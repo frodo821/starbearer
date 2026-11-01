@@ -76,6 +76,29 @@ public static class Bodies
         return (u, new Vec3d(-Math.Sin(node), 0, Math.Cos(node)) * Math.Cos(tilt) + new Vec3d(0, Math.Sin(tilt), 0));
     }
 
+    /// <summary>Share of a planet's sphere kept clear of moons, for stations to circle in.</summary>
+    public const double FreeInnerShare = 0.42;
+
+    /// <summary>The orbit whose sphere of influence starts at the given radius, so neighbours never overlap.</summary>
+    static double Slot(double inner, double mu, double parentMu) => inner / (1 - Math.Pow(mu / parentMu, 0.4));
+
+    /// <summary>The middle of the widest band of a system clear of every planet's sphere.</summary>
+    public static double WidestGap(Center system)
+    {
+        var (best, from, wide) = (system.Edge * 0.5, system.Edge * 0.1, 0.0);
+        void Band(double to)
+        {
+            if (to - from > wide) (wide, best) = (to - from, (from + to) / 2);
+        }
+        foreach (var p in system.Children.OrderBy(p => p.OrbitRadius))
+        {
+            Band(p.OrbitRadius - p.Edge);
+            from = p.OrbitRadius + p.Edge;
+        }
+        Band(system.Edge * 0.95);
+        return best;
+    }
+
     /// <summary>A star's planets and moons, from the seed, so they never need saving.</summary>
     public static Center Build(ulong seed, Star s)
     {
@@ -83,14 +106,17 @@ public static class Bodies
         Center root = s;
         var system = new Center { Star = s.Id, Name = s.Name, Kind = BodyKind.Star, Mu = root.Mu, BodyRadius = root.BodyRadius, Edge = root.Edge };
         var index = 1;
-        var count = 2 + r.Index(3);
-        for (int i = 0; i < count; i++)
+        var planets = 2 + r.Index(3);
+        var inner = system.Edge * 0.18;
+        for (int i = 0; i < planets; i++)
         {
-            var a = system.Edge * (0.22 + 0.62 * (i + r.Range(0.1, 0.7)) / count);
             var giant = r.Unit() < 0.45;
             var mu = system.Mu * r.Range(giant ? 0.02 : 0.004, giant ? 0.05 : 0.012);
-            var (u, w) = Plane(r, 4);
+            var a = Slot(inner + system.Edge * r.Range(0.02, 0.1), mu, system.Mu);
             var edge = Sphere(a, mu, system.Mu);
+            if (a + edge > system.Edge * 0.92) break;
+            inner = a + edge;
+            var (u, w) = Plane(r, 4);
             var planet = new Center
             {
                 Star = s.Id, Index = index++, Name = $"{s.Name} {"bcdefg"[i]}", Kind = giant ? BodyKind.Giant : BodyKind.Rocky, Parent = system,
@@ -98,12 +124,15 @@ public static class Bodies
                 OrbitRadius = a, Phase = r.Range(0, 2 * Math.PI), Omega = Math.Sqrt(system.Mu / (a * a * a)), U = u, W = w,
             };
             system.Children.Add(planet);
+            var moonInner = edge * FreeInnerShare;
             for (int m = 0, moons = giant ? 1 + r.Index(2) : r.Index(2); m < moons; m++)
             {
-                var ma = edge * (0.4 + 0.3 * (m + r.Range(0, 0.6)) / moons);
-                var mmu = mu * 0.03;
-                var (mu0, mw) = Plane(r, 12);
+                var mmu = mu * 0.01;
+                var ma = Slot(moonInner + edge * r.Range(0.01, 0.05), mmu, mu);
                 var me = Sphere(ma, mmu, mu);
+                if (ma + me > edge * 0.9) break;
+                moonInner = ma + me;
+                var (mu0, mw) = Plane(r, 12);
                 planet.Children.Add(new Center
                 {
                     Star = s.Id, Index = index++, Name = $"{planet.Name}{"ⅠⅡⅢ"[m]}", Kind = BodyKind.Moon, Parent = planet,

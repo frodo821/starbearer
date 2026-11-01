@@ -974,12 +974,38 @@ public class SimTests
         var system = g.System(g.Ports[0]);
         var planet = system.Children[0];
         var at = planet.Position(10);
-        var p = at + new Vec3d(planet.Edge * 3, 0, 0);
-        var v = (at - p) * 0.25 + planet.Velocity(10);
+        var p = at + new Vec3d(planet.Edge * 1.2, 0, 0);
+        var v = (at - p) * 2 + planet.Velocity(10);
         var f = Sublight.PredictPath(g, system, p, v, 10, Array.Empty<Maneuver>(), 30);
         Assert.Equal(planet.Key, f.Enter!.Value.Body.Key);
         Assert.Equal(planet.Edge, f.Enter.Value.Position.Length, 6);
         Assert.Equal(planet.Key, f.Beyond!.Center!.Key);
+    }
+
+    [Fact]
+    public void SpheresOfInfluenceNeverOverlap()
+    {
+        int stars = 0, planets = 0, moons = 0, belts = 0;
+        for (ulong seed = 1; seed <= 40; seed++)
+        {
+            var g = Galaxy.Generate(seed);
+            foreach (var a in g.Stars)
+                foreach (var b in g.Stars)
+                    if (a.Id < b.Id && (a.Position - b.Position).Length < a.Soi + b.Soi) stars++;
+            foreach (var star in g.Stars)
+            {
+                var system = g.System(star.Id);
+                bool Clash(Center x, Center y) => x.OrbitRadius < y.OrbitRadius && x.OrbitRadius + x.Edge > y.OrbitRadius - y.Edge;
+                planets += system.Children.Sum(x => system.Children.Count(y => Clash(x, y)));
+                moons += system.Children.Sum(p => p.Children.Sum(x => p.Children.Count(y => Clash(x, y))));
+            }
+            foreach (var port in g.Ports.Concat(g.Depots))
+            {
+                var st = g.StationAt(port);
+                if (st.Host!.Kind == BodyKind.Star && g.System(port).Children.Any(c => Math.Abs(c.OrbitRadius - st.Radius) < c.Edge)) belts++;
+            }
+        }
+        Assert.True(stars + planets + moons + belts == 0, $"stars {stars} planets {planets} moons {moons} belts {belts}");
     }
 
     [Fact]

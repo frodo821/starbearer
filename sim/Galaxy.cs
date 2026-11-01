@@ -41,7 +41,7 @@ public sealed class Galaxy
     Center HostFor(StationKind kind, Center system, Rng r)
     {
         var planets = system.Children;
-        var moons = planets.SelectMany(p => p.Children).ToList();
+        var moons = planets.SelectMany(p => p.Children).Where(m => m.Edge * 0.25 > Tuning.DockRange * 3).ToList();
         return kind switch
         {
             StationKind.Mine => system,
@@ -64,7 +64,8 @@ public sealed class Galaxy
         var r = new Rng(Seed * 1000003 + (ulong)star);
         var system = System(star);
         var host = HostFor(Missions.KindOf(this, star), system, r);
-        var radius = host == system ? r.Range(0.7, 1.6) : host.Edge * r.Range(0.25, 0.4);
+        var share = host.Kind == BodyKind.Moon ? r.Range(0.25, 0.4) : r.Range(0.22, Bodies.FreeInnerShare - 0.08);
+        var radius = host == system ? Bodies.WidestGap(system) : host.Edge * share;
         var node = r.Range(0, 2 * Math.PI);
         var tilt = r.Range(5, 28) * Math.PI / 180 * (r.Unit() < 0.5 ? -1 : 1);
         var u = new Vec3d(Math.Cos(node), 0, Math.Sin(node));
