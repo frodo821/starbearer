@@ -80,7 +80,7 @@ public partial class Main
         if (v.Phase == Phase.Flight && v.NearestWell(out var star) < double.MaxValue && star != null)
         {
             DescentStar = star;
-            DescentForecast = Sublight.Predict(star, G!.StationOrNull(star.Id),
+            DescentForecast = Sublight.Predict(G!.System(star.Id), Sublight.Waypoint(G.System(star.Id), G.StationOrNull(star.Id)),
                 (v.TruePosition - v.TruePositions[star.Id]) / Sublight.Scale, v.Velocity, v.AbsoluteTime, Array.Empty<Maneuver>(), 60, 300);
         }
         if (vel.Length < 1e-3) { Forecast = null; return; }
@@ -92,11 +92,11 @@ public partial class Main
     {
         var v = V!;
         OrbitForecast Path(IReadOnlyCollection<Maneuver> nodes) =>
-            Sublight.PredictPath(G!, v.System, v.SubPosition, v.SubVelocity, v.AbsoluteTime, nodes, ForecastSpan());
+            Sublight.PredictPath(G!, v.Primary, v.SubPosition, v.SubVelocity, v.AbsoluteTime, nodes, ForecastSpan());
         SubCurrent = Path(Array.Empty<Maneuver>());
         if (v.Nodes.Count == 0) PlanFrozen = false;
         if (!PlanFrozen) SubForecast = v.Nodes.Count == 0 ? SubCurrent : Path(v.Nodes);
-        double? PassesAt(OrbitForecast? f) => new[] { f?.Closest?.Time, f?.Crossing?.Time, f?.Exit?.Time, f?.Next?.Time }
+        double? PassesAt(OrbitForecast? f) => new[] { f?.Closest?.Time, f?.Crossing?.Time, f?.Exit?.Time, f?.Next?.Time, f?.Enter?.Time }
             .Where(t => t > v.AbsoluteTime).Min();
         _pathGoodUntil = new[] { PassesAt(SubCurrent), PassesAt(SubForecast) }.Min() ?? double.PositiveInfinity;
     }

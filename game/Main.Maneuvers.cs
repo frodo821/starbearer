@@ -59,22 +59,44 @@ public partial class Main
     double ForecastSpan()
     {
         var v = V!;
-        var el = Sublight.OrbitOf(Sublight.Mu(v.System), v.SubPosition, v.SubVelocity);
-        var target = v.LocalStation != null ? 3 * Math.PI / v.LocalStation.Omega : 0;
+        var el = Sublight.OrbitOf(v.Primary.Mu, v.SubPosition, v.SubVelocity);
+        var target = v.Waypoint != null ? 3 * Math.PI / v.Waypoint.Omega : 0;
         return Math.Max(el.Bound ? Math.Clamp(el.Period * 1.5, 10, 150) : 60, target);
+    }
+
+    string NoWaypoint => V!.LocalStation == null ? "この星系に港はない" : "港はこの天体の外にある。まずヒル球を出る";
+
+    /// <summary>The way out of a body that doesn't lead to the station.</summary>
+    void PlanEscape()
+    {
+        if (V!.LocalStation == null || V.Primary.Parent == null) { Message = NoWaypoint; return; }
+        Selected = Sublight.SuggestEscape(V.Primary, V.SubPosition, V.SubVelocity, V.AbsoluteTime);
+        V.Nodes.Add(Selected);
+        Paused = true; HandlesOpen = false;
+        Message = $"{V.Primary.Name} のヒル球を出る噴射を計画した";
+        Replan();
     }
 
     void SuggestTransfer()
     {
-        var st = V!.LocalStation;
-        if (st == null) { Message = "この星系に目的の港はない"; return; }
+        if (V!.Waypoint is not { } st) { PlanEscape(); return; }
+        if (Sublight.SuggestCapture(V.Primary, st, V.SubPosition, V.SubVelocity, V.AbsoluteTime) is { } capture)
+        {
+            V.Nodes.Clear();
+            V.Nodes.AddRange(capture);
+            Selected = capture[0];
+            Paused = true; HandlesOpen = false;
+            Message = $"{V.Primary.Name} に捕まるための噴射を {capture.Count} 段計画した";
+            Replan();
+            return;
+        }
         var added = 0;
-        if (V.Nodes.Count == 0 && Sublight.SuggestPlaneMatch(V.System, st, V.SubPosition, V.SubVelocity, V.AbsoluteTime) is { } plane)
+        if (V.Nodes.Count == 0 && Sublight.SuggestPlaneMatch(V.Primary, st, V.SubPosition, V.SubVelocity, V.AbsoluteTime) is { } plane)
         {
             V.Nodes.Add(plane);
             added++;
         }
-        Selected = Sublight.SuggestTransfer(V.System, st, V.SubPosition, V.SubVelocity, V.AbsoluteTime, V.Nodes.OrderBy(n => n.Time).ToList());
+        Selected = Sublight.SuggestTransfer(V.Primary, st, V.SubPosition, V.SubVelocity, V.AbsoluteTime, V.Nodes.OrderBy(n => n.Time).ToList());
         V.Nodes.Add(Selected);
         added++;
         Paused = true; HandlesOpen = false;
@@ -84,9 +106,8 @@ public partial class Main
 
     void AddMatchBurn()
     {
-        var st = V!.LocalStation;
-        if (st == null) { Message = "この星系に目的の港はない"; return; }
-        var m = Sublight.MatchAtClosest(V.System, st, V.SubPosition, V.SubVelocity, V.AbsoluteTime, V.Nodes.OrderBy(n => n.Time).ToList(), ForecastSpan());
+        if (V!.Waypoint is not { } st) { Message = NoWaypoint; return; }
+        var m = Sublight.MatchAtClosest(V.Primary, st, V.SubPosition, V.SubVelocity, V.AbsoluteTime, V.Nodes.OrderBy(n => n.Time).ToList(), ForecastSpan());
         if (m == null) { Message = "合流点が見つからない"; return; }
         V.Nodes.Add(m);
         Selected = m;
@@ -122,9 +143,8 @@ public partial class Main
     void RunTransferComputer()
     {
         if (!Owns(Modules.Transfer)) { Message = "転送計算機が未搭載"; return; }
-        var st = V!.LocalStation;
-        if (st == null) { Message = "この星系に目的の港はない"; return; }
-        var plan = Sublight.PlanRendezvous(V.System, st, V.SubPosition, V.SubVelocity, V.AbsoluteTime);
+        if (V!.Waypoint is not { } st) { Message = NoWaypoint; return; }
+        var plan = Sublight.PlanRendezvous(V.Primary, st, V.SubPosition, V.SubVelocity, V.AbsoluteTime);
         if (plan == null) { Message = "転送計算機: 解が見つからない"; return; }
         V.Nodes.Clear();
         V.Nodes.AddRange(plan);

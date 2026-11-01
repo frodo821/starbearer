@@ -56,7 +56,9 @@ public sealed class Voyage
     // Normal space
     public double Epoch { get; }
     public double AbsoluteTime => Epoch + Time;
-    public int SystemStar { get; private set; }
+    /// <summary>The body the ship's sublight state is relative to.</summary>
+    public Center Primary { get; private set; } = null!;
+    public int SystemStar => Primary.Star;
     public Vec3d SubPosition { get; private set; }
     public Vec3d SubVelocity { get; private set; }
     public List<Maneuver> Nodes { get; } = new();
@@ -84,18 +86,31 @@ public sealed class Voyage
         _chart = new Vec3d[g.Stars.Length];
         var o = g.Stars[origin];
         Epoch = epoch;
-        SystemStar = origin;
         var st = g.StationAt(origin);
+        Primary = st.Host ?? g.System(origin);
         SubPosition = st.Position(epoch);
         SubVelocity = st.Velocity(epoch);
         SyncTruePosition();
         Observe();
     }
 
-    void SyncTruePosition() => TruePosition = System.Position + SubPosition * Sublight.Scale;
+    void SyncTruePosition() => TruePosition = JumpState.Position;
+
+    /// <summary>The station relative to the ship's current primary, whichever body the station circles.</summary>
+    public (Vec3d Position, Vec3d Velocity) StationNow()
+    {
+        var st = LocalStation!;
+        var t = AbsoluteTime;
+        var host = st.Host ?? G.System(SystemStar);
+        return (host.StarPosition(t) - Primary.StarPosition(t) + st.Position(t), host.StarVelocity(t) - Primary.StarVelocity(t) + st.Velocity(t));
+    }
+
+    /// <summary>What to steer for from here to reach this system's station. See <see cref="Sublight.Waypoint"/>.</summary>
+    public IOrbiter? Waypoint => Sublight.Waypoint(Primary, LocalStation);
 
     /// <summary>State a jump would start from. Speed carries over, so timing the orbit matters.</summary>
-    public (Vec3d Position, Vec3d Velocity) JumpState => (System.Position + SubPosition * Sublight.Scale, SubVelocity);
+    public (Vec3d Position, Vec3d Velocity) JumpState =>
+        (System.Position + (Primary.StarPosition(AbsoluteTime) + SubPosition) * Sublight.Scale, SubVelocity + Primary.StarVelocity(AbsoluteTime));
 
     public void EnterFtl()
     {
@@ -113,7 +128,7 @@ public sealed class Voyage
         if (Phase != Phase.Flight) return false;
         NearestWell(out var star);
         if (star == null) return false;
-        SystemStar = star.Id;
+        Primary = G.System(star.Id);
         SubPosition = (TruePosition - _truth[star.Id]) / Sublight.Scale;
         SubVelocity = Velocity;
         Phase = Phase.Sublight;
@@ -123,23 +138,40 @@ public sealed class Voyage
     public void Undock() => Docked = false;
 
     /// <summary>Past the star's sphere of influence, with no star pulling on the ship.</summary>
-    public bool Adrift => Phase == Phase.Sublight && SubPosition.Length >= Sublight.SystemRadius(System);
+    public bool Adrift => Phase == Phase.Sublight && Primary.Parent == null && SubPosition.Length >= Primary.Edge;
 
     /// <summary>Open space is one flat frame, so the ship can coast from one star's reach into another's.</summary>
-    void HandOver(ref Vec3d p)
+    void HandOver(ref Vec3d p, ref Vec3d v, double t)
     {
-        if (p.Length < Sublight.SystemRadius(System)) return;
+        if (Primary.Parent is { } up && p.Length >= Primary.Edge)
+        {
+            p += Primary.Position(t);
+            v += Primary.Velocity(t);
+            Primary = up;
+        }
+        var before = Primary;
+        while (true)
+        {
+            var (at, _) = (p, v);
+            var child = Primary.Children.FirstOrDefault(c => (at - c.Position(t)).Length < c.Edge);
+            if (child == null) break;
+            p -= child.Position(t);
+            v -= child.Velocity(t);
+            Primary = child;
+        }
+        if (Primary != before) return;
+        if (Primary.Parent != null || p.Length < Primary.Edge) return;
         var ly = System.Position + p * Sublight.Scale;
         var next = Physics.Primary(G, _truth, ly);
         if (next < 0 || next == SystemStar) return;
-        SystemStar = next;
+        Primary = G.System(next);
         p = (ly - System.Position) / Sublight.Scale;
     }
 
     /// <summary>Close and slow enough to tie up, whether or not the ship has been away yet.</summary>
-    public bool CanDock => Phase == Phase.Sublight && !Docked && LocalStation is { } st
-        && (st.Position(AbsoluteTime) - SubPosition).Length < Tuning.DockRange
-        && (st.Velocity(AbsoluteTime) - SubVelocity).Length < Tuning.DockRelativeSpeed;
+    public bool CanDock => Phase == Phase.Sublight && !Docked && LocalStation != null
+        && (StationNow().Position - SubPosition).Length < Tuning.DockRange
+        && (StationNow().Velocity - SubVelocity).Length < Tuning.DockRelativeSpeed;
 
     public bool RequestDock()
     {
@@ -168,7 +200,7 @@ public sealed class Voyage
         double left = days;
         while (left > 0 && Phase == Phase.Sublight)
         {
-            var mu = p.Length < Sublight.SystemRadius(System) ? Sublight.Mu(System) : 0;
+            var mu = p.Length < Primary.Edge ? Primary.Mu : 0;
             var dt = Math.Min(left, 0.02);
             var due = IdealNodesForTest ? Nodes.OrderBy(n => n.Time).FirstOrDefault() : null;
             if (due != null && due.Time <= AbsoluteTime + dt)
@@ -193,17 +225,17 @@ public sealed class Voyage
                 Thrusting = true;
             }
             Sublight.Propagate(mu, ref p, ref v, dt, a);
-            HandOver(ref p);
+            HandOver(ref p, ref v, AbsoluteTime + dt);
             PassSublightTime(dt); left -= dt;
             Heat = Math.Max(0, Heat - Tuning.CoolingPerDay * Heat * dt);
-            if (p.Length < Sublight.StarRadius(System)) { Kill(DeathCause.Collision); break; }
+            if (p.Length < Primary.BodyRadius) { Kill(DeathCause.Collision); break; }
             if (LifeRemaining <= 0) { Kill(DeathCause.LifeSupport); break; }
-            var st = LocalStation;
-            if (st != null)
+            if (LocalStation != null)
             {
-                var near = (st.Position(AbsoluteTime) - p).Length < Tuning.DockRange;
+                var (sp, sv) = StationNow();
+                var near = (sp - p).Length < Tuning.DockRange;
                 if (!near) _clearOfDock = true;
-                else if (_clearOfDock && (st.Velocity(AbsoluteTime) - v).Length < Tuning.DockRelativeSpeed)
+                else if (_clearOfDock && (sv - v).Length < Tuning.DockRelativeSpeed)
                     Phase = Phase.Arrived;
             }
         }
@@ -380,7 +412,18 @@ public sealed class Voyage
 
     /// <summary>Smoke-test hooks; not reachable from play.</summary>
     public void PlaceForTest(Vec3d position, Vec3d velocity) { TruePosition = position; Velocity = velocity; }
-    public void PlaceSublightForTest(Vec3d position, Vec3d velocity) { SubPosition = position; SubVelocity = velocity; SyncTruePosition(); }
+    /// <summary>Puts the ship beside this system's station, drifting with it.</summary>
+    public void PlaceNearStationForTest(double distance)
+    {
+        var st = LocalStation!;
+        Primary = st.Host!;
+        SubPosition = st.Position(AbsoluteTime) + st.PlaneNormal * distance;
+        SubVelocity = st.Velocity(AbsoluteTime);
+        SyncTruePosition();
+    }
+
+    /// <summary>Puts the ship at a state relative to the star, leaving any planet.</summary>
+    public void PlaceSublightForTest(Vec3d position, Vec3d velocity) { Primary = G.System(SystemStar); SubPosition = position; SubVelocity = velocity; SyncTruePosition(); }
     public void RefillForTest() => Fuel = Tuning.TankCapacity;
     public void ForceDeathForTest() => Kill(DeathCause.Collision);
 

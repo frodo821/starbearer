@@ -8,28 +8,50 @@ public static partial class Sublight
     /// where they fall. Arriving from outside, an unpowered path always leaves again or hits the star,
     /// so each leg ends unless a burn captures it.
     /// </summary>
-    public static void FollowOn(Galaxy g, int star, OrbitForecast f, IEnumerable<Maneuver>? nodes = null, int legs = 3)
+    public static void FollowOn(Galaxy g, int star, OrbitForecast f, IEnumerable<Maneuver>? nodes = null, int legs = 6)
     {
-        if (f.Exit is not { } e) return;
         var rest = (nodes ?? Array.Empty<Maneuver>()).Where(n => f.Stages.All(s => s.Node != n)).OrderBy(n => n.Time).ToList();
+        OrbitForecast Fly(Center c, Vec3d p, Vec3d v, double t)
+        {
+            var el = OrbitOf(c.Mu, p, v);
+            var span = el.Bound ? el.Period : 2 * c.Edge / Math.Max(v.Length, 1e-3);
+            return Predict(c, TargetIn(g, c), p, v, t, rest, span);
+        }
+        void Carry(Center c, Vec3d p, Vec3d v, double t)
+        {
+            f.Beyond = Fly(c, p, v, t);
+            FollowOn(g, c.Star, f.Beyond, rest, legs - 1);
+        }
+        if (f.Enter is { } entry)
+        {
+            if (legs > 0) Carry(entry.Body, entry.Position, entry.Velocity, entry.Time);
+            return;
+        }
+        if (f.Exit is not { } e) return;
+        if (f.Center?.Parent is { } up)
+        {
+            var c = f.Center;
+            if (legs > 0) Carry(up, e.Position + c.Position(e.Time), e.Velocity + c.Velocity(e.Time), e.Time);
+            return;
+        }
         var (drift, velocity) = FlyDrift(g, star, e, rest, out var next);
         f.Drift = drift;
         f.Next = next;
         if (legs <= 0 || next is not { } n) return;
         var to = g.Stars[n.Star];
         var arrive = (n.Point - to.Position) / Scale * (1 - 1e-9);   // on the boundary would count as already out
-        var el = OrbitOf(Mu(to), arrive, velocity);
-        var span = el.Bound ? el.Period : 2 * SystemRadius(to) / velocity.Length;
-        f.Beyond = Predict(to, g.StationOrNull(to.Id), arrive, velocity, n.Time, rest, span);
-        FollowOn(g, n.Star, f.Beyond, rest, legs - 1);
+        Carry(g.System(n.Star), arrive, velocity, n.Time);
     }
+
+    /// <summary>The port's station, on the legs flown around the body it circles.</summary>
+    static Station? TargetIn(Galaxy g, Center c) => g.StationOrNull(c.Star) is { } st && st.Host?.Key == c.Key ? st : null;
 
     /// <summary>The straight run from a Disengage to the next star, flying and removing the burns in rest
     /// that fall on it. Stages stay in the frame of the star left behind, as the ship's state does.</summary>
     static (OrbitForecast Drift, Vec3d Velocity) FlyDrift(Galaxy g, int star, Disengage e, List<Maneuver> rest, out Handover? next)
     {
         var from = g.Stars[star];
-        var drift = new OrbitForecast { Star = star, IsDrift = true };
+        var drift = new OrbitForecast { Star = star, IsDrift = true, Center = g.System(star) };
         var (p, v, t) = (e.Position, e.Velocity, e.Time);
         (drift.AfterPosition, drift.AfterVelocity) = (p, v);
         drift.Track.Add((t, p));
@@ -59,10 +81,10 @@ public static partial class Sublight
     }
 
     /// <summary>The whole path from a state: this star's reach, and everything past it.</summary>
-    public static OrbitForecast PredictPath(Galaxy g, Star star, Vec3d p, Vec3d v, double t0, IReadOnlyCollection<Maneuver> nodes, double horizon)
+    public static OrbitForecast PredictPath(Galaxy g, Center from, Vec3d p, Vec3d v, double t0, IReadOnlyCollection<Maneuver> nodes, double horizon)
     {
-        var f = Predict(star, g.StationOrNull(star.Id), p, v, t0, nodes, horizon);
-        FollowOn(g, star.Id, f, nodes);
+        var f = Predict(from, TargetIn(g, from), p, v, t0, nodes, horizon);
+        FollowOn(g, from.Star, f, nodes);
         return f;
     }
 
@@ -82,13 +104,13 @@ public static partial class Sublight
     sealed class StationWatch
     {
         readonly double _mu;
-        readonly Station _station;
+        readonly IOrbiter _station;
         readonly OrbitForecast _result;
         Approach? _best;
         (double T, Vec3d P, Vec3d V, double Span) _bracket;
         Crossing? _crossing;
 
-        public StationWatch(double mu, Station station, OrbitForecast result) => (_mu, _station, _result) = (mu, station, result);
+        public StationWatch(double mu, IOrbiter station, OrbitForecast result) => (_mu, _station, _result) = (mu, station, result);
 
         public void PlaneCrossing(Hop hop, Vec3d p)
         {
@@ -100,9 +122,9 @@ public static partial class Sublight
         public void Observe(Hop hop, Vec3d p, Vec3d v)
         {
             var rBefore = hop.P0.Length;
-            if (_crossing == null && (rBefore - _station.Radius) * (p.Length - _station.Radius) <= 0)
+            if (_crossing == null && (rBefore - _station.OrbitRadius) * (p.Length - _station.OrbitRadius) <= 0)
             {
-                var (cp, cv, ct) = hop.At(p.Length == rBefore ? 1 : (_station.Radius - rBefore) / (p.Length - rBefore));
+                var (cp, cv, ct) = hop.At(p.Length == rBefore ? 1 : (_station.OrbitRadius - rBefore) / (p.Length - rBefore));
                 var sc = _station.Position(ct);
                 var (_, _, up) = Frame(cp, cv);
                 var lead = Math.Atan2(cp.Cross(sc).Dot(up), cp.Dot(sc)) * 180 / Math.PI;
@@ -122,6 +144,20 @@ public static partial class Sublight
             _result.Closest = _best == null ? null : RefineApproach(_mu, _station, _bracket);
             _result.Crossing = _crossing;
         }
+    }
+
+    /// <summary>The point in a step where the path comes inside a child's sphere of influence.</summary>
+    static Entry FindEntry(Hop hop, Center body, bool coarse)
+    {
+        double lo = 0, hi = 1;
+        for (int i = 0; i < 30 && !coarse; i++)
+        {
+            var mid = (lo + hi) / 2;
+            var (p, _, t) = hop.At(mid);
+            if ((p - body.Position(t)).Length < body.Edge) hi = mid; else lo = mid;
+        }
+        var (ep, ev, et) = hop.At(hi);
+        return new Entry(body, et, ep - body.Position(et), ev - body.Velocity(et));
     }
 
     /// <summary>The point in a step where the path crosses the edge of the sphere of influence.</summary>
@@ -144,17 +180,17 @@ public static partial class Sublight
     /// The search runs to horizon, but always far enough to close a lap or reach the edge of the
     /// sphere of influence, where it stops: burns past that point are not flown.
     /// </summary>
-    public static OrbitForecast Predict(Star star, Station? target, Vec3d p, Vec3d v, double t0, IEnumerable<Maneuver> nodes, double horizon, int samples = 500, bool coarse = false)
+    public static OrbitForecast Predict(Center star, IOrbiter? target, Vec3d p, Vec3d v, double t0, IEnumerable<Maneuver> nodes, double horizon, int samples = 500, bool coarse = false)
     {
-        var mu = Mu(star);
-        var res = new OrbitForecast { Star = star.Id };
+        var mu = star.Mu;
+        var res = new OrbitForecast { Star = star.Star, Center = star };
         var pending = nodes.OrderBy(n => n.Time).ToList();
         var lastNode = pending.Count > 0 ? Math.Max(pending[^1].Time, t0) : t0;
         var end = lastNode + horizon;
         var dt = (end - t0) / samples;
         var t = t0;
         int next = 0;
-        var edge = SystemRadius(star);
+        var edge = star.Edge;
         var lapEnd = double.PositiveInfinity;
         void OpenLap(Vec3d from, Vec3d speed, double when)
         {
@@ -179,6 +215,13 @@ public static partial class Sublight
         {
             var r0 = p.Length;
             var step = coarse ? dt : Math.Min(dt, TrackStep * Math.Sqrt(r0 * r0 * r0 / mu));
+            foreach (var child in star.Children)
+            {
+                // Close in on a sphere of influence slowly enough not to step over it.
+                var gap = (p - child.Position(t)).Length - child.Edge;
+                var closing = v.Length + child.OrbitRadius * child.Omega;
+                step = Math.Min(step, Math.Max(gap * 0.5 / closing, 1e-3));
+            }
             var stepEnd = Math.Min(t + step, end);
             if (t < lapEnd - 1e-9) stepEnd = Math.Min(stepEnd, lapEnd);   // the drawn lap closes on a sample
             while (next < pending.Count && pending[next].Time < stepEnd)
@@ -198,12 +241,19 @@ public static partial class Sublight
             Propagate(mu, ref p, ref v, stepEnd - t);
             t = stepEnd;
             res.Track.Add((t, p));
-            if (p.Length < StarRadius(star)) { res.Impact = true; break; }
+            if (p.Length < star.BodyRadius) { res.Impact = true; break; }
             if (p.Length >= edge)
             {
                 var exit = FindExit(hop, edge, coarse);
                 res.Exit = exit;
                 res.Track[^1] = (exit.Time, exit.Position);
+                break;
+            }
+            if (star.Children.FirstOrDefault(c => (p - c.Position(t)).Length < c.Edge) is { } met)
+            {
+                res.Enter = FindEntry(hop, met, coarse);
+                var at = res.Enter.Value;
+                res.Track[^1] = (at.Time, at.Position + met.Position(at.Time));
                 break;
             }
             if (t > lapEnd + 1e-9 && res.DrawnCount == 0) res.DrawnCount = res.Track.Count - 1;
@@ -218,7 +268,7 @@ public static partial class Sublight
     }
 
     /// <summary>Golden-section search for the true closest approach inside a sample bracket.</summary>
-    static Approach RefineApproach(double mu, Station target, (double T, Vec3d P, Vec3d V, double Span) from)
+    static Approach RefineApproach(double mu, IOrbiter target, (double T, Vec3d P, Vec3d V, double Span) from)
     {
         (double D, Vec3d P, Vec3d V) At(double offset)
         {

@@ -73,16 +73,17 @@ public partial class Hud
         foreach (var star in g.Ports.Concat(g.Depots))
         {
             var st = g.StationAt(star);
+            var host = (st.Host ?? g.System(star)).StarPosition(v.AbsoluteTime);
             if (!new Rect2(Vector2.Zero, Size).Grow(200).HasPoint(MapPoint(v.ChartPositions[star]))) continue;
             Vector2? last = null;
             for (int i = 0; i <= 64; i++)
             {
                 var a = i * Math.Tau / 64;
-                var p = SystemPoint(star, (st.U * Math.Cos(a) + st.W * Math.Sin(a)) * st.Radius);
+                var p = SystemPoint(star, host + (st.U * Math.Cos(a) + st.W * Math.Sin(a)) * st.Radius);
                 if (last is { } l) DrawLine(l, p, new Color(Good, 0.35f), 1, true);
                 last = p;
             }
-            var at = SystemPoint(star, st.Position(v.AbsoluteTime));
+            var at = SystemPoint(star, host + st.Position(v.AbsoluteTime));
             DrawRect(new Rect2(at - new Vector2(3, 3), 6, 6), Good);
             Text(at + new Vector2(7, -5), star == v.TargetStar ? "目的港" : g.Ports.Contains(star) ? "港" : "補給港", Good, 12);
         }
@@ -167,7 +168,7 @@ public partial class Hud
     public void ZoomMap(float factor)
     {
         Game.StopGlide();
-        Game.MapZoom = Mathf.Clamp(Game.MapZoom * factor, 4, 10000);
+        Game.MapZoom = Mathf.Clamp(Game.MapZoom * factor, 4, 40000);
     }
 
     public void RotateMap(Vector2 d)

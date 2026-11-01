@@ -33,7 +33,7 @@ public static partial class Sublight
     }
 
     /// <summary>Angle in degrees between an orbit and the station's plane.</summary>
-    public static double RelativeInclination(Station s, Vec3d p, Vec3d v)
+    public static double RelativeInclination(IOrbiter s, Vec3d p, Vec3d v)
     {
         var (_, _, n) = Frame(p, v);
         return Math.Acos(Math.Clamp(n.Dot(s.PlaneNormal), -1, 1)) * 180 / Math.PI;
@@ -142,6 +142,18 @@ public static partial class Sublight
                 best = new Handover(s.Id, time + hit / speed, ly + dir * hit);
         }
         return best;
+    }
+
+    /// <summary>What to steer for from a body to reach a station: the station itself when they share the
+    /// body, else the body one level down toward it. Null when the ship has to climb out first.</summary>
+    public static IOrbiter? Waypoint(Center from, Station? st)
+    {
+        if (st == null) return null;
+        var host = st.Host;
+        if (host == null || host.Key == from.Key) return st;
+        for (var c = host; c != null; c = c.Parent)
+            if (c.Parent?.Key == from.Key) return c;
+        return null;
     }
 
     public static Elements OrbitOf(double mu, Vec3d p, Vec3d v)

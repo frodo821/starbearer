@@ -44,6 +44,20 @@ public partial class Main : Node3D
     public int SubRateIndex = 3;
     /// <summary>The plan: the path with its burns. Frozen once a burn starts, so it stays the reference.</summary>
     public OrbitForecast? SubForecast { get; private set; }
+    /// <summary>The ship's primary on the galaxy chart, in ly.</summary>
+    public Vec3d PrimaryOnChart => V!.System.Position + V.Primary.StarPosition(V.AbsoluteTime) * Sublight.Scale;
+    Vec3d _chartBody;
+
+    float ZoomFor(Center c) => c.Parent == null ? SystemZoom : Mathf.Min(10000f, 220f / (float)(c.Edge * Sublight.Scale));
+
+    /// <summary>A planet moves under the view; the chart goes with it so the ship's orbit holds still.</summary>
+    void FollowPrimary()
+    {
+        var now = PrimaryOnChart;
+        if (V!.Primary.Parent != null) { MapCenter += now - _chartBody; if (_glide is { } g) _glide = g with { Center = g.Center + (now - _chartBody) }; }
+        _chartBody = now;
+    }
+
     /// <summary>Where the ship goes if the engine stops now and nothing more is flown.</summary>
     public OrbitForecast? SubCurrent { get; private set; }
     public bool PlanFrozen { get; private set; }
@@ -200,6 +214,7 @@ public partial class Main : Node3D
             else if (v.Phase == Phase.Stalled) Message = "失速。FTLから脱落した。Cで再キック";
         }
 
+        if (Screen == Screen.Orbit) FollowPrimary();
         _forecastTimer -= delta;
         if (Screen is Screen.Plan or Screen.Flight or Screen.Orbit && (_forecastDirty || _forecastTimer <= 0))
         {

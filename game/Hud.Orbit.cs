@@ -20,8 +20,11 @@ public partial class Hud
 
     static Color StageColor(int stage) => StageColors[Math.Min(stage, StageColors.Length - 1)];
 
-    /// <summary>A point in this system's AU, on the one chart.</summary>
-    public Vector2 OrbitPoint(Vec3d p) => MapPoint(Game.V!.System.Position + p * Sublight.Scale);
+    /// <summary>A point relative to the ship's primary, on the one chart.</summary>
+    public Vector2 OrbitPoint(Vec3d p) => StarPoint(Game.V!.Primary.StarPosition(Game.V.AbsoluteTime) + p);
+
+    /// <summary>A point relative to this system's star.</summary>
+    Vector2 StarPoint(Vec3d p) => MapPoint(Game.V!.System.Position + p * Sublight.Scale);
 
     public void ZoomOrbit(float f) => ZoomMap(f);
     public void RotateOrbit(Vector2 d) => RotateMap(d);
@@ -30,8 +33,12 @@ public partial class Hud
     Stage? StageOf(Maneuver n) => Game.SubForecast?.StageOf(n);
 
     /// <summary>Where a leg of the path sits on screen. Later legs follow their star as the chart shows it.</summary>
-    Func<Vec3d, Vector2> LegMap(OrbitForecast leg) =>
-        leg.Star == Game.V!.SystemStar ? OrbitPoint : p => SystemPoint(leg.Star, p);
+    public Func<Vec3d, Vector2> LegMap(OrbitForecast leg)
+    {
+        if (leg.Center!.Key == Game.V!.Primary.Key) return OrbitPoint;
+        var body = leg.Center.StarPosition(leg.Track[0].Time);   // where it will be when the ship gets there
+        return p => SystemPoint(leg.Star, body + p);
+    }
 
     Vector2? NodePoint(Maneuver n) => Game.SubForecast?.LegOf(n) is { } leg ? LegMap(leg)(StageOf(n)!.Value.Position) : null;
 
@@ -187,19 +194,34 @@ public partial class Hud
         }
     }
 
-    /// <summary>The path past a change of primary: where the star lets go, the run through open space,
-    /// who takes over, and the pass around that star. Each leg is drawn on its own star.</summary>
+    /// <summary>The path past a change of primary: where a body lets go or takes over, the run through open
+    /// space, and the pass around whatever comes next. Each leg is drawn on its own body.</summary>
     void DrawHandover(OrbitForecast f, Color c, int stage = 0, Vector2? arrived = null)
     {
-        if (f.Exit is not { } e) return;
         var map = LegMap(f);
         var v = Game.V!;
+        stage += f.Enter != null ? f.Stages.Count : 0;
+        if (f.Enter is { } entry)
+        {
+            var into = map(f.Track[^1].Position);
+            DrawArc(into, 6, 0, Mathf.Tau, 16, Good, 1.6f, true);
+            if (arrived is not { } near || near.DistanceTo(into) > 90)
+                Text(into + new Vector2(10, -6), $"Encounter {entry.Body.Name} " + Instruments.Countdown(entry.Time - v.AbsoluteTime), Good, 13);
+            if (f.Beyond is { } inside) DrawPass(inside, c, stage, into);
+            return;
+        }
+        if (f.Exit is not { } e) return;
         var at = map(e.Position);
         DrawArc(at, 6, 0, Mathf.Tau, 16, c, 1.6f, true);
         // Zoomed out a whole pass is a few pixels, and the two labels would land on each other.
         if (e.Time > v.AbsoluteTime && (arrived is not { } came || came.DistanceTo(at) > 90))
             Text(at + new Vector2(10, -6), "Disengage " + Instruments.Countdown(e.Time - v.AbsoluteTime), c, 13);
         stage += f.Stages.Count;
+        if (f.Center?.Parent != null)
+        {
+            if (f.Beyond is { } outer) DrawPass(outer, c, stage, at);
+            return;
+        }
         if (f.Drift is not { } drift) return;
         stage = DrawDrift(drift, map, c, stage);
         if (f.Next is not { } n) return;
@@ -249,7 +271,7 @@ public partial class Hud
             DrawLine(map(pass.Track[i - 1].Position), map(pass.Track[i].Position), line, 1.4f, true);
         }
         DrawFlow(pass, line, map);
-        if (pass.Impact) Text(map(pass.Track[^1].Position) + new Vector2(10, 14), "恒星に落下", Bad, 13);
+        if (pass.Impact) Text(map(pass.Track[^1].Position) + new Vector2(10, 14), "天体に衝突", Bad, 13);
         if (pass.Closest is { } a) DrawClosest(a, map);
         DrawHandover(pass, c, stage, hit);
     }
@@ -266,7 +288,7 @@ public partial class Hud
         var star = v.System;
         DrawRect(new Rect2(Vector2.Zero, Size), new Color(0.01f, 0.015f, 0.035f, 0.9f));
         DrawGalaxyLayer(v.SystemStar);
-        var c = OrbitPoint(Vec3d.Zero);
+        var c = StarPoint(Vec3d.Zero);
         var col = Sky.StarColor(star.Temperature);
         for (int i = 4; i >= 1; i--) DrawCircle(c, 5f * i * i * 0.5f, new Color(col, 0.13f));
         DrawCircle(c, 5, col);
@@ -274,9 +296,10 @@ public partial class Hud
         if (Game.OrbitZoom < 35)
         {
             // Zoomed out to the galaxy the system is one point, but where the ship is bound still reads.
-            if (Game.SubForecast is { Exit: not null } leaving) DrawHandover(leaving, Warn);
+            if (Game.SubForecast is { } leaving) DrawHandover(leaving, Warn);
             return;
         }
+        DrawBodies();
 
         DrawLocalStation();
         if (Game.SubForecast is { } fc)
@@ -304,15 +327,40 @@ public partial class Hud
         DrawShipMarker();
     }
 
+    /// <summary>The system's planets and moons: their orbits, and their spheres of influence once visible.</summary>
+    void DrawBodies()
+    {
+        var v = Game.V!;
+        var t = v.AbsoluteTime;
+        foreach (var body in Game.G!.System(v.SystemStar).Tree.Skip(1))
+        {
+            var around = body.Parent!.StarPosition(t);
+            var (u, w, rad) = (body.U, body.W, body.OrbitRadius);
+            if (rad * Game.OrbitZoom > 12)
+                for (int i = 0; i < 96; i++)
+                    DrawLine(StarPoint(around + (u * Math.Cos(i * Math.Tau / 96) + w * Math.Sin(i * Math.Tau / 96)) * rad),
+                        StarPoint(around + (u * Math.Cos((i + 1) * Math.Tau / 96) + w * Math.Sin((i + 1) * Math.Tau / 96)) * rad), new Color(Dim, 0.3f), 1, true);
+            var at = StarPoint(body.StarPosition(t));
+            var col = body.Kind switch { BodyKind.Giant => new Color(0.95f, 0.8f, 0.55f), BodyKind.Moon => new Color(0.75f, 0.75f, 0.8f), _ => new Color(0.55f, 0.75f, 0.9f) };
+            DrawCircle(at, Mathf.Max(body.Kind == BodyKind.Moon ? 2f : 3.5f, (float)body.BodyRadius * Game.OrbitZoom), col);
+            var sphere = (float)body.Edge * Game.OrbitZoom;
+            if (sphere > 10) DrawArc(at, sphere, 0, Mathf.Tau, 48, new Color(col, 0.35f), 1, true);
+            if (sphere > 10 || body.Kind != BodyKind.Moon) Text(at + new Vector2(7, 12), body.Name, new Color(col, 0.8f), 12);
+        }
+    }
+
     void DrawLocalStation()
     {
         var v = Game.V!;
         if (v.LocalStation is not { } st) return;
+        var t = v.AbsoluteTime;
+        var host = (st.Host ?? Game.G!.System(v.SystemStar)).StarPosition(t) - v.Primary.StarPosition(t);
         var (u, w, rad) = (st.U, st.W, st.Radius);
-        Polyline3(a => (u * Math.Cos(a) + w * Math.Sin(a)) * rad, new Color(Good, 0.35f), 1);
-        var sp = OrbitPoint(st.Position(v.AbsoluteTime));
+        Polyline3(a => host + (u * Math.Cos(a) + w * Math.Sin(a)) * rad, new Color(Good, 0.35f), 1);
+        var sp = OrbitPoint(host + st.Position(t));
         DrawRect(new Rect2(sp - new Vector2(4, 4), 8, 8), Good);
         Text(sp + new Vector2(8, -6), v.SystemStar == v.TargetStar ? "目的港" : Game.G!.Ports.Contains(v.SystemStar) ? "港" : "補給港", Good, 13);
+        if (st.Host?.Key != v.Primary.Key) return;
         // Drop line from the ship to the station's plane, so height reads in 3D.
         var height = v.SubPosition.Dot(st.PlaneNormal);
         DrawDashedLine(OrbitPoint(v.SubPosition), OrbitPoint(v.SubPosition - st.PlaneNormal * height), new Color(Good, 0.5f), 1, 3);
@@ -388,7 +436,7 @@ public partial class Hud
     void DrawOrbitPanel(float x, float y)
     {
         var v = Game.V!;
-        var el = Sublight.OrbitOf(Sublight.Mu(v.System), v.SubPosition, v.SubVelocity);
+        var el = Sublight.OrbitOf(v.Primary.Mu, v.SubPosition, v.SubVelocity);
         void Line(string s, Color c) { Text(new Vector2(x, y), s, c, 15); y += 20; }
         Line(el.Bound ? $"近点 {el.Periapsis:F2}  遠点 {el.Apoapsis:F2} AU" : "脱出軌道", el.Bound ? Ink : Warn);
         Line($"{(el.Bound ? $"周期 {el.Period:F1} 日   " : "")}{(Game.CurrentRate == 0 ? "一時停止 (P)" : $"時間 {Instruments.Rate(Game.CurrentRate)}")}", Dim);
@@ -396,8 +444,10 @@ public partial class Hud
         var st = v.LocalStation;
         if (st != null)
         {
-            var d = (st.Position(v.AbsoluteTime) - v.SubPosition).Length;
-            var rel = (st.Velocity(v.AbsoluteTime) - v.SubVelocity).Length;
+            var (stationAt, stationSpeed) = v.StationNow();
+            var d = (stationAt - v.SubPosition).Length;
+            var rel = (stationSpeed - v.SubVelocity).Length;
+            Line($"主天体 {v.Primary.Name}", Dim);
             Line($"港まで {d:F3} AU   相対 {rel:F3}", d < Tuning.DockRange * 3 ? Good : Ink);
             var incl = Sublight.RelativeInclination(st, v.SubPosition, v.SubVelocity);
             var last = Game.SubForecast?.Stages.LastOrDefault();   // the plan within this star's reach
@@ -410,7 +460,7 @@ public partial class Hud
             else Line("港の軌道半径に届いていない", Warn);
             Line($"港 半径 {st.Radius:F2} AU   入港 {Tuning.DockRange:F2} AU / 相対 {Tuning.DockRelativeSpeed:F2}", Dim);
         }
-        if (Game.SubForecast?.Impact == true) Line("恒星に落下する軌道", Bad);
+        if (Game.SubForecast?.Impact == true) Line("天体に衝突する軌道", Bad);
         y += 4;
         var fc = Game.SubForecast;
         var live = fc?.AllStages.Where(s => v.Nodes.Contains(s.Node)).ToList() ?? new List<Stage>();

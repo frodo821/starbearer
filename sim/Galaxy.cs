@@ -23,16 +23,53 @@ public sealed class Galaxy
     public bool HasStation(int star) => Ports.Contains(star) || Depots.Contains(star);
     public Station? StationOrNull(int star) => HasStation(star) ? StationAt(star) : null;
 
+    readonly Dictionary<int, Center> _systems = new();
+    readonly Dictionary<int, Station> _stations = new();
+
+    /// <summary>A star with its planets and moons.</summary>
+    public Center System(int star)
+    {
+        lock (_systems)
+        {
+            if (!_systems.TryGetValue(star, out var c)) _systems[star] = c = Bodies.Build(Seed, Stars[star]);
+            return c;
+        }
+    }
+
+    /// <summary>What a kind of station circles: mining stations work a belt around the star, cities
+    /// circle planets, labs and foundries the moons, anything else the first planet going.</summary>
+    Center HostFor(StationKind kind, Center system, Rng r)
+    {
+        var planets = system.Children;
+        var moons = planets.SelectMany(p => p.Children).ToList();
+        return kind switch
+        {
+            StationKind.Mine => system,
+            StationKind.Lab or StationKind.Foundry when moons.Count > 0 => moons[r.Index(moons.Count)],
+            _ => planets[r.Index(planets.Count)],
+        };
+    }
+
     public Station StationAt(int star)
     {
+        lock (_stations)
+        {
+            if (!_stations.TryGetValue(star, out var st)) _stations[star] = st = PlaceStation(star);
+            return st;
+        }
+    }
+
+    Station PlaceStation(int star)
+    {
         var r = new Rng(Seed * 1000003 + (ulong)star);
-        var s = Stars[star];
-        var radius = r.Range(0.7, 1.6);
+        var system = System(star);
+        var host = HostFor(Missions.KindOf(this, star), system, r);
+        var radius = host == system ? r.Range(0.7, 1.6) : host.Edge * r.Range(0.25, 0.4);
         var node = r.Range(0, 2 * Math.PI);
         var tilt = r.Range(5, 28) * Math.PI / 180 * (r.Unit() < 0.5 ? -1 : 1);
         var u = new Vec3d(Math.Cos(node), 0, Math.Sin(node));
         var w = new Vec3d(-Math.Sin(node), 0, Math.Cos(node)) * Math.Cos(tilt) + new Vec3d(0, Math.Sin(tilt), 0);
-        return new Station(star, radius, r.Range(0, 2 * Math.PI), Math.Sqrt(Sublight.Mu(s) / (radius * radius * radius)), u, w);
+        return new Station(star, radius, r.Range(0, 2 * Math.PI), Math.Sqrt(host.Mu / (radius * radius * radius)), u, w) { Host = host };
     }
 
     static readonly string[] Syllables = "ka ru mi to sa ne ra li on ve th al dor ys ean or tes mar qu ien sol vi ga".Split(' ');

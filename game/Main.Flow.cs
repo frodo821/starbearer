@@ -78,7 +78,8 @@ public partial class Main
         PlanDv = 0.35;
         Forecast = null; SubForecast = null; SubCurrent = null; PlanFrozen = false; Selected = null;
         OrbitSky = false; Paused = true;
-        MapCenter = V.System.Position; MapZoom = SystemZoom; _glide = null;
+        MapCenter = PrimaryOnChart; MapZoom = ZoomFor(V.Primary); _glide = null;
+        _chartBody = PrimaryOnChart;
         LookAt(PlanDir);
         Screen = Screen.Orbit;
         MapOpen = false;
@@ -201,7 +202,7 @@ public partial class Main
         Screen = Screen.Orbit;
         MapOpen = false; Selected = null; Paused = true; PlanFrozen = false;
         OrbitSky = false;
-        GlideChart(V.System.Position, SystemZoom);
+        GlideChart(PrimaryOnChart, ZoomFor(V.Primary));
         ShowCue(new StateCue("亜光速へ降下", V.System.Name + " 星系", new Color(0.5f, 1f, 0.7f), Major: true, Outward: false));
         Message = V.LocalStation == null ? "この星系に港はない。J で再発進できる"
             : V.Hold.Any(c => c.Mission.Target == V.SystemStar) ? "亜光速へ降下。軌道をタップしてマニューバを置き、港へ軌道を合わせる"
@@ -225,19 +226,20 @@ public partial class Main
     {
         var v = V!;
         if (v.Docked) { Firing = false; return Vec3d.Zero; }
-        var st = v.LocalStation;
+        var here = v.LocalStation != null;
         Vec3d? assist = null;
-        if (st != null && IsDown(Key.X))
+        if (here && IsDown(Key.X))
         {
-            var toward = st.Position(v.AbsoluteTime) - v.SubPosition;
-            var rel = st.Velocity(v.AbsoluteTime) - v.SubVelocity;
+            var (sp, sv) = v.StationNow();
+            var toward = sp - v.SubPosition;
+            var rel = sv - v.SubVelocity;
             var want = rel + toward.Normalized() * Math.Min(0.02, toward.Length);
             if (want.Length < 0.005) { Firing = false; return Vec3d.Zero; }
             assist = want.Normalized();
         }
-        else if (st != null && IsDown(Key.Z))
+        else if (here && IsDown(Key.Z))
         {
-            var rel = st.Velocity(v.AbsoluteTime) - v.SubVelocity;
+            var rel = v.StationNow().Velocity - v.SubVelocity;
             if (rel.Length < 0.002) { Firing = false; return Vec3d.Zero; }
             assist = rel.Normalized();
         }

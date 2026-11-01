@@ -3,16 +3,17 @@ namespace Starbearer.Sim;
 public static partial class Sublight
 {
     /// <summary>A burn at the next crossing of the station's plane that rotates the orbit into it. Null if already aligned.</summary>
-    public static Maneuver? SuggestPlaneMatch(Star star, Station target, Vec3d p, Vec3d v, double t0)
+    public static Maneuver? SuggestPlaneMatch(Center star, IOrbiter target, Vec3d p, Vec3d v, double t0)
     {
         if (RelativeInclination(target, p, v) < 1) return null;
-        var mu = Mu(star);
+        var mu = star.Mu;
         var n = target.PlaneNormal;
         var el = OrbitOf(mu, p, v);
         var span = el.Bound ? el.Period : 30;
         var dt = span / 400;
         var (pos, vel, t) = (p, v, t0);
-        Propagate(mu, ref pos, ref vel, 0.1); t += 0.1;
+        var lead = Math.Min(0.1, span / 100);
+        Propagate(mu, ref pos, ref vel, lead); t += lead;
         for (int i = 0; i < 400; i++)
         {
             var (p0, v0, t1) = (pos, vel, t);
@@ -25,34 +26,101 @@ public static partial class Sublight
         return null;
     }
 
+    /// <summary>
+    /// Burns that stop a ship falling through a body: trim the pass to the target's height if it is still
+    /// coming in, then circle at the low point. Null if the orbit is already safely held.
+    /// </summary>
+    public static List<Maneuver>? SuggestCapture(Center c, IOrbiter target, Vec3d p, Vec3d v, double t0)
+    {
+        var el = OrbitOf(c.Mu, p, v);
+        if (el.Bound && el.Apoapsis < c.Edge * 0.9 && el.Periapsis > c.BodyRadius * 1.2) return null;
+        var plan = new List<Maneuver>();
+        var lead = 0.05 * Math.Sqrt(p.LengthSq * p.Length / c.Mu);
+        var t = t0 + lead;
+        Propagate(c.Mu, ref p, ref v, lead);
+        if (p.Dot(v) < 0)
+        {
+            var want = Math.Max(target.OrbitRadius, c.BodyRadius * 2.5);
+            var (_, radial, _) = Frame(p, v);
+            var trim = Enumerable.Range(-60, 121).Select(i => i * 0.01)
+                .OrderBy(dv => Math.Abs(OrbitOf(c.Mu, p, v + radial * dv).Periapsis - want) + Math.Abs(dv) * 0.02).First();
+            if (Math.Abs(trim) > 1e-3)
+            {
+                plan.Add(Decompose(t, p, v, radial * trim));
+                v += radial * trim;
+            }
+            // Coast to the low point.
+            for (int i = 0; i < 4000 && p.Dot(v) < 0; i++)
+            {
+                var step = 0.01 * Math.Sqrt(p.LengthSq * p.Length / c.Mu);
+                Propagate(c.Mu, ref p, ref v, step);
+                t += step;
+            }
+        }
+        var (tangent, _, _) = Frame(p, v);
+        var along = (tangent - p.Normalized() * tangent.Dot(p.Normalized())).Normalized();
+        plan.Add(Decompose(t, p, v, along * Math.Sqrt(c.Mu / p.Length) - v));
+        return plan;
+    }
+
+    /// <summary>A burn along the way of travel that carries the ship out of a body's sphere of influence.</summary>
+    public static Maneuver SuggestEscape(Center c, Vec3d p, Vec3d v, double t0)
+    {
+        var needed = Math.Sqrt(2 * c.Mu / p.Length) * 1.1 - v.Length;
+        var (_, radial, _) = Frame(p, v);
+        // A ship falling at the body has to miss it first.
+        var clear = p.Dot(v) < 0 && OrbitOf(c.Mu, p, v).Periapsis < c.BodyRadius * 1.5
+            ? Enumerable.Range(-60, 121).Select(i => i * 0.01).Where(dv => OrbitOf(c.Mu, p, v + radial * dv).Periapsis > c.BodyRadius * 2).OrderBy(Math.Abs).FirstOrDefault()
+            : 0;
+        return new Maneuver { Time = t0 + 0.02, Prograde = Math.Max(needed, 0), Radial = clear };
+    }
+
+    /// <summary>A step of delta-v that means the same around a star as around a moon.</summary>
+    static double DvUnit(IOrbiter target) => target.OrbitRadius * target.Omega * 0.09;
+
+    /// <summary>How long a transfer search looks ahead: scaled to the orbits at hand, not to days.</summary>
+    static double Horizon(Elements el, IOrbiter target) =>
+        Math.Max(2 * Math.PI / target.Omega, el.Bound ? el.Period * 1.5 : 2 * Math.PI / target.Omega);
+
+    /// <summary>How badly a path misses, or null if it can't be flown. Reaching a body's sphere is a hit.</summary>
+    static double? Miss(OrbitForecast f, IOrbiter target)
+    {
+        if (f.Impact) return null;
+        if (f.Enter is { } e && e.Body == target) return 0;
+        // Another body in the way cuts the path short: a bad pass, but one a better burn can clear.
+        return f.Closest is { } c ? c.Distance * 6 + c.RelativeSpeed + (f.Enter != null || f.Exit != null ? 1 : 0) : null;
+    }
+
     /// <summary>A rough transfer to refine by hand: scans departure time and prograde, after any burns already planned.</summary>
-    public static Maneuver SuggestTransfer(Star star, Station target, Vec3d p, Vec3d v, double t0, IReadOnlyList<Maneuver>? planned = null)
+    public static Maneuver SuggestTransfer(Center star, IOrbiter target, Vec3d p, Vec3d v, double t0, IReadOnlyList<Maneuver>? planned = null)
     {
         var baseNodes = planned ?? Array.Empty<Maneuver>();
-        var el = OrbitOf(Mu(star), p, v);
-        var span = el.Bound ? Math.Max(el.Period, 2 * Math.PI / target.Omega) * 1.5 : 30;
-        var horizon = Math.Max(2 * Math.PI / target.Omega, 20);
-        var start = Math.Max(t0, baseNodes.Count > 0 ? baseNodes.Max(n => n.Time) : t0) + 0.2;
+        var el = OrbitOf(star.Mu, p, v);
+        var span = el.Bound ? Math.Max(el.Period, 2 * Math.PI / target.Omega) * 1.5 : 4 * Math.PI / target.Omega;
+        var horizon = Horizon(el, target);
+        var unit = DvUnit(target);
+        var start = Math.Max(t0, baseNodes.Count > 0 ? baseNodes.Max(n => n.Time) : t0) + Math.Min(0.2, span / 100);
         Maneuver best = new() { Time = start };
         double bestScore = double.MaxValue;
         for (int i = 0; i <= 48; i++)
             for (int j = -16; j <= 16; j++)
             {
-                var m = new Maneuver { Time = start + span * i / 48, Prograde = j * 0.02 };
+                var m = new Maneuver { Time = start + span * i / 48, Prograde = j * unit };
                 var f = Predict(star, target, p, v, t0, baseNodes.Append(m), horizon, 120, coarse: true);
-                if (f.Impact || f.Closest is not { } c) continue;
-                var score = c.Distance * 6 + m.DeltaV + c.RelativeSpeed;
+                var miss = Miss(f, target);
+                if (miss == null) continue;
+                var score = miss.Value + m.DeltaV;
                 if (score < bestScore) { bestScore = score; best = m; }
             }
         return best;
     }
 
     /// <summary>A burn at the closest approach that matches the station's velocity.</summary>
-    public static Maneuver? MatchAtClosest(Star star, Station target, Vec3d p, Vec3d v, double t0, IReadOnlyList<Maneuver> nodes, double horizon)
+    public static Maneuver? MatchAtClosest(Center star, IOrbiter target, Vec3d p, Vec3d v, double t0, IReadOnlyList<Maneuver> nodes, double horizon)
     {
         var f = Predict(star, target, p, v, t0, nodes, horizon, 800);
         if (f.Closest is not { } c) return null;
-        var mu = Mu(star);
+        var mu = star.Mu;
         var (ps, vs, t) = (p, v, t0);
         foreach (var n in nodes.OrderBy(n => n.Time))
         {
@@ -68,21 +136,24 @@ public static partial class Sublight
     /// The transfer computer: plane match if needed, then a pattern search for a departure burn that
     /// meets the station, then a burn matching its velocity. Null when nothing comes close.
     /// </summary>
-    public static List<Maneuver>? PlanRendezvous(Star star, Station target, Vec3d p, Vec3d v, double t0)
+    public static List<Maneuver>? PlanRendezvous(Center star, IOrbiter target, Vec3d p, Vec3d v, double t0)
     {
+        if (SuggestCapture(star, target, p, v, t0) is { } capture) return capture;
         var plan = new List<Maneuver>();
         if (SuggestPlaneMatch(star, target, p, v, t0) is { } plane) plan.Add(plane);
         var first = SuggestTransfer(star, target, p, v, t0, plan);
-        var horizon = Math.Max(2 * Math.PI / target.Omega, 20);
+        var horizon = Horizon(OrbitOf(star.Mu, p, v), target);
         double Score(Maneuver m)
         {
             var f = Predict(star, target, p, v, t0, plan.Append(m), horizon, 160, coarse: true);
-            return f.Impact || f.Closest is not { } c ? double.MaxValue : c.Distance * 6 + m.DeltaV + c.RelativeSpeed;
+            return Miss(f, target) is { } miss ? miss + m.DeltaV : double.MaxValue;
         }
-        var earliest = plan.Count > 0 ? plan[0].Time + 0.1 : t0 + 0.05;
+        var scale = 2 * Math.PI / target.Omega / 30;
+        var earliest = plan.Count > 0 ? plan[0].Time + Math.Min(0.1, scale / 2) : t0 + Math.Min(0.05, scale / 4);
         var bestS = Score(first);
-        double stepT = 0.5, stepD = 0.02;
-        for (int round = 0; round < 30; round++)
+        double stepT = Math.Min(0.5, scale), stepD = DvUnit(target);
+        // Refining a way into a body only shaves delta-v until the pass barely grazes it.
+        for (int round = 0; round < 30 && target is Station; round++)
         {
             var improved = false;
             foreach (var (dt, dp, dr, dn) in new[] { (stepT, 0.0, 0.0, 0.0), (-stepT, 0.0, 0.0, 0.0), (0.0, stepD, 0.0, 0.0), (0.0, -stepD, 0.0, 0.0), (0.0, 0.0, stepD, 0.0), (0.0, 0.0, -stepD, 0.0), (0.0, 0.0, 0.0, stepD), (0.0, 0.0, 0.0, -stepD) })
@@ -95,8 +166,10 @@ public static partial class Sublight
         }
         plan.Add(first);
         var result = Predict(star, target, p, v, t0, plan, horizon, 600);
-        if (result.Closest is not { } meet || meet.Distance > 0.15) return null;
-        if (MatchAtClosest(star, target, p, v, t0, plan, horizon) is { } match) plan.Add(match);
+        var reached = result.Enter?.Body == target;
+        if (!reached && (result.Closest is not { } meet || meet.Distance > 0.5 * target.OrbitRadius)) return null;
+        // A body is only a way in: its sphere of influence takes over before there is anything to match.
+        if (target is Station && MatchAtClosest(star, target, p, v, t0, plan, horizon) is { } match) plan.Add(match);
         return plan;
     }
 }

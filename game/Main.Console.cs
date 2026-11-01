@@ -60,12 +60,13 @@ public partial class Main
         if (Screen == Screen.Orbit)
         {
             var st = v.LocalStation;
+            var way = v.Waypoint;
             var nodes = v.Nodes.Count > 0;
             list.Add(("計画", new Command[]
             {
-                new(Key.H, "H", "遷移案", st != null),
-                new(Key.M, "M", "合流案", st != null),
-                new(Key.T, "T", "計算機", st != null && Owns(Modules.Transfer)),
+                new(Key.H, "H", way == null && v.Primary.Parent != null ? "脱出案" : "遷移案", way != null || v.Primary.Parent != null),
+                new(Key.M, "M", "合流案", way is Station),
+                new(Key.T, "T", "計算機", way != null && Owns(Modules.Transfer)),
                 new(Key.G, "G", v.AutoBurn ? "自動噴射 ON" : "自動噴射", Owns(Modules.AutoBurn) && !v.Docked),
                 new(Key.Y, "Y", "再計画", nodes),
                 new(Key.Backspace, "BS", "ノード削除", nodes),
@@ -122,15 +123,21 @@ public partial class Main
         var st = v.LocalStation;
         if (st == null) return (Key.J, "この星系に港はない。発進して次へ");
         if (EngineOn && NextNode != null) return (Key.Space, "ノード噴射中。完了すると自動で止まる");
-        var distance = (st.Position(v.AbsoluteTime) - v.SubPosition).Length;
-        var relative = (st.Velocity(v.AbsoluteTime) - v.SubVelocity).Length;
+        var (stationAt, stationSpeed) = v.StationNow();
+        var distance = (stationAt - v.SubPosition).Length;
+        var relative = (stationSpeed - v.SubVelocity).Length;
         if (v.CanDock) return (Key.J, "港のすぐそば。発進するか、U で入港し直す");
-        if (distance < 0.3)
+        if (distance < 0.05)
             return relative > 0.1 ? (Key.Z, $"港の近く。相対速度 {relative:F2} を押し続けて落とす") : (Key.X, $"港まで {distance:F3} AU。押し続けて寄せる");
         if (IgnitionIn is { } wait)
             return wait > 0.05 ? (ToNode ? null : Key.N, $"次の点火まで {wait:F1} 日" + (v.AutoBurn ? "。自動噴射が点火する" : "。ノードまで時間を進める")) : (Key.Space, "点火の時機。機首をノードに向けて点火");
-        if (SubForecast?.Closest is { Distance: < 0.1 }) return (Key.M, "港に接近する軌道。最接近で速度を合わせる");
-        return (Key.H, "港へ向かう軌道を作る");
+        if (SubForecast?.Closest is { Distance: < 0.03 }) return (Key.M, "港に接近する軌道。最接近で速度を合わせる");
+        return v.Waypoint switch
+        {
+            Station => (Key.H, "港へ向かう軌道を作る"),
+            Center body => (Key.H, $"港は {body.Name} の周りにある。ヒル球へ入る軌道を作る"),
+            _ => (Key.H, "港はこの天体の外にある。ヒル球を出る軌道を作る"),
+        };
     }
 
     /// <summary>Banners for changes nothing in the flight code announces by itself.</summary>
@@ -139,13 +146,15 @@ public partial class Main
         if (V is not { } v || Screen is not (Screen.Flight or Screen.Orbit)) { _lastWell = -1; _lastPrimary = -1; return; }
         if (Screen == Screen.Orbit)
         {
-            var primary = v.Adrift ? -2 : v.SystemStar;
-            if (_lastPrimary >= 0 && primary == -2)
-                ShowCue(new StateCue("Disengage", v.System.Name + " のヒル球を離れた", new Color(1f, 0.7f, 0.25f), Major: false, Outward: true));
-            else if (_lastPrimary != -1 && primary >= 0 && primary != _lastPrimary)
+            var primary = v.Adrift ? -2 : v.Primary.Key;
+            if (_lastPrimary != -1 && primary != _lastPrimary)
             {
-                ShowCue(new StateCue("Encounter", v.System.Name + " のヒル球に入った", new Color(0.5f, 1f, 0.7f), Major: false, Outward: false));
-                GlideChart(v.System.Position, SystemZoom);
+                // Going down into a body is an encounter; climbing out or leaving the star lets go.
+                var inward = primary >= 0 && (_lastPrimary < 0 || _lastPrimary / 1000 != primary / 1000 || v.Primary.Parent?.Key == _lastPrimary);
+                ShowCue(inward
+                    ? new StateCue("Encounter", v.Primary.Name + " のヒル球に入った", new Color(0.5f, 1f, 0.7f), Major: false, Outward: false)
+                    : new StateCue("Disengage", "ヒル球を離れた", new Color(1f, 0.7f, 0.25f), Major: false, Outward: true));
+                if (primary >= 0) GlideChart(PrimaryOnChart, ZoomFor(v.Primary));
                 Replan();
             }
             _lastPrimary = primary;

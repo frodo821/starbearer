@@ -1,7 +1,7 @@
 namespace Starbearer.Sim;
 
 /// <summary>What a station does. It decides which jobs its board offers.</summary>
-public enum StationKind { Farm, Foundry, Lab, Clinic, Mine, Depot }
+public enum StationKind { Farm, Foundry, Lab, Clinic, Mine, City, Depot }
 
 /// <summary>A job from a mission board: carry Cargo to Target for Pay, less whatever the cargo loses.</summary>
 public sealed record Mission(string Id, int Origin, int Target, Cargo Cargo, double Pay);
@@ -26,6 +26,7 @@ public static class Missions
         [StationKind.Lab] = new Cargo[] { new("精密機器", 0.7, 0.7, 180, 2), new("観測試料", 0.2, 0.4, 170, 1), new("実験装置", 0.5, 0.6, 150, 3) },
         [StationKind.Clinic] = new Cargo[] { new("医薬品", 0.2, 0.55, 130, 1), new("血漿", 0.3, 0.4, 190, 1), new("医療機材", 0.5, 0.75, 120, 2) },
         [StationKind.Mine] = new Cargo[] { new("鉱石", 1.2, 0.95, 100, 3), new("レアメタル", 0.9, 0.9, 170, 1), new("採掘機材", 0.8, 0.85, 110, 3) },
+        [StationKind.City] = new Cargo[] { new("生活物資", 0.7, 0.8, 100, 3), new("加工食品", 0.5, 0.7, 110, 2), new("美術品", 0.2, 0.5, 200, 1) },
         [StationKind.Depot] = new Cargo[] { new("予備部品", 0.3, 0.85, 60, 1), new("空タンク", 0.2, 0.95, 40, 2), new("郵便", 0.1, 0.8, 70, 1) },
     };
 
@@ -35,7 +36,8 @@ public static class Missions
         StationKind.Foundry => "工業ステーション",
         StationKind.Lab => "研究ステーション",
         StationKind.Clinic => "医療ステーション",
-        StationKind.Mine => "鉱業ステーション",
+        StationKind.Mine => "小惑星採掘ステーション",
+        StationKind.City => "都市ステーション",
         _ => "補給ステーション",
     };
 

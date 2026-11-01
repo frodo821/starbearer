@@ -1,9 +1,12 @@
 namespace Starbearer.Sim;
 
 /// <summary>A station on a circular orbit. U and W span its orbital plane.</summary>
-public sealed record Station(int Star, double Radius, double Phase, double Omega, Vec3d U, Vec3d W)
+public sealed record Station(int Star, double Radius, double Phase, double Omega, Vec3d U, Vec3d W) : IOrbiter
 {
+    /// <summary>The body it circles. Null only for stations built by hand around a bare star.</summary>
+    public Center? Host { get; init; }
     public Vec3d PlaneNormal => U.Cross(W);
+    public double OrbitRadius => Radius;
 
     public Vec3d Position(double t)
     {
@@ -36,6 +39,8 @@ public readonly record struct Elements(double Periapsis, double Apoapsis, double
 
 /// <summary>Where the path leaves the star's sphere of influence.</summary>
 public readonly record struct Disengage(double Time, Vec3d Position, Vec3d Velocity);
+/// <summary>Where the path enters a body's sphere of influence. State is relative to that body.</summary>
+public readonly record struct Entry(Center Body, double Time, Vec3d Position, Vec3d Velocity);
 /// <summary>The next star whose sphere of influence a ship in open space runs into. Point is in ly.</summary>
 public readonly record struct Handover(int Star, double Time, Vec3d Point);
 
@@ -46,6 +51,9 @@ public sealed class OrbitForecast
     /// <summary>Points of Track to show: up to one lap past the last burn, or to where the star lets go.</summary>
     public int DrawnCount { get; set; }
     public Disengage? Exit { get; set; }
+    public Entry? Enter { get; set; }
+    /// <summary>The body this leg is relative to.</summary>
+    public Center? Center { get; set; }
     public Handover? Next { get; set; }
     /// <summary>The star whose frame Track and Stages are in.</summary>
     public int Star { get; set; }

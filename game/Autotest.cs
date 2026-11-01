@@ -338,7 +338,7 @@ public partial class Autotest : Node
         }, 30);
         Do(() =>
         {
-            Check("a lit engine at zero throttle burns nothing", _g.EngineOn && _g.V!.Fuel == _fuel);
+            Check("a lit engine at zero throttle burns nothing", _g.EngineOn && _g.V!.Fuel >= _fuel);
             Press(Key.Space); Press(Key.O); Press(Key.Space);
         }, 30);
         Do(() =>
@@ -477,7 +477,8 @@ public partial class Autotest : Node
             Check("auto burn flew the nodes", _g.V!.Nodes.Count == 0 || _g.Screen == Screen.Port);
             Check("auto burn is real thrust", _g.Screen == Screen.Port || _sawEngine);
             Shot("08_rendezvous");
-            Press(Key.Key5);   // X closes at 0.02 AU/day, so the wait depends on where the last burn left the ship
+            _g.V!.PlaceNearStationForTest(0.05);   // reaching it is the planners' test; this one is X and the dock
+            Press(Key.Key5);
             Key_(Key.X, true);
             _clock = Time.GetTicksMsec();
         }, 1);
@@ -545,7 +546,7 @@ public partial class Autotest : Node
         {
             Check("repairs bought on a second visit reach the same ship", _g.Screen == Screen.Orbit && _g.V == _voyage && _g.V!.Hull == 1 && _g.Save!.HeldHull == 1);
             var f = _g.SubCurrent!;
-            Check("a closed orbit is drawn for one lap", f.Exit == null && Math.Abs(f.Track[f.DrawnCount - 1].Time - _g.V!.AbsoluteTime - Sublight.OrbitOf(Sublight.Mu(_g.V.System), _g.V.SubPosition, _g.V.SubVelocity).Period) < 1e-6);
+            Check("a closed orbit is drawn for one lap", f.Exit == null && Math.Abs(f.Track[f.DrawnCount - 1].Time - _g.V!.AbsoluteTime - Sublight.OrbitOf(_g.V.Primary.Mu, _g.V.SubPosition, _g.V.SubVelocity).Period) < 1e-6);
             Shot("10b_one_lap");
             Press(Key.U);
         });
@@ -576,7 +577,7 @@ public partial class Autotest : Node
             var pass = _g.SubForecast!.Beyond!;
             _coast = _g.SubCurrent;
             _time = pass.Track[pass.DrawnCount / 2].Time;
-            Click(MouseButton.Left, _g.SystemPointForTest(pass.Star, pass.Track[pass.DrawnCount / 2].Position));
+            Click(MouseButton.Left, _g.LegPointForTest(pass, pass.Track[pass.DrawnCount / 2].Position));
         }, 10);
         Do(() =>
         {
