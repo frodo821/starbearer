@@ -135,8 +135,8 @@ public partial class Main
         return v.Waypoint switch
         {
             Station => (Key.H, "港へ向かう軌道を作る"),
-            Center body => (Key.H, $"港は {body.Name} の周りにある。ヒル球へ入る軌道を作る"),
-            _ => (Key.H, "港はこの天体の外にある。ヒル球を出る軌道を作る"),
+            Center body => (Key.H, $"港は {body.Name} の周りにある。{body.Name} へ向かう軌道を作る"),
+            _ => (Key.H, "港はこの天体の外にある。ここを離れる軌道を作る"),
         };
     }
 
@@ -149,11 +149,6 @@ public partial class Main
             var primary = v.Adrift ? -2 : v.Primary.Key;
             if (_lastPrimary != -1 && primary != _lastPrimary)
             {
-                // Going down into a body is an encounter; climbing out or leaving the star lets go.
-                var inward = primary >= 0 && (_lastPrimary < 0 || _lastPrimary / 1000 != primary / 1000 || v.Primary.Parent?.Key == _lastPrimary);
-                ShowCue(inward
-                    ? new StateCue("Encounter", v.Primary.Name + " のヒル球に入った", new Color(0.5f, 1f, 0.7f), Major: false, Outward: false)
-                    : new StateCue("Disengage", "ヒル球を離れた", new Color(1f, 0.7f, 0.25f), Major: false, Outward: true));
                 if (primary >= 0) GlideChart(PrimaryOnChart, ZoomFor(v.Primary));
                 Replan();
             }

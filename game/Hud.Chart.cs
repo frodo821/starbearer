@@ -35,8 +35,6 @@ public partial class Hud
             var s = g.Stars[i];
             var p = MapPoint(v.ChartPositions[i]);
             var col = Sky.StarColor(s.Temperature);
-            var well = (float)s.Soi * Game.MapZoom;
-            if (well < 3000) DrawArc(p, well, 0, Mathf.Tau, 64, new Color(col, 0.25f), 1f, true);
             if (i == here) continue;   // the orbit view draws its own star, at its true place
             DrawCircle(p, 2.5f + (float)s.Mass, col);
             // Chart ring: how far this star may be from where it is drawn.

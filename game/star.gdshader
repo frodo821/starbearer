@@ -1,5 +1,5 @@
 shader_type spatial;
-render_mode unshaded, blend_add, cull_disabled, shadows_disabled, depth_draw_never, depth_test_disabled;
+render_mode unshaded, blend_add, cull_disabled, shadows_disabled, depth_draw_never;
 
 varying float falloff;
 

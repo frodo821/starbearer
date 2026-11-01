@@ -64,7 +64,7 @@ public partial class Main
         return Math.Max(el.Bound ? Math.Clamp(el.Period * 1.5, 10, 150) : 60, target);
     }
 
-    string NoWaypoint => V!.LocalStation == null ? "この星系に港はない" : "港はこの天体の外にある。まずヒル球を出る";
+    string NoWaypoint => V!.LocalStation == null ? "この星系に港はない" : "港はこの天体の外にある。まずここを離れる";
 
     /// <summary>The way out of a body that doesn't lead to the station.</summary>
     void PlanEscape()
@@ -73,7 +73,7 @@ public partial class Main
         Selected = Sublight.SuggestEscape(V.Primary, V.SubPosition, V.SubVelocity, V.AbsoluteTime);
         V.Nodes.Add(Selected);
         Paused = true; HandlesOpen = false;
-        Message = $"{V.Primary.Name} のヒル球を出る噴射を計画した";
+        Message = $"{V.Primary.Name} を離れる噴射を計画した";
         Replan();
     }
 
@@ -206,9 +206,9 @@ public partial class Main
         if (acting) Aligning = false;
         if (Paused && !acting) { CurrentRate = 0; ToNode = false; Aligning = false; return; }
         var rate = ToNode ? Rates[^1] : Rates[SubRateIndex];
-        if (acting) rate = Math.Min(rate, BurnRate);
+        if (acting) rate = Math.Min(rate, BurnTimeRate);
         if (NextNode is { } n && n.Time > v.AbsoluteTime)
-            rate = Math.Min(rate, Math.Max(BurnRate, (n.Time - v.AbsoluteTime) * 1.5));   // don't sail past ignition
+            rate = Math.Min(rate, Math.Max(BurnTimeRate, (n.Time - v.AbsoluteTime) * 1.5));   // don't sail past ignition
         if (ToNode)
         {
             // Spend the wait in a few real seconds and slow down into it, stopping just short of ignition.

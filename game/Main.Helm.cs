@@ -165,7 +165,18 @@ public partial class Main
         Throttle * (V!.Phase == Phase.Sublight ? Tuning.SublightThrust : Tuning.MaxThrust);
 
     /// <summary>Time rate a burn runs at, so the real-time estimate matches what will happen.</summary>
-    public double BurnTimeRate => Math.Min(BurnRate, V!.Phase == Phase.Sublight ? Rates[SubRateIndex] : Rates[RateIndex]);
+    /// <summary>Days per second under power. A tight orbit gets a minute a lap, or the nose can't keep up with it.</summary>
+    public double BurnTimeRate
+    {
+        get
+        {
+            var v = V!;
+            if (v.Phase != Phase.Sublight) return Math.Min(BurnRate, Rates[RateIndex]);
+            var r = v.SubPosition.Length;
+            var lap = 2 * Math.PI * Math.Sqrt(r * r * r / v.Primary.Mu);
+            return Math.Min(Math.Min(BurnRate, Rates[SubRateIndex]), lap / 60);
+        }
+    }
 
     public string HoldName => Hold switch
     {

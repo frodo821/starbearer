@@ -27,6 +27,8 @@ public partial class Autotest : Node
     OrbitForecast? _plan;
     Star? _meets;
     OrbitForecast? _coast;
+    int _settling;
+    List<Center> _views = new();
     Vector2 Size() => _g.GetViewport().GetVisibleRect().Size;
     double _dv, _throttle;
     ulong _clock;
@@ -117,7 +119,18 @@ public partial class Autotest : Node
         });
         Do(() => { Check("a departure can be planned while docked", _g.Screen == Screen.Plan); Press(Key.Enter); });
         Do(() => { Check("a docked ship can't jump", _g.Screen == Screen.Plan && _g.V!.Phase == Phase.Sublight); Press(Key.Escape); });
-        Do(() => { Check("the plan closes back to the port", _g.Screen == Screen.Orbit); Press(Key.Enter); });
+        Do(() =>
+        {
+            Check("the plan closes back to the port", _g.Screen == Screen.Orbit);
+            _g.LookAtPublic(-_g.V!.SubPosition.Normalized());   // the body the port circles
+            _g.OrbitSky = true;
+        }, 20);
+        Do(() =>
+        {
+            Shot("01d_body_from_port");
+            _g.OrbitSky = false;
+            Press(Key.Enter);
+        });
         Do(() =>
         {
             Shot("01b_port");
@@ -429,7 +442,7 @@ public partial class Autotest : Node
         Do(() =>
         {
             var v = _g.V!;
-            var fresh = Sublight.Predict(v.System, v.LocalStation, v.SubPosition, v.SubVelocity, v.AbsoluteTime, v.Nodes, 10);
+            var fresh = Sublight.Predict(v.Primary, v.Waypoint, v.SubPosition, v.SubVelocity, v.AbsoluteTime, v.Nodes, 10);
             var same = v.Nodes.Count == 0 || (fresh.Stages[0].Velocity - _g.SubForecast!.Stages[0].Velocity).Length < 1e-3;
             Check("remaining stages start from the current orbit", v.Nodes.Count > 0 && same);
             _g.SetHold(ViewHold.Free);
@@ -444,7 +457,7 @@ public partial class Autotest : Node
         Do(() =>
         {
             Check("transfer computer plans a multi-stage burn", _g.V!.Nodes.Count >= 2);
-            Check("the orbit view knows where a jump would go", _g.Forecast != null);
+            Check("no jump path shows until one is planned", _g.Forecast == null);
             _g.MapZoom = 30;
         });
         Do(() =>
@@ -476,13 +489,14 @@ public partial class Autotest : Node
         {
             Check("auto burn flew the nodes", _g.V!.Nodes.Count == 0 || _g.Screen == Screen.Port);
             Check("auto burn is real thrust", _g.Screen == Screen.Port || _sawEngine);
+            if (_g.Screen == Screen.Orbit) _g.V!.PlaceNearStationForTest(0.05);   // the coast from here isn't under test
             Shot("08_rendezvous");
             _g.V!.PlaceNearStationForTest(0.05);   // reaching it is the planners' test; this one is X and the dock
             Press(Key.Key5);
             Key_(Key.X, true);
             _clock = Time.GetTicksMsec();
         }, 1);
-        Until(() => _g.Screen == Screen.Port || Time.GetTicksMsec() - _clock > 120000);
+        Until(() => { Key_(Key.X, true); return _g.Screen == Screen.Port || Time.GetTicksMsec() - _clock > 120000; });   // the window can lose a held key
         Do(() =>
         {
             Key_(Key.X, false);
@@ -585,11 +599,14 @@ public partial class Autotest : Node
             Check("a tap on the star ahead plans a burn there", _g.Selected is { } n && f.LegOf(n) == f.Beyond && Math.Abs(n.Time - _time) < 1);
             Check("the panel plans the burn ahead", f.AllStages.Count() == 1 && f.Stages.Count == 0);
             Shot("10e_node_ahead");
+            _views = _g.G!.Stars.SelectMany(x => _g.G.System(x.Id).Tree).GroupBy(c => c.Kind).Select(k => k.First()).ToList();
             _g.DeleteNode();
-            // Falling in from outside the station's orbit: nothing on the path comes up for days.
+            // A clear circle around the star: nothing on the path comes up for days.
             var v = _g.V!;
             var st = v.LocalStation!;
-            v.PlaceSublightForTest(st.U * (st.Radius * 2.5), st.W * 0.05);
+            var system = _g.G!.System(v.SystemStar);
+            var gap = Bodies.WidestGap(system);
+            v.PlaceSublightForTest(st.U * gap, st.W * Math.Sqrt(system.Mu / gap));
             Press(Key.Y);
             if (_g.Paused) Press(Key.P);
         }, 10);
@@ -600,7 +617,31 @@ public partial class Autotest : Node
         }, 40);
         Do(() =>
         {
-            Check("a coast leaves the worked-out path alone", _g.V!.AbsoluteTime > _time && ReferenceEquals(_g.SubCurrent, _coast));
+            Check("a coast leaves the worked-out path alone", _g.V!.AbsoluteTime > _time && _g.V.Phase == Phase.Sublight && ReferenceEquals(_g.SubCurrent, _coast));
+            _g.Paused = true;
+            _g.OrbitSky = true;
+        });
+        for (int n = 0; n < 5; n++)
+        {
+            var view = n;
+            Do(() =>
+            {
+                // From the sunward side, close enough to fill the window.
+                var body = _views[view % _views.Count];
+                var v = _g.V!;
+                var at = body.StarPosition(v.AbsoluteTime);
+                var sunward = at.Length > 0 ? -at.Normalized() : new Vec3d(1, 0, 0);
+                var side = sunward.AnyPerpendicular();
+                var away = (sunward + side * 0.5).Normalized();
+                _g.ViewFromForTest(body.Star, at + away * (body.BodyRadius * (body.Parent == null ? 5 : 13)));
+                _g.LookAtPublic(-away);
+            }, 12);
+            Do(() => Shot($"12_body_{view}"), 2);
+        }
+        Do(() =>
+        {
+            _g.OrbitSky = false;
+            _g.ViewFromForTest(-1, Vec3d.Zero);
             _g.GoBrokeForTest();
         });
         Do(() =>
@@ -623,6 +664,8 @@ public partial class Autotest : Node
     public override void _Process(double delta)
     {
         if (!Enabled || _g.Screen == Screen.Loading || --_wait > 0 || _steps.Count == 0) return;
+        if (_g.ForecastBusyForTest && ++_settling < 30) return;   // forecasts land a few frames after they are asked for
+        _settling = 0;
         var (step, wait) = _steps.Peek();
         _wait = wait;
         if (step()) _steps.Dequeue();

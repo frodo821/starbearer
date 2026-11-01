@@ -51,6 +51,17 @@ public partial class Main : Node3D
     float ZoomFor(Center c) => c.Parent == null ? SystemZoom : Mathf.Min(10000f, 220f / (float)(c.Edge * Sublight.Scale));
 
     /// <summary>A planet moves under the view; the chart goes with it so the ship's orbit holds still.</summary>
+    (int Star, Vec3d At)? _viewForTest;
+    public void ViewFromForTest(int star, Vec3d at) => _viewForTest = (star, at);
+
+    void ShowWorlds()
+    {
+        var v = V!;
+        if (_viewForTest is { Star: >= 0 } view) { _worlds.Show(G!, view.Star, view.At, v.AbsoluteTime); return; }
+        var star = v.Phase == Phase.Flight ? (v.NearestWell(out var s) < double.MaxValue && s != null ? s.Id : -1) : v.SystemStar;
+        _worlds.Show(G!, star, star < 0 ? Vec3d.Zero : (v.TruePosition - v.TruePositions[star]) / Sublight.Scale, v.AbsoluteTime);
+    }
+
     void FollowPrimary()
     {
         var now = PrimaryOnChart;
@@ -123,6 +134,7 @@ public partial class Main : Node3D
 
     Sky? _sky;
     Hud _hud = null!;
+    readonly Worlds _worlds = new();
     float _yaw, _pitch;
     bool _looking, _dragged;
     Vector2 _pressAt;
@@ -160,6 +172,7 @@ public partial class Main : Node3D
         });
         Camera = new Camera3D { Fov = 70, Far = 1000 };
         AddChild(Camera);
+        AddChild(_worlds);
         var layer = new CanvasLayer();
         AddChild(layer);
         _hud = new Hud { Game = this };
@@ -216,13 +229,15 @@ public partial class Main : Node3D
 
         if (Screen == Screen.Orbit) FollowPrimary();
         _forecastTimer -= delta;
-        if (Screen is Screen.Plan or Screen.Flight or Screen.Orbit && (_forecastDirty || _forecastTimer <= 0))
+        CollectForecast();
+        if (_forecastJob == null && Screen is Screen.Plan or Screen.Flight or Screen.Orbit && (_forecastDirty || _forecastTimer <= 0))
         {
             RefreshForecast(_forecastDirty);
             _forecastDirty = false;
             _forecastTimer = 0.4;
         }
         _sky?.UpdateSky(v.TruePositions, v.TruePosition);
+        ShowWorlds();
         _hud.QueueRedraw();
     }
 

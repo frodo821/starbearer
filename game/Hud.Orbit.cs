@@ -327,7 +327,7 @@ public partial class Hud
         DrawShipMarker();
     }
 
-    /// <summary>The system's planets and moons: their orbits, and their spheres of influence once visible.</summary>
+    /// <summary>The system's planets and moons, with their orbits.</summary>
     void DrawBodies()
     {
         var v = Game.V!;
@@ -343,9 +343,7 @@ public partial class Hud
             var at = StarPoint(body.StarPosition(t));
             var col = body.Kind switch { BodyKind.Giant => new Color(0.95f, 0.8f, 0.55f), BodyKind.Moon => new Color(0.75f, 0.75f, 0.8f), _ => new Color(0.55f, 0.75f, 0.9f) };
             DrawCircle(at, Mathf.Max(body.Kind == BodyKind.Moon ? 2f : 3.5f, (float)body.BodyRadius * Game.OrbitZoom), col);
-            var sphere = (float)body.Edge * Game.OrbitZoom;
-            if (sphere > 10) DrawArc(at, sphere, 0, Mathf.Tau, 48, new Color(col, 0.35f), 1, true);
-            if (sphere > 10 || body.Kind != BodyKind.Moon) Text(at + new Vector2(7, 12), body.Name, new Color(col, 0.8f), 12);
+            if (body.Edge * Game.OrbitZoom > 10 || body.Kind != BodyKind.Moon) Text(at + new Vector2(7, 12), body.Name, new Color(col, 0.8f), 12);
         }
     }
 
