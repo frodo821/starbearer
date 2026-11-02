@@ -81,7 +81,7 @@ public partial class Main
             list.Add(("操船", ShipCommands(Helm.EngineOn, this)));
             list.Add(("機首", NoseCommands));
             var port = new List<Command> { new(Key.X, "X", "接近", st != null, Hold: true), new(Key.Z, "Z", "相対0", st != null, Hold: true), new(Key.U, "U", "入港", v.CanDock) };
-            if (v.AtGate) port.Add(new(Key.K, "", v.GateBooked != null ? "通過を取消" : $"ゲート通過 {GateToll:F0}"));
+            if (v.AtGate) port.Add(new(Key.K, "", !v.Class.Gates ? "ゲート不可" : v.GateBooked != null ? "通過を取消" : $"ゲート通過 {GateToll:F0}", v.Class.Gates));
             list.Add(("港", port.ToArray()));
             list.Add(("航行", new Command[] { new(Key.J, "J", "FTL発進"), new(Key.Tab, "Tab", OrbitSky ? "軌道図" : "空") }));
             return list;

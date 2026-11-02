@@ -22,7 +22,8 @@ public static class Predictor
     const double SampleLy = 0.2;
 
     /// <param name="stopAtStar">Stop after the first encounter with this star (used by the autopilot).</param>
-    public static Prediction Run(Galaxy g, Vec3d[] starPos, Vec3d pos, Vec3d vel, int stopAtStar = -1)
+    /// <param name="drag">The hull's drag, as a multiple of a small ship's.</param>
+    public static Prediction Run(Galaxy g, Vec3d[] starPos, Vec3d pos, Vec3d vel, int stopAtStar = -1, double drag = 1)
     {
         var res = new Prediction();
         double t = 0, sinceSample = double.MaxValue;
@@ -40,7 +41,7 @@ public static class Predictor
                 sinceSample = 0;
             }
             var prev = pos;
-            t += Physics.Coast(g, starPos, ref pos, ref vel, Math.Max(MaxDays - t, 1e-6), ref well);
+            t += Physics.Coast(g, starPos, ref pos, ref vel, Math.Max(MaxDays - t, 1e-6), ref well, drag);
             sinceSample += (pos - prev).Length;
 
             if (well >= 0)

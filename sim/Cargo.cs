@@ -7,20 +7,11 @@ public enum BayKind { Fluid, Bulk, Container }
 
 public sealed record Bay(BayKind Kind, double Volume);
 
-/// <summary>A hull and the bays built into it. A ship's bays never change; only a pressurizer can be fitted to a fluid bay.</summary>
-public sealed record ShipClass(string Id, string Name, Bay[] Bays);
-
-public static class Ships
-{
-    public static readonly ShipClass Courier = new("courier", "小型コンテナ船", new[] { new Bay(BayKind.Container, 8) });
-    public static readonly ShipClass[] All = { Courier };
-    public static ShipClass Get(string id) => All.FirstOrDefault(s => s.Id == id) ?? Courier;
-}
-
 /// <summary>The ship's bays as fitted: which fluid bays carry a pressurizer.</summary>
 public sealed record CargoBays(ShipClass Ship, IReadOnlyCollection<int> Pressurized)
 {
-    public static CargoBays Of(SaveData s) => new(Ships.Get(s.Ship), s.Pressurized);
+    public static CargoBays Of(OwnedShip s) => new(s.Type, s.Pressurized);
+    public static CargoBays Of(SaveData s) => Of(s.Ship);
 
     public double Capacity => Ship.Bays.Sum(b => b.Volume);
     double Room(BayKind kind) => Ship.Bays.Where(b => b.Kind == kind).Sum(b => b.Volume);

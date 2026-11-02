@@ -90,7 +90,7 @@ public partial class Main
             // The auto burn throttles its last moment down to exactly what is left.
             if (v.AutoBurn && NextNode is { } aim && Helm.EngineOn && !IsDown(Key.X) && !IsDown(Key.Z))
             {
-                var step = engine.Length * Tuning.SublightThrust * rate * delta;
+                var step = engine.Length * v.SublightThrust * rate * delta;
                 if (step > aim.DeltaV) engine *= aim.DeltaV / step;
             }
         }
@@ -100,7 +100,7 @@ public partial class Main
         var passages = v.Passages;
         v.AdvanceSublight(rate * delta, engine);
         if (v.Passages != passages) PassedGate();
-        var burned = v.Fuel < fuelBefore ? engine * (Tuning.SublightThrust * rate * delta) : (Vec3d?)null;
+        var burned = v.Fuel < fuelBefore ? engine * (v.SublightThrust * rate * delta) : (Vec3d?)null;
         Burn.Measure(v, firedOn, burned);
         if (firedOn != null && burned != null && firedOn == Burn.Node)
         {

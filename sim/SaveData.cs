@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 namespace Starbearer.Sim;
 
 /// <summary>Checkpoint taken while docked. A flight is never saved: that could lock in a doomed trajectory.</summary>
@@ -18,10 +19,10 @@ public static class Modules
     public const double PressurizerPrice = 200;
 
     /// <summary>What the modules aboard are worth, pressurizers included.</summary>
-    public static double Value(SaveData s) =>
+    public static double Value(OwnedShip s) =>
         s.Modules.Sum(id => Shop.FirstOrDefault(m => m.Id == id).Price) + s.Pressurized.Count * PressurizerPrice;
 
-    /// <summary>Fits a pressurizer to the first fluid bay without one. False if there is none, or not the money.</summary>
+    /// <summary>Fits a pressurizer to the first fluid bay of the ship flown without one. False if there is none, or not the money.</summary>
     public static bool FitPressurizer(SaveData s)
     {
         var bay = CargoBays.Of(s).Unpressurized.Cast<int?>().FirstOrDefault();
@@ -42,35 +43,43 @@ public static class Supply
         return amount;
     }
 
-    public static void BuyFuel(SaveData s) => s.HeldFuel += Spend(s, Tuning.TankCapacity - s.HeldFuel, Tuning.FuelPrice);
+    public static void BuyFuel(SaveData s) => s.HeldFuel += Spend(s, s.Ship.Type.Tank - s.HeldFuel, Tuning.FuelPrice);
     public static void BuyLife(SaveData s) => s.HeldLife += Spend(s, Tuning.LifeSupportDays - s.HeldLife, Tuning.LifePricePerDay);
     public static void RepairHull(SaveData s) => s.HeldHull += Spend(s, 1 - s.HeldHull, Tuning.HullRepairPrice);
 
-    /// <summary>Even spending every credit on fuel, the ship could not leave for another station.</summary>
-    public static bool Bankrupt(SaveData s) => s.HeldFuel + s.Credits / Tuning.FuelPrice < Tuning.DepartureFuelFloor;
+    /// <summary>Even spending every credit on fuel, no ship docked here could leave for another station. Ships elsewhere are out of reach.</summary>
+    public static bool Bankrupt(SaveData s) =>
+        s.Fleet.Where(x => x.Star == s.PortStar).All(x => x.Fuel + s.Credits / Tuning.FuelPrice < Tuning.DepartureFuelFloor);
 }
 
 public sealed class SaveData
 {
     public ulong Seed { get; set; }
-    public int PortStar { get; set; }
     public int Deliveries { get; set; }
     public int Retries { get; set; }
     public double Credits { get; set; } = Tuning.StartingCredits;
     public double TotalDays { get; set; }
     public double[] ClosestApproach { get; set; } = Array.Empty<double>();
-    public List<string> Modules { get; set; } = new();
-    /// <summary>The hull, by ship class id. Its bays are fixed.</summary>
-    public string Ship { get; set; } = Ships.Courier.Id;
-    /// <summary>Indexes of the fluid bays that carry a pressurizer.</summary>
-    public List<int> Pressurized { get; set; } = new();
-    /// <summary>Jobs in the cargo hold, as of the last dock.</summary>
-    public List<Consignment> Hold { get; set; } = new();
+    /// <summary>Every ship the company owns, each where it was last docked.</summary>
+    public List<OwnedShip> Fleet { get; set; } = new() { new OwnedShip { Id = 1 } };
+    /// <summary>Id of the ship flown. The checkpoint is where it is docked.</summary>
+    public int Flown { get; set; } = 1;
     /// <summary>The star the instruments steer for. Falls back when no cargo is bound there.</summary>
     public int Course { get; set; } = -1;
-    public double HeldFuel { get; set; } = Tuning.TankCapacity;
-    public double HeldHull { get; set; } = 1;
-    public double HeldLife { get; set; } = Tuning.LifeSupportDays;
+
+    [JsonIgnore] public OwnedShip Ship => Fleet.First(x => x.Id == Flown);
+    // The ship flown, as the rest of the game reads it.
+    [JsonIgnore] public int PortStar { get => Ship.Star; set => Ship.Star = value; }
+    [JsonIgnore] public List<string> Modules { get => Ship.Modules; set => Ship.Modules = value; }
+    [JsonIgnore] public List<int> Pressurized { get => Ship.Pressurized; set => Ship.Pressurized = value; }
+    /// <summary>Jobs in the bays of the ship flown, as of the last dock.</summary>
+    [JsonIgnore] public List<Consignment> Hold { get => Ship.Hold; set => Ship.Hold = value; }
+    [JsonIgnore] public double HeldFuel { get => Ship.Fuel; set => Ship.Fuel = value; }
+    [JsonIgnore] public double HeldHull { get => Ship.Hull; set => Ship.Hull = value; }
+    [JsonIgnore] public double HeldLife { get => Ship.Life; set => Ship.Life = value; }
+
+    /// <summary>The ships docked at a station, the one flown first.</summary>
+    public IEnumerable<OwnedShip> ShipsAt(int star) => Fleet.Where(x => x.Star == star).OrderBy(x => x.Id != Flown).ThenBy(x => x.Id);
 
     static readonly JsonSerializerOptions Options = new() { NumberHandling = System.Text.Json.Serialization.JsonNumberHandling.AllowNamedFloatingPointLiterals };
     public string ToJson() => JsonSerializer.Serialize(this, Options);
@@ -81,7 +90,7 @@ public sealed class SaveData
         var g = Galaxy.Generate(seed);
         return (new SaveData
         {
-            Seed = seed, PortStar = g.Ports[0],
+            Seed = seed, Fleet = new() { new OwnedShip { Id = 1, Star = g.Ports[0] } },
             ClosestApproach = Enumerable.Repeat(double.MaxValue, g.Stars.Length).ToArray(),
         }, g);
     }

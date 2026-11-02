@@ -63,6 +63,115 @@ public class SimTests
         }
     }
 
+    [Fact]
+    public void ABigHullDragsHarderAndPushesLessButKeepsItsDeltaV()
+    {
+        var g = WithPorts();
+        Voyage Fly(ShipClass c)
+        {
+            var v = new Voyage(g, 0, 1, Array.Empty<Consignment>(), Unseen(g), 1, shipClass: c);
+            v.EnterFtl();
+            v.PlaceForTest(new Vec3d(4, 0, 0), new Vec3d(0.5, 0, 0));
+            return v;
+        }
+        var (small, big) = (Fly(Ships.Courier), Fly(Ships.Tanker));
+        Assert.Equal(small.DeltaVRemaining, big.DeltaVRemaining, 9);   // dry mass and tank grow together
+        small.Advance(2, Vec3d.Zero, false);
+        big.Advance(2, Vec3d.Zero, false);
+        Assert.True(big.Velocity.Length < small.Velocity.Length);
+        var (s2, b2) = (Fly(Ships.Courier), Fly(Ships.Tanker));
+        s2.Advance(0.1, new Vec3d(0, 1, 0), false);
+        b2.Advance(0.1, new Vec3d(0, 1, 0), false);
+        Assert.Equal(Ships.Tanker.Thrust, b2.Velocity.Y / s2.Velocity.Y, 2);
+    }
+
+    [Fact]
+    public void AGateTurnsAwayAHullTooBigForIt()
+    {
+        var g = Galaxy.Generate(7);
+        var gate = g.Gates[0];
+        var v = new Voyage(g, gate, gate, Array.Empty<Consignment>(), Unseen(g), 1, shipClass: Ships.Bulker);
+        v.Undock();
+        v.BookGate(10);
+        Assert.Null(v.GateBooked);
+    }
+
+    [Fact]
+    public void EveryShipyardBuildsTheSmallShipAndEveryHullIsBuiltSomewhere()
+    {
+        for (ulong seed = 1; seed <= 8; seed++)
+        {
+            var g = Galaxy.Generate(seed);
+            var yards = g.Ports.Where(p => Missions.KindOf(g, p) == StationKind.Shipyard).ToList();
+            Assert.All(yards, y => Assert.Contains(Ships.Courier, Ships.SoldAt(g, y)));
+            Assert.All(Ships.All, c => Assert.Contains(yards, y => Ships.SoldAt(g, y).Contains(c)));
+            Assert.Empty(Ships.SoldAt(g, g.Depots[0]));
+        }
+    }
+
+    static (SaveData S, Galaxy G, ShipClass Sold) AtAShipyard()
+    {
+        var g = Galaxy.Generate(5);
+        var yard = g.Ports.First(p => Missions.KindOf(g, p) == StationKind.Shipyard && Ships.SoldAt(g, p).Length > 1);
+        var s = new SaveData { Seed = 5, Credits = 10000 };
+        s.PortStar = yard;
+        return (s, g, Ships.SoldAt(g, yard)[1]);
+    }
+
+    [Fact]
+    public void ABoughtShipWaitsWhereItWasBuiltAndTheOneLeftKeepsItsCargo()
+    {
+        var (s, g, sold) = AtAShipyard();
+        var job = new Consignment { Mission = new Mission("a", s.PortStar, 0, Box, 100) };
+        s.Hold.Add(job);
+        Assert.True(Hangar.Buy(s, g, sold));
+        Assert.Equal(10000 - sold.Price, s.Credits);
+        var bought = s.Fleet.Single(x => x.Id != s.Flown);
+        Assert.Equal(s.PortStar, bought.Star);
+        Assert.Equal(sold.Tank, bought.Fuel);
+        Assert.True(Hangar.Board(s, bought.Id));
+        Assert.Equal(sold, s.Ship.Type);
+        Assert.Empty(s.Hold);                                          // the new ship's bays
+        Assert.Same(job, s.Fleet.Single(x => x.Id != s.Flown).Hold.Single());   // still in the old one
+        var back = SaveData.FromJson(s.ToJson())!;
+        Assert.Equal(2, back.Fleet.Count);
+        Assert.Equal(sold.Id, back.Ship.Class);
+        Assert.Equal(s.PortStar, back.PortStar);
+    }
+
+    [Fact]
+    public void AShipCanOnlyBeBoardedOrSoldWhereItIs()
+    {
+        var (s, g, sold) = AtAShipyard();
+        Hangar.Buy(s, g, sold);
+        var other = s.Fleet.Single(x => x.Id != s.Flown);
+        other.Star = g.Depots[0];
+        Assert.False(Hangar.Board(s, other.Id));
+        Assert.False(Hangar.Sell(s, g, other.Id));
+        other.Star = s.PortStar;
+        other.Hold.Add(new Consignment { Mission = new Mission("a", 0, 1, Box, 100) });
+        Assert.NotNull(Hangar.SaleRefusal(s, g, other));                // not with cargo aboard
+        other.Hold.Clear();
+        Assert.NotNull(Hangar.SaleRefusal(s, g, s.Ship));              // nor the one flown
+        var credits = s.Credits;
+        Assert.True(Hangar.Sell(s, g, other.Id));
+        Assert.Equal(credits + sold.Price / 2, s.Credits, 6);
+        Assert.Single(s.Fleet);
+    }
+
+    [Fact]
+    public void BankruptcyCountsOnlyTheShipsDockedHere()
+    {
+        var s = new SaveData { Credits = 0 };
+        s.HeldFuel = 0;
+        Assert.True(Supply.Bankrupt(s));
+        var spare = new OwnedShip { Id = 2, Star = 99, Fuel = Ships.Courier.Tank };
+        s.Fleet.Add(spare);
+        Assert.True(Supply.Bankrupt(s));    // out of reach
+        spare.Star = s.PortStar;
+        Assert.False(Supply.Bankrupt(s));
+    }
+
     static (Voyage V, Station From, Station To) AtGate()
     {
         var g = Galaxy.Generate(7);
@@ -114,7 +223,7 @@ public class SimTests
     {
         var (v, _, _) = AtGate();
         var bare = Gates.Toll(new SaveData(), v);
-        Assert.Equal(Math.Round(Tuning.GateTollRate * Tuning.HullValue), bare);
+        Assert.Equal(Math.Round(Tuning.GateTollRate * Ships.Courier.Price), bare);
         var rich = new SaveData();
         rich.Modules.Add(Modules.Transfer);
         Assert.True(Gates.Toll(rich, v) > bare);
@@ -323,7 +432,7 @@ public class SimTests
         Assert.DoesNotContain(Missions.Board(g, g.Ports[0], 0, taken), m => m.Id == board[0].Id);
     }
 
-    static readonly ShipClass Tanker = new("test", "test", new[] { new Bay(BayKind.Fluid, 4), new Bay(BayKind.Fluid, 4), new Bay(BayKind.Bulk, 3), new Bay(BayKind.Container, 2) });
+    static readonly ShipClass Tanker = Ships.Courier with { Id = "test", Bays = new[] { new Bay(BayKind.Fluid, 4), new Bay(BayKind.Fluid, 4), new Bay(BayKind.Bulk, 3), new Bay(BayKind.Container, 2) } };
     static Cargo Load(CargoKind kind, double volume) => new($"{kind}", 0.5, 0.9, 100, volume, kind);
 
     [Fact]
@@ -364,11 +473,11 @@ public class SimTests
         var (v, _, _) = AtGate();
         var bare = Gates.Toll(s, v);
         s.Pressurized.Add(0);
-        Assert.Equal(Math.Round(Tuning.GateTollRate * (Tuning.HullValue + Modules.PressurizerPrice)), Gates.Toll(s, v));
+        Assert.Equal(Math.Round(Tuning.GateTollRate * (Ships.Courier.Price + Modules.PressurizerPrice)), Gates.Toll(s, v));
         Assert.True(Gates.Toll(s, v) > bare);
         var back = SaveData.FromJson(s.ToJson())!;
         Assert.Equal(new[] { 0 }, back.Pressurized);
-        Assert.Equal(Ships.Courier.Id, back.Ship);
+        Assert.Equal(Ships.Courier.Id, back.Ship.Class);
     }
 
     [Fact]
@@ -745,7 +854,7 @@ public class SimTests
         Assert.Equal(0, s.Credits, 9);
         var rich = new SaveData { HeldFuel = 1.0, Credits = 1000 };
         Supply.BuyFuel(rich);
-        Assert.Equal(Tuning.TankCapacity, rich.HeldFuel, 9);
+        Assert.Equal(Ships.Courier.Tank, rich.HeldFuel, 9);
         Assert.Equal(1000 - 0.8 * Tuning.FuelPrice, rich.Credits, 9);
     }
 
@@ -939,7 +1048,7 @@ public class SimTests
     public void WaitingAtThePortCostsNoLifeSupport()
     {
         var g = Galaxy.Generate(5);
-        var v = new Voyage(g, g.Ports[0], g.Ports[1], Box, Unseen(g), 1, 0, new ShipState(Tuning.TankCapacity, 1, 100));
+        var v = new Voyage(g, g.Ports[0], g.Ports[1], Box, Unseen(g), 1, 0, new ShipState(Ships.Courier.Tank, 1, 100));
         v.AdvanceSublight(300, Vec3d.Zero);
         Assert.True(v.Docked);
         Assert.Equal(100, v.LifeRemaining, 6);
@@ -969,7 +1078,7 @@ public class SimTests
     public void UndockingStartsLifeSupportAndTheShipCanTieBackUp()
     {
         var g = Galaxy.Generate(5);
-        var v = new Voyage(g, g.Ports[0], g.Ports[1], Box, Unseen(g), 1, 0, new ShipState(Tuning.TankCapacity, 1, 100));
+        var v = new Voyage(g, g.Ports[0], g.Ports[1], Box, Unseen(g), 1, 0, new ShipState(Ships.Courier.Tank, 1, 100));
         Assert.False(v.RequestDock());              // already docked
         v.Undock();
         Assert.True(v.CanDock);

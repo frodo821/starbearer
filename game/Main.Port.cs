@@ -101,6 +101,7 @@ public partial class Main
     {
         var v = V!;
         if (GateExit < 0) return;
+        if (!v.Class.Gates) { Message = $"{v.Class.Name} はゲートを通れない"; return; }
         if (v.Docked) { Message = "出港してからゲートへ向かう"; return; }
         if (v.GateBooked != null) { v.CancelGate(); Message = "ゲート通過の予約を取り消した"; return; }
         var toll = GateToll;
@@ -139,6 +140,35 @@ public partial class Main
         if (!AtShipyard) { Message = "モジュールは造船所で買える"; _hud.Port.Rebuild(); return; }
         if (!Modules.FitPressurizer(Save!)) { Message = $"{Modules.PressurizerName}: 付けられる液体ベイがないか、資金が足りない"; _hud.Port.Rebuild(); return; }
         Message = $"{Modules.PressurizerName} を液体ベイに搭載";
+        PortChanged();
+    }
+
+    public void BuyShip(ShipClass c)
+    {
+        if (!Hangar.Buy(Save!, G!, c)) { Message = $"{c.Name}: " + (Save!.Credits < c.Price ? "資金が足りない" : "ここでは造っていない"); _hud.Port.Rebuild(); return; }
+        Message = $"{c.Name} を購入した。この港に置いてある";
+        PortChanged();
+    }
+
+    /// <summary>Changes ships here. The one left keeps its bays' cargo, fuel and modules; the voyage starts over in the new one.</summary>
+    public void BoardShip(int id)
+    {
+        var s = Save!;
+        if (id == s.Flown || !Hangar.Board(s, id)) return;
+        VisitingPort = false;   // leaving the port boards the new ship from the checkpoint
+        SteerForCourse();
+        Message = $"{s.Ship.Type.Name} に乗り換えた";
+        PortChanged();
+    }
+
+    public void SellShip(int id)
+    {
+        var s = Save!;
+        var ship = s.Fleet.FirstOrDefault(x => x.Id == id);
+        if (ship == null) return;
+        var value = Ships.SaleValue(ship);
+        if (!Hangar.Sell(s, G!, id)) { Message = Hangar.SaleRefusal(s, G!, ship) ?? "売れない"; _hud.Port.Rebuild(); return; }
+        Message = $"{ship.Type.Name} を {value:F0} で売った";
         PortChanged();
     }
 

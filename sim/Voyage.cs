@@ -31,7 +31,9 @@ public sealed class Voyage
     Vec3d _navError = Vec3d.Zero;
     public double NavSigma { get; private set; } = Tuning.SightError;
 
-    public double Fuel { get; private set; } = Tuning.TankCapacity;
+    /// <summary>The hull flown: its mass, tank, drag, thrust and whether gates take it.</summary>
+    public ShipClass Class { get; }
+    public double Fuel { get; private set; }
     public double Hull { get; private set; } = 1;
     public double Heat { get; private set; }
     public double Time { get; private set; }
@@ -51,8 +53,10 @@ public sealed class Voyage
     public Vec3d EstimatedPosition => TruePosition + _navError;
     public Vec3d[] TruePositions => _truth;
     public Vec3d[] ChartPositions => _chart;
-    public double Mass => Tuning.DryMass + CargoMass + Fuel;
-    public double DeltaVRemaining => Tuning.ExhaustVelocity * Math.Log(Mass / (Tuning.DryMass + CargoMass));
+    public double Mass => Class.DryMass + CargoMass + Fuel;
+    public double DeltaVRemaining => Tuning.ExhaustVelocity * Math.Log(Mass / (Class.DryMass + CargoMass));
+    public double SublightThrust => Tuning.SublightThrust * Class.Thrust;
+    public double FlightThrust => Tuning.MaxThrust * Class.Thrust;
 
     // Normal space
     public double Epoch { get; }
@@ -72,13 +76,14 @@ public sealed class Voyage
     bool _clearOfDock;   // a ship starts on the station it left; it has to get away before it can dock
 
     /// <summary>A ship with one load, as the tools and tests fly it.</summary>
-    public Voyage(Galaxy g, int origin, int target, Cargo cargo, double[] closestApproach, ulong rngSeed, double epoch = 0, ShipState? ship = null)
-        : this(g, origin, target, new[] { new Consignment { Mission = new Mission("", origin, target, cargo, cargo.Reward) } }, closestApproach, rngSeed, epoch, ship) { }
+    public Voyage(Galaxy g, int origin, int target, Cargo cargo, double[] closestApproach, ulong rngSeed, double epoch = 0, ShipState? ship = null, ShipClass? shipClass = null)
+        : this(g, origin, target, new[] { new Consignment { Mission = new Mission("", origin, target, cargo, cargo.Reward) } }, closestApproach, rngSeed, epoch, ship, shipClass) { }
 
-    public Voyage(Galaxy g, int origin, int target, IEnumerable<Consignment> hold, double[] closestApproach, ulong rngSeed, double epoch = 0, ShipState? ship = null)
+    public Voyage(Galaxy g, int origin, int target, IEnumerable<Consignment> hold, double[] closestApproach, ulong rngSeed, double epoch = 0, ShipState? ship = null, ShipClass? shipClass = null)
     {
         G = g; OriginStar = origin; TargetStar = target; Hold = hold.Select(c => c.Copy()).ToList();
-        Fuel = ship?.Fuel ?? Tuning.TankCapacity;
+        Class = shipClass ?? Ships.Courier;
+        Fuel = ship?.Fuel ?? Class.Tank;
         Hull = ship?.Hull ?? 1;
         LifeSupply = ship?.Life ?? Tuning.LifeSupportDays;
         ClosestApproach = closestApproach;
@@ -244,7 +249,7 @@ public sealed class Voyage
             if (thrust.LengthSq > 0 && Fuel > 0)
             {
                 var throttle = thrust.Length;
-                var want = Tuning.SublightThrust * throttle * dt;
+                var want = SublightThrust * throttle * dt;
                 var done = SpendDeltaV(want * Tuning.SublightFuelFactor) / Tuning.SublightFuelFactor;
                 a = thrust.Normalized() * (done / dt);
                 Thrusting = true;
@@ -284,7 +289,7 @@ public sealed class Voyage
     /// <summary>Books the passage: from now, coming within docking range of the gate takes the ship through.</summary>
     public void BookGate(double toll)
     {
-        if (!AtGate || Docked) return;
+        if (!AtGate || Docked || !Class.Gates) return;
         (_bookedAt, _toll) = (SystemStar, toll);
     }
 
@@ -387,7 +392,7 @@ public sealed class Voyage
         dv = Math.Min(dv, DeltaVRemaining);
         if (dv > 0) Docked = false;
         var m1 = Mass / Math.Exp(dv / Tuning.ExhaustVelocity);
-        Fuel = Math.Max(0, m1 - Tuning.DryMass - CargoMass);
+        Fuel = Math.Max(0, m1 - Class.DryMass - CargoMass);
         return dv;
     }
 
@@ -443,12 +448,12 @@ public sealed class Voyage
             {
                 // Under power the path bends anywhere, so every star is checked as before.
                 dt = Math.Min(left, Physics.SafeStep(G, _truth, pos, vel));
-                var done = SpendDeltaV(Tuning.MaxThrust * thrust.Length * dt);
-                Physics.Rk4(G, _truth, ref pos, ref vel, thrust.Normalized() * (done / dt), dt);
+                var done = SpendDeltaV(FlightThrust * thrust.Length * dt);
+                Physics.Rk4(G, _truth, ref pos, ref vel, thrust.Normalized() * (done / dt), dt, Class.Drag);
                 Thrusting = true;
                 _well = -1;
             }
-            else dt = Physics.Coast(G, _truth, ref pos, ref vel, left, ref _well);   // the same steps the forecast takes
+            else dt = Physics.Coast(G, _truth, ref pos, ref vel, left, ref _well, Class.Drag);   // the same steps the forecast takes
             TruePosition = pos; Velocity = vel;
             Time += dt; left -= dt;
             Tick(dt, shielded);
@@ -470,7 +475,7 @@ public sealed class Voyage
         {
             var flux = star.Mass / (r * r);
             gain = Tuning.HeatCoefficient * flux * (shielded ? Tuning.ShieldFactor : 1);
-            Fuel = Math.Min(Tuning.TankCapacity, Fuel + Tuning.ScoopCoefficient * flux * dt);
+            Fuel = Math.Min(Class.Tank, Fuel + Tuning.ScoopCoefficient * flux * dt);
         }
         Heat = Math.Max(0, Heat + (gain - Tuning.CoolingPerDay * Math.Max(Heat, 0.05)) * dt);
         if (Heat > 1)
@@ -512,7 +517,7 @@ public sealed class Voyage
 
     /// <summary>Puts the ship at a state relative to the star, leaving any planet.</summary>
     public void PlaceSublightForTest(Vec3d position, Vec3d velocity) { Primary = G.System(SystemStar); SubPosition = position; SubVelocity = velocity; SyncTruePosition(); }
-    public void RefillForTest() => Fuel = Tuning.TankCapacity;
+    public void RefillForTest() => Fuel = Class.Tank;
     public void ForceDeathForTest() => Kill(DeathCause.Collision);
 
     void Kill(DeathCause c) { Death = c; Phase = Phase.Dead; }

@@ -98,7 +98,7 @@ public partial class Main
         {
             var descent = well == null ? null : Sublight.Predict(g.System(well.Id), Sublight.Waypoint(g.System(well.Id), g.StationOrNull(well.Id)),
                 wellAt, wellSpeed, t, Array.Empty<Maneuver>(), 60, 300);
-            return new ForecastResult(v, screen, false, null, null, 0, aim.Length < 1e-3 ? null : Predictor.Run(g, chart, pos, aim), descent, well);
+            return new ForecastResult(v, screen, false, null, null, 0, aim.Length < 1e-3 ? null : Predictor.Run(g, chart, pos, aim, drag: v.Class.Drag), descent, well);
         });
     }
 

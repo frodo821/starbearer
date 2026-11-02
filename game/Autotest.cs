@@ -74,7 +74,10 @@ public partial class Autotest : Node
 
     double Off(Vec3d dir) => Math.Acos(Math.Clamp(_g.Helm.Nose.Dot(dir), -1, 1));
 
-    int _heldTarget, _stop, _bought, _gate, _exit;
+    int _heldTarget, _stop, _bought, _gate, _exit, _firstShip;
+    ShipClass? _boughtClass;
+    (Vec3d, float) _chartBefore;
+    int _parkedAt;
     double _toll;
     double _credits, _heldFuel;
     int _retries;
@@ -697,6 +700,47 @@ public partial class Autotest : Node
         Do(() =>
         {
             Check("a stop survives a reload", _g.V!.TargetStar == _heldTarget && _g.V.SystemStar == _stop);
+            // Buy a ship here and change into it; the job stays in the ship left behind.
+            var s = _g.Save!;
+            s.Credits = 100000;
+            _firstShip = s.Flown;
+            _boughtClass = Ships.SoldAt(_g.G!, _stop).LastOrDefault();
+            if (_boughtClass == null) return;
+            _g.BuyShip(_boughtClass);
+            _g.BoardShip(s.Fleet.Max(x => x.Id));
+            _g.LeavePort();
+        });
+        Do(() =>
+        {
+            if (_boughtClass == null) return;
+            var s = _g.Save!;
+            Check("a bought ship can be boarded where it was built", _g.V!.Class == _boughtClass && _g.V.Hold.Count == 0 && _g.V.Docked
+                && s.Fleet.Single(x => x.Id == _firstShip).Hold.Single().Mission.Id == _heldJob && s.Fleet.All(x => x.Star == _stop));
+            Press(Key.Enter);
+        });
+        Do(() =>
+        {
+            if (_boughtClass == null) return;
+            Shot("10f_hangar");
+            _g.BoardShip(_firstShip);
+            _g.LeavePort();
+        });
+        Do(() =>
+        {
+            if (_boughtClass != null)
+                Check("changing back finds the job where it was left", _g.V!.Class == Ships.Courier && _g.V.Hold.Single().Mission.Id == _heldJob);
+            _chartBefore = (_g.Chart.Center, _g.Chart.Zoom);
+            (_g.Chart.Center, _g.Chart.Zoom) = (_g.V!.ChartPositions[_stop], 12);   // out to where stars are points
+            // Shown as if the bought ship waited at the nearest other station, where the chart marks it.
+            var g = _g.G!;
+            _parkedAt = g.Ports.Concat(g.Depots).Where(p => p != _stop).OrderBy(p => (g.Stars[p].Position - g.Stars[_stop].Position).Length).First();
+            if (_boughtClass != null) _g.Save!.Fleet.Single(x => x.Id != _firstShip).Star = _parkedAt;
+        });
+        Do(() =>
+        {
+            if (_boughtClass != null) Shot("10g_parked_ship_on_map");
+            (_g.Chart.Center, _g.Chart.Zoom) = _chartBefore;
+            if (_boughtClass != null) _g.Save!.Fleet.Single(x => x.Id != _firstShip).Star = _stop;
             _g.Save!.Credits = 100000;
             _voyage = _g.V;
             Press(Key.Enter);

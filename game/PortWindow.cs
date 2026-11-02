@@ -96,6 +96,8 @@ public partial class PortWindow : PanelContainer
             box.AddChild(Text($"出港してから「ゲート通過」で予約し、ゲートまで寄ると向こうへ出る。速さはそのまま\n通行税は船・モジュール・積荷の価値の {Tuning.GateTollRate:P0}（今なら {_game.GateToll:F0}）、次の入港で精算", 14, Dim));
             box.AddChild(Text("ゲートは仕事を出さない", 15, Dim));
             TakeButtons = Array.Empty<Button>();
+            box.AddChild(new HSeparator());
+            HangarSection(box, g, s);
             return box;
         }
         var offers = _game.Offers;
@@ -114,7 +116,43 @@ public partial class PortWindow : PanelContainer
             box.AddChild(Row(info, Text($"報酬 {m.Pay:F0}", 17, Good), take));
             return take;
         }).ToArray();
+        box.AddChild(new HSeparator());
+        HangarSection(box, g, s);
         return box;
+    }
+
+    static string Spec(ShipClass c) =>
+        string.Join(" ", c.Bays.GroupBy(b => b.Kind).Select(k => $"{Cargos.Name(k.Key)}{Missions.Cubic(k.Sum(b => b.Volume))}"))
+        + $"   抵抗×{c.Drag:0.0#} 推力×{c.Thrust:0.0#} {(c.Gates ? "ゲート可" : "ゲート不可")}";
+
+    /// <summary>The company's ships docked here, and at a shipyard what it builds.</summary>
+    void HangarSection(VBoxContainer box, Galaxy g, SaveData s)
+    {
+        var star = s.PortStar;
+        box.AddChild(Text("格納庫", 20, Good));
+        foreach (var ship in s.ShipsAt(star))
+        {
+            var info = new VBoxContainer();
+            info.AddChild(Text(ship.Type.Name + (ship.Id == s.Flown ? "（乗船中）" : ""), 16, ship.Id == s.Flown ? Good : null));
+            info.AddChild(Text($"燃料 {ship.Fuel:F2}/{ship.Type.Tank:F2}   船体 {ship.Hull:P0}   積荷 {ship.Hold.Count} 件   {Spec(ship.Type)}", 13, Dim));
+            if (ship.Id == s.Flown) { box.AddChild(Row(info)); continue; }
+            var sale = Hangar.SaleRefusal(s, g, ship);
+            box.AddChild(Row(info, Press("乗り換え", () => _game.BoardShip(ship.Id)),
+                Press($"売却 {Ships.SaleValue(ship):F0}", () => _game.SellShip(ship.Id), sale == null)));
+        }
+        var away = s.Fleet.Where(x => x.Star != star).ToList();
+        if (away.Count > 0)
+            box.AddChild(Text("ほかの港: " + string.Join("、", away.Select(x => $"{x.Type.Name}（{g.Stars[x.Star].Name}）")), 13, Dim));
+        var sold = Ships.SoldAt(g, star);
+        if (sold.Length == 0) return;
+        box.AddChild(Text("造船", 18, Good));
+        foreach (var c in sold)
+        {
+            var info = new VBoxContainer();
+            info.AddChild(Text(c.Name, 15));
+            info.AddChild(Text(Spec(c), 13, Dim));
+            box.AddChild(Row(info, Press($"購入 {c.Price:F0}", () => _game.BuyShip(c), s.Credits >= c.Price)));
+        }
     }
 
     Control ShipColumn(Galaxy g, SaveData s)
@@ -138,7 +176,7 @@ public partial class PortWindow : PanelContainer
         box.AddChild(Text("補給", 20, Good));
         void Sale(string name, double cost, bool need, Action<SaveData> buy, string key) =>
             box.AddChild(Row(Text(name, 15), Press($"{cost:F0}", () => _game.Purchase(buy), need, key)));
-        Sale($"燃料 {s.HeldFuel:F2} / {Tuning.TankCapacity:F1}", (Tuning.TankCapacity - s.HeldFuel) * Tuning.FuelPrice, s.HeldFuel < Tuning.TankCapacity - 0.001, Supply.BuyFuel, "3");
+        Sale($"燃料 {s.HeldFuel:F2} / {s.Ship.Type.Tank:F1}", (s.Ship.Type.Tank - s.HeldFuel) * Tuning.FuelPrice, s.HeldFuel < s.Ship.Type.Tank - 0.001, Supply.BuyFuel, "3");
         Sale($"生命維持 残 {s.HeldLife:F0} 日", (Tuning.LifeSupportDays - s.HeldLife) * Tuning.LifePricePerDay, s.HeldLife < Tuning.LifeSupportDays - 0.5, Supply.BuyLife, "4");
         Sale($"船体 {s.HeldHull:P0}", (1 - s.HeldHull) * Tuning.HullRepairPrice, s.HeldHull < 0.999, Supply.RepairHull, "5");
         box.AddChild(Text("足りなければ買える分だけ。出港に足る燃料も買えなければ破産", 13, Dim));

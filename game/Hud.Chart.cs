@@ -30,6 +30,9 @@ public partial class Hud
         var zoom = Game.Chart.Zoom;
         var view = new Rect2(Vector2.Zero, Size).Grow(60);
         var bound = v.Hold.Select(c => c.Mission.Target).ToHashSet();
+        // The company's other ships, where they wait.
+        var save = Game.Save!;
+        var parked = save.Fleet.Where(x => x.Id != save.Flown).GroupBy(x => x.Star).ToDictionary(k => k.Key, k => k.Count());
         for (int i = 0; i < g.Stars.Length; i++)
         {
             var s = g.Stars[i];
@@ -40,12 +43,13 @@ public partial class Hud
             var err = (float)(Tuning.ChartErrorLy * Voyage.ChartFactor(v.ClosestApproach[i]) * zoom);
             if (err > 2) DrawArc(p, err * 2, 0, Mathf.Tau, 20, new Color(1f, 0.6f, 0.3f, 0.45f), 1f, true);
             var station = g.HasStation(i);
-            var name = s.Name + Missions.Mark(g, i);
+            var name = s.Name + Missions.Mark(g, i) + (parked.TryGetValue(i, out var ships) ? $"  自船×{ships}" : "");
+            if (ships > 0) DrawRect(new Rect2(p + new Vector2(-9, -9), 18, 18), new Color(Good, 0.8f), false, 1.5f);
             if (i == current) { DrawHere(p, name, ring: true); continue; }
-            var key = i == v.TargetStar || bound.Contains(i);
+            var key = i == v.TargetStar || bound.Contains(i) || ships > 0;
             // Zoomed out, names thin to the stations, then to where the ship is bound.
             if (!key && (zoom < 4 || zoom < 8 && !station)) continue;
-            Text(p + new Vector2(8, 4), name, i == v.TargetStar ? Good : bound.Contains(i) ? Warn : station ? Ink : Dim, 13);
+            Text(p + new Vector2(8, 4), name, i == v.TargetStar || ships > 0 ? Good : bound.Contains(i) ? Warn : station ? Ink : Dim, 13);
         }
         DrawRegionNames();
         var fc = Game.Forecast;

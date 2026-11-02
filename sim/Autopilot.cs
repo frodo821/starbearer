@@ -9,18 +9,18 @@ public static class Autopilot
     public const double DesiredPeriapsis = 0.16;
     public const double MinPeriapsis = 0.09;
 
-    public static double SpeedForLeg(Galaxy g, Vec3d a, Vec3d b, double margin)
+    public static double SpeedForLeg(Galaxy g, Vec3d a, Vec3d b, double margin, double drag = 1)
     {
         var d = (b - a).Length;
         double integral = 0;
         const int n = 24;
         for (int i = 0; i < n; i++)
             integral += g.Density(a + (b - a) * ((i + 0.5) / n)) * d / n;
-        return Tuning.StallSpeed * margin * Math.Exp(Tuning.BaseDrag * integral);
+        return Tuning.StallSpeed * margin * Math.Exp(Tuning.BaseDrag * drag * integral);
     }
 
     /// <summary>Cheapest star chain, costing each leg by the launch speed it needs.</summary>
-    public static List<int> Route(Galaxy g, int from, int to)
+    public static List<int> Route(Galaxy g, int from, int to, double drag = 1)
     {
         int n = g.Stars.Length;
         var dist = Enumerable.Repeat(double.MaxValue, n).ToArray();
@@ -36,7 +36,7 @@ public static class Autopilot
             for (int v = 0; v < n; v++)
             {
                 if (v == u) continue;
-                var c = dist[u] + SpeedForLeg(g, g.Stars[u].Position, g.Stars[v].Position, 1.3);
+                var c = dist[u] + SpeedForLeg(g, g.Stars[u].Position, g.Stars[v].Position, 1.3, drag);
                 if (c < dist[v]) { dist[v] = c; prev[v] = u; }
             }
         }
@@ -72,7 +72,7 @@ public static class Autopilot
         {
             var b = (lo + hi) / 2;
             var vel = (truth[starId] + axis * b - pos).Normalized() * speed;
-            var p = Predictor.Run(g, truth, pos, vel, starId);
+            var p = Predictor.Run(g, truth, pos, vel, starId, v.Class.Drag);
             var hit = p.Encounters.FirstOrDefault(e => e.Star == starId, new Encounter(-1, double.MaxValue, 0, 0, 0, pos));
             bool tooClose = p.End == PredictionEnd.Collision || hit.Periapsis < MinPeriapsis;
             if (tooClose) { lo = b; continue; }
@@ -115,7 +115,7 @@ public static class Autopilot
             {
                 var a = center + span * i / 12;
                 var vel = (dir * Math.Cos(a) + side * Math.Sin(a)) * speed;
-                var p = Predictor.Run(g, truth, pos, vel, starId);
+                var p = Predictor.Run(g, truth, pos, vel, starId, v.Class.Drag);
                 if (p.End == PredictionEnd.Collision) continue;
                 var hit = p.Encounters.FirstOrDefault(e => e.Star == starId, new Encounter(-1, double.MaxValue, 0, 0, 0, pos));
                 if (hit.Star < 0) continue;
@@ -129,17 +129,17 @@ public static class Autopilot
 
     public sealed record Result(bool Delivered, DeathCause Death, double FuelLeft, double Days, double CargoIntegrity, int Legs, string Note, Voyage Final);
 
-    public static Result Fly(Galaxy g, int origin, int target, Cargo cargo, ulong rngSeed = 1, double epoch = 0)
+    public static Result Fly(Galaxy g, int origin, int target, Cargo cargo, ulong rngSeed = 1, double epoch = 0, ShipClass? ship = null)
     {
-        var v = new Voyage(g, origin, target, cargo, Enumerable.Repeat(double.MaxValue, g.Stars.Length).ToArray(), rngSeed, epoch);
-        var route = Route(g, origin, target);
+        var v = new Voyage(g, origin, target, cargo, Enumerable.Repeat(double.MaxValue, g.Stars.Length).ToArray(), rngSeed, epoch, shipClass: ship);
+        var route = Route(g, origin, target, v.Class.Drag);
         const double margin = 1.5;
 
         // Jump from the station's orbit toward the first waypoint.
         var next = 1;
         v.EnterFtl();
         var home = g.Stars[origin];
-        var legSpeed = SpeedForLeg(g, v.TruePosition, g.Stars[route[next]].Position, margin);
+        var legSpeed = SpeedForLeg(g, v.TruePosition, g.Stars[route[next]].Position, margin, v.Class.Drag);
         var startR = (v.TruePosition - home.Position).Length;
         var startSpeed = Math.Sqrt(legSpeed * legSpeed + 2 * home.Mu * (1 / startR - 1 / home.Soi)); // what is left after climbing out
         var launch = AimOutOfWell(g, v, home, route[next], startSpeed) - v.Velocity;
@@ -174,7 +174,7 @@ public static class Autopilot
                         return new Result(ok, v.Death, v.Fuel, v.Time, v.CargoIntegrity, route.Count - 1, ok ? "descended" : "missed capture", v);
                     }
                     var after = route[next + 1];
-                    var need = SpeedForLeg(g, v.TruePosition, v.TruePositions[after], margin);
+                    var need = SpeedForLeg(g, v.TruePosition, v.TruePositions[after], margin, v.Class.Drag);
                     var well = 2 * star.Mu * (1 / nextR - 1 / star.Soi);
                     var want = Math.Sqrt(need * need + well);
                     if (want > speedAtP) v.Burn(v.Velocity, want - speedAtP);

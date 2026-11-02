@@ -126,7 +126,7 @@ public partial class Main
 
     /// <summary>Engine acceleration at the current throttle, in the units of the current layer.</summary>
     public double EngineAcceleration =>
-        Helm.Throttle * (V!.Phase == Phase.Sublight ? Tuning.SublightThrust : Tuning.MaxThrust);
+        Helm.Throttle * (V!.Phase == Phase.Sublight ? V!.SublightThrust : V!.FlightThrust);
 
     /// <summary>Days per second under power. A tight orbit gets a minute a lap, or the nose can't keep up with it.</summary>
     public double BurnTimeRate

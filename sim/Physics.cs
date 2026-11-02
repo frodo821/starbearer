@@ -20,7 +20,8 @@ public static class Physics
         return best;
     }
 
-    public static Vec3d Acceleration(Galaxy g, Vec3d[] starPos, Vec3d pos, Vec3d vel, Vec3d thrust)
+    /// <param name="drag">The hull's drag, as a multiple of a small ship's.</param>
+    public static Vec3d Acceleration(Galaxy g, Vec3d[] starPos, Vec3d pos, Vec3d vel, Vec3d thrust, double drag = 1)
     {
         var a = thrust;
         var primary = Primary(g, starPos, pos);
@@ -30,19 +31,19 @@ public static class Physics
             var r2 = d.LengthSq;
             a += d * (g.Stars[primary].Mu / (r2 * Math.Sqrt(r2)));
         }
-        var k = Tuning.BaseDrag * g.Density(pos) * (primary >= 0 ? 0.1 : 1);   // stellar wind clears the medium near a star
+        var k = Tuning.BaseDrag * drag * g.Density(pos) * (primary >= 0 ? 0.1 : 1);   // stellar wind clears the medium near a star
         return a - vel * (k * vel.Length);
     }
 
-    public static void Rk4(Galaxy g, Vec3d[] starPos, ref Vec3d p, ref Vec3d v, Vec3d thrust, double dt)
+    public static void Rk4(Galaxy g, Vec3d[] starPos, ref Vec3d p, ref Vec3d v, Vec3d thrust, double dt, double drag = 1)
     {
-        var a1 = Acceleration(g, starPos, p, v, thrust);
+        var a1 = Acceleration(g, starPos, p, v, thrust, drag);
         var v2 = v + a1 * (dt / 2);
-        var a2 = Acceleration(g, starPos, p + v * (dt / 2), v2, thrust);
+        var a2 = Acceleration(g, starPos, p + v * (dt / 2), v2, thrust, drag);
         var v3 = v + a2 * (dt / 2);
-        var a3 = Acceleration(g, starPos, p + v2 * (dt / 2), v3, thrust);
+        var a3 = Acceleration(g, starPos, p + v2 * (dt / 2), v3, thrust, drag);
         var v4 = v + a3 * dt;
-        var a4 = Acceleration(g, starPos, p + v3 * dt, v4, thrust);
+        var a4 = Acceleration(g, starPos, p + v3 * dt, v4, thrust, drag);
         var np = p + (v + 2 * v2 + 2 * v3 + v4) * (dt / 6);
         var nv = v + (a1 + 2 * a2 + 2 * a3 + a4) * (dt / 6);
         p = np; v = nv;
@@ -96,7 +97,7 @@ public static class Physics
     /// run goes along the line to the next well's edge, the stall point, or the end of the time.
     /// well is the star whose well the ship is in, or -1; it is only a hint and is checked.
     /// </summary>
-    public static double Coast(Galaxy g, Vec3d[] starPos, ref Vec3d pos, ref Vec3d vel, double maxDt, ref int well)
+    public static double Coast(Galaxy g, Vec3d[] starPos, ref Vec3d pos, ref Vec3d vel, double maxDt, ref int well, double drag = 1)
     {
         if (well >= 0 && (starPos[well] - pos).LengthSq >= g.Stars[well].Soi * g.Stars[well].Soi) well = -1;
         var speed = vel.Length;
@@ -105,7 +106,7 @@ public static class Physics
         {
             var next = NextWell(g, starPos, pos, vel / speed, out ahead);
             if (ahead == 0) well = next;
-            else if (next >= 0 && ahead <= OpenRunLy) return RunTo(g, ref pos, ref vel, ahead + 1e-6, maxDt, ref well, next);
+            else if (next >= 0 && ahead <= OpenRunLy) return RunTo(g, ref pos, ref vel, ahead + 1e-6, maxDt, ref well, next, drag);
         }
         if (well >= 0)
         {
@@ -113,23 +114,23 @@ public static class Physics
             var d = starPos[well] - pos;
             var r = Math.Max(d.Length, 0.01);
             var dt = Math.Min(maxDt, Math.Clamp(0.04 * r / Math.Sqrt(speed * speed + 2 * s.Mu / r), 1e-4, 1.0));
-            Rk4(g, starPos[well], s.Mu, ref pos, ref vel, dt);
+            Rk4(g, starPos[well], s.Mu, ref pos, ref vel, dt, drag);
             if ((starPos[well] - pos).LengthSq >= s.Soi * s.Soi) well = -1;
             return dt;
         }
         if (speed <= 1e-12) return maxDt;
-        return RunTo(g, ref pos, ref vel, OpenRunLy, maxDt, ref well, -1);
+        return RunTo(g, ref pos, ref vel, OpenRunLy, maxDt, ref well, -1, drag);
     }
 
     /// <summary>
     /// A straight coast of up to run ly in open space, shortened to the time left or the point where the
     /// speed falls to the stall line. With quadratic drag v(s) = v0 exp(-k s) and t(s) = (exp(k s) - 1) / (k v0).
     /// </summary>
-    static double RunTo(Galaxy g, ref Vec3d pos, ref Vec3d vel, double run, double maxDt, ref int well, int entering)
+    static double RunTo(Galaxy g, ref Vec3d pos, ref Vec3d vel, double run, double maxDt, ref int well, int entering, double drag)
     {
         var speed = vel.Length;
         var dir = vel / speed;
-        var k = Tuning.BaseDrag * g.Density(pos + dir * (run / 2));
+        var k = Tuning.BaseDrag * drag * g.Density(pos + dir * (run / 2));
         double Days(double s) => k * s < 1e-9 ? s / speed : (Math.Exp(k * s) - 1) / (k * speed);
         var reached = true;
         if (speed > Tuning.StallSpeed && speed * Math.Exp(-k * run) < Tuning.StallSpeed)
@@ -151,13 +152,13 @@ public static class Physics
     }
 
     /// <summary>One step in a well: the one star's pull and the thinned drag near it.</summary>
-    static void Rk4(Galaxy g, Vec3d star, double mu, ref Vec3d p, ref Vec3d v, double dt)
+    static void Rk4(Galaxy g, Vec3d star, double mu, ref Vec3d p, ref Vec3d v, double dt, double drag)
     {
         Vec3d A(Vec3d q, Vec3d w)
         {
             var d = star - q;
             var r2 = d.LengthSq;
-            return d * (mu / (r2 * Math.Sqrt(r2))) - w * (Tuning.BaseDrag * g.Density(q) * 0.1 * w.Length);
+            return d * (mu / (r2 * Math.Sqrt(r2))) - w * (Tuning.BaseDrag * drag * g.Density(q) * 0.1 * w.Length);
         }
         var a1 = A(p, v);
         var v2 = v + a1 * (dt / 2);
