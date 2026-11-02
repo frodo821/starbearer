@@ -4,7 +4,7 @@ KESTREL K-40 / Freighter
 元のBody: 幅25m / 全長40m / 高さ15m。
 艦首: Blender +Y、glTF / Godot -Z。Godot の上方向は +Y。
 
-source/freighter.blend: 編集用モデル。Body の元形状とスケールを保持。
+source/freighter.blend: 編集用モデル。元の概形を手掛かりに船体を再構成。
 source/freighter_blockout.blend: ユーザーが用意したBodyの変更前バックアップ。
 source/freighter_bow.png / freighter_stern.png: 制作モデルのレンダー。
 freighter.glb: 細部を実ジオメトリで持つ形状確認用。ランプの開閉アニメーション付き。
@@ -22,3 +22,15 @@ Body と Freighter Details が編集対象です。
 Blender のフレーム1で収納、フレーム48で展開。保存時は展開状態です。
 GLB の初期状態は収納。Scene アニメーションを最後まで再生すると展開します。
 船体の開口は元のメッシュを保持するBooleanモディファイアで作成しています。
+
+船首をくさび形に絞り、中央屋根を低く傾斜させ、左右の機関部を面取りした
+独立ポッドとして造形しています。貨物区画の前端と下部キールも絞っています。
+source/reshape_freighter.py がこのシルエットの再構成処理です。
+
+ORE船を参考にした工業ディテール:
+黄土色の保護フレーム、露出した整備区画と配管、コンプレッサー、
+駆動系の接続部、格納した荷役アームを追加しています。
+外板を一様に分割するタイリングは使用していません。
+source/add_industrial_detail.py がこの追加処理です。
+参考: https://images.evetech.net/types/32880/render?size=1024 (Venture)
+参考: https://images.evetech.net/types/42244/render?size=1024 (Porpoise)

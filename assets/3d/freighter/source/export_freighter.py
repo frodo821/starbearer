@@ -70,6 +70,7 @@ gltf=json.loads(binary[20:20+json_size])
 total_triangles=sum(gltf['accessors'][p['indices']]['count']//3
                     for mesh in gltf['meshes'] for p in mesh['primitives'])
 report={'meters_per_unit':1,'base_hull_dimensions_m':[25,40,15],
+        'hull_dimensions_m':[round(v,3) for v in body.dimensions],
         'full_dimensions_blender_xyz_m':[round(s,3) for s in dims],
         'triangles':total_triangles,'static_triangles':count,'materials':len(gltf['materials']),
         'bow_axis_godot':'-Z','scale':[1,1,1],'normal_maps_baked':False,

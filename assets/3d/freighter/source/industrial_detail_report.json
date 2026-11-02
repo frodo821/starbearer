@@ -1,0 +1,25 @@
+{
+  "style_reference": "EVE Online ORE industrial vessels, interpreted as a 40m utility freighter",
+  "reference_urls": [
+    "https://images.evetech.net/types/32880/render?size=1024",
+    "https://images.evetech.net/types/42244/render?size=1024"
+  ],
+  "details": [
+    "open dorsal service well",
+    "two raised compressor assemblies",
+    "two recessed nacelle machinery bays",
+    "protective structural hoops",
+    "cargo bay load frames",
+    "folded handling arm",
+    "coolant and power conduits",
+    "rear bulkhead power assembly"
+  ],
+  "uniform_surface_tiling": false,
+  "meters_per_unit": 1,
+  "ramp_animation_retained": true,
+  "hull_dimensions_m": [
+    25.0,
+    40.55,
+    15.05
+  ]
+}

@@ -52,6 +52,7 @@ public partial class Main
     {
         WriteSave();
         _hud.Port.Rebuild();
+        if (ManifestOpen) _hud.Manifest.Rebuild();
     }
 
     public void TakeMission(Mission m)
@@ -71,6 +72,15 @@ public partial class Main
     }
 
     /// <summary>Sets where the ship is bound, from a job at the port or any star on the chart.</summary>
+    /// <summary>The manifest window: the hold and the jobs aboard, open over the chart or the sky.</summary>
+    public bool ManifestOpen { get; private set; }
+
+    public void ToggleManifest()
+    {
+        ManifestOpen = !ManifestOpen;
+        if (ManifestOpen) _hud.Manifest.Rebuild();
+    }
+
     public void SetCourse(int star)
     {
         Save!.Course = star;

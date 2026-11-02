@@ -1,0 +1,22 @@
+{
+  "meters_per_unit": 1,
+  "uniform_grid": false,
+  "surface_details": [
+    "four structural hull joints",
+    "unequal removable deck plates",
+    "pressed cargo doublers",
+    "gaskets and recessed rebates",
+    "captured hex fasteners",
+    "one lap-weld repair"
+  ],
+  "pipe_routes": 14,
+  "bolted_flange_unions": 34,
+  "pipe_details": [
+    "circular swept elbows",
+    "obstacle clearance dog-legs",
+    "gate valves",
+    "straps and mounting feet",
+    "flexible hose sections"
+  ],
+  "ramp_animation_retained": true
+}

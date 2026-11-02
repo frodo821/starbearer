@@ -389,6 +389,15 @@ public partial class Autotest : Node
         });
         Do(() => _g.LookAtPublic(_g.NearestStarDirection()!.Value));
         Do(() => Shot("04a_star_in_well"));
+        Do(() => Press(Key.I));
+        Do(() =>
+        {
+            var m = _g.HudForTest.Manifest;
+            Check("I opens the manifest in flight", m.Visible && m.CourseButtons.Length == _g.V!.Hold.Count && _g.V.Hold.Count > 0);
+            Shot("04b_manifest");
+            Press(Key.I);
+        });
+        Do(() => Check("I closes it again", !_g.HudForTest.Manifest.Visible));
         Do(() =>
         {
             Check("enter jumps to FTL", _g.Screen == Screen.Flight && _g.V!.Phase == Phase.Flight);

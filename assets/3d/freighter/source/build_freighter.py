@@ -1,7 +1,7 @@
-"""Editable 1:1, forty-meter freighter built around the supplied Body blockout.
+"""Editable 1:1, forty-meter freighter developed from the Body silhouette.
 
-Run inside Blender with the freighter blockout open. Original hull vertex
-coordinates and transforms remain intact. Detail coordinates are world meters.
+Run inside Blender with the freighter blockout open. Surface/ramp and silhouette
+revisions run after the initial assembly. Detail coordinates are world meters.
 """
 import bpy
 import bmesh
@@ -410,9 +410,19 @@ if revision.exists():
     revision_ns={'__file__':str(revision)}
     exec(compile(revision.read_text(),str(revision),'exec'),revision_ns)
     plate_count=0
+silhouette=OUT/'source'/'reshape_freighter.py'
+if silhouette.exists():
+    silhouette_ns={'__file__':str(silhouette)}
+    exec(compile(silhouette.read_text(),str(silhouette),'exec'),silhouette_ns)
+industrial=OUT/'source'/'add_industrial_detail.py'
+if industrial.exists():
+    industrial_ns={'__file__':str(industrial)}
+    exec(compile(industrial.read_text(),str(industrial),'exec'),industrial_ns)
 bpy.ops.wm.save_as_mainfile(filepath=str(OUT/'source'/'freighter.blend'))
 report={'class':'KESTREL K-40','meters_per_unit':1,'base_hull_dimensions_m':[25,40,15],
-        'base_hull_preserved':True,'hull_plates':plate_count,'cargo_bays':6,
+        'base_hull_preserved':not body.get('silhouette_revision',False),
+        'hull_dimensions_m':[round(v,3) for v in body.dimensions],
+        'hull_plates':plate_count,'cargo_bays':6,
         'main_engines':2,'crew_airlock_height_m':2.05,
         'blender_bow_axis':'+Y','godot_bow_axis':'-Z'}
 (OUT/'source'/'design_report.json').write_text(json.dumps(report,indent=2))

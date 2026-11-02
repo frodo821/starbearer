@@ -5,13 +5,19 @@
     40,
     15
   ],
+  "hull_dimensions_m": [
+    25.0,
+    40.55,
+    15.05
+  ],
   "full_dimensions_blender_xyz_m": [
     25.94,
-    41.403,
-    17.74
+    41.623,
+    18.24
   ],
-  "triangles": 29560,
-  "materials": 11,
+  "triangles": 44980,
+  "static_triangles": 40932,
+  "materials": 15,
   "bow_axis_godot": "-Z",
   "scale": [
     1,
@@ -23,6 +29,5 @@
   "purpose": "geometry preview for iteration",
   "ramp_animation_exported": true,
   "ramp_closed_frame": 1,
-  "ramp_open_frame": 48,
-  "static_triangles": 25512
+  "ramp_open_frame": 48
 }

@@ -6,7 +6,7 @@
     40,
     15
   ],
-  "base_hull_preserved": true,
+  "base_hull_preserved": false,
   "hull_plates": 0,
   "cargo_bays": 6,
   "main_engines": 2,
@@ -14,5 +14,13 @@
   "blender_bow_axis": "+Y",
   "godot_bow_axis": "-Z",
   "surface": "continuous hull, functional bulkhead joints",
-  "cargo_loading": "three-panel folding ramp"
+  "cargo_loading": "three-panel folding ramp",
+  "silhouette_reference_retained": true,
+  "hull_dimensions_m": [
+    25.0,
+    40.55,
+    15.05
+  ],
+  "industrial_detail_revision": true,
+  "style_reference": "ORE industrial ships"
 }

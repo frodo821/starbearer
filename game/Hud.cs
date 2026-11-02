@@ -12,15 +12,24 @@ public partial class Hud : Control
     bool _mapDragging;
     public Hud() { MouseFilter = MouseFilterEnum.Ignore; }
     public PortWindow Port { get; private set; } = null!;
+    public ManifestWindow Manifest { get; private set; } = null!;
 
     public override void _Ready()
     {
         Port = new PortWindow(Game);
         AddChild(Port);
+        Manifest = new ManifestWindow(Game);
+        AddChild(Manifest);
     }
 
     public override void _Process(double delta)
     {
+        var manifest = Game.ManifestOpen && Game.Screen is Screen.Orbit or Screen.Plan or Screen.Flight && Game.V != null;
+        if (manifest != Manifest.Visible)
+        {
+            if (manifest) Manifest.Rebuild();
+            Manifest.Visible = manifest;
+        }
         var open = Game.Screen == Screen.Port;
         if (open == Port.Visible) return;
         if (open) Port.Rebuild();

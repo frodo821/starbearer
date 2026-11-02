@@ -115,6 +115,11 @@ public partial class Main
             if (e is InputEventKey { Pressed: true, Echo: true } ek && Screen == Screen.Plan) Nudge(ek.Keycode, ek.ShiftPressed);
             return;
         }
+        if (Screen is Screen.Orbit or Screen.Plan or Screen.Flight)
+        {
+            if (k.Keycode == Key.I) { ToggleManifest(); return; }
+            if (k.Keycode == Key.Escape && ManifestOpen) { ToggleManifest(); return; }
+        }
         if (MapOpen && k.Keycode == Key.R) Chart.Center = V!.EstimatedPosition;
         if (MapOpen && k.Keycode == Key.T) Chart.Center = V!.ChartPositions[V.TargetStar];
         switch (Screen)

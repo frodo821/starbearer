@@ -1,0 +1,21 @@
+{
+  "meters_per_unit": 1,
+  "reference": "Original T silhouette, approximately 40m long / 25m wide",
+  "changes": [
+    "tapered wedge bow",
+    "lowered swept cockpit",
+    "sloping dorsal spine",
+    "chamfered engine nacelles",
+    "tapered cargo fairings",
+    "sculpted lower keel"
+  ],
+  "continuous_hull": true,
+  "rear_folding_ramp_retained": true,
+  "construction_shells_manifold": true,
+  "source_body_replaced": true,
+  "hull_dimensions_m": [
+    25.0,
+    40.55,
+    15.05
+  ]
+}
