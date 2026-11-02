@@ -22,7 +22,7 @@ public partial class Main
     /// <summary>What a docked ship can't touch. The chart, the plan and the clock stay usable.</summary>
     static bool ShipControl(Key key) => key is Key.E or Key.O or Key.L or Key.B or Key.G or Key.X or Key.Z or Key.W or Key.S;
 
-    public IReadOnlyList<Mission> Offers => Missions.Board(G!, Save!.PortStar, Save.Deliveries, Save.Hold);
+    public IReadOnlyList<Mission> Offers => Missions.OffersFor(Save!, G!);
 
     void PortChanged()
     {
@@ -33,7 +33,7 @@ public partial class Main
 
     public void TakeMission(Mission m)
     {
-        if (!Missions.Take(Save!, m)) { Refuse(CargoBays.Of(Save!).Refusal(Save!.Hold, m.Cargo) ?? "積めない"); return; }
+        if (!Missions.Take(Save!, G!, m)) { Refuse(CargoBays.Of(Save!).Refusal(Save!.Hold, m.Cargo) ?? "在庫が足りない"); return; }
         Message = "";
         SteerForCourse();
         PortChanged();
@@ -156,6 +156,7 @@ public partial class Main
         s.HeldLife = v.LifeRemaining;
         s.TotalDays += v.Time;
         s.MarketIn(G!);   // the galaxy's stock catches up with the days flown
+        foreach (var c in here) Missions.Deliver(s, G!, c);
         s.PortStar = v.SystemStar;
         s.ClosestApproach = v.ClosestApproach;
         WriteSave();

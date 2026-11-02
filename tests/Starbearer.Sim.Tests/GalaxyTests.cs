@@ -43,7 +43,7 @@ public partial class SimTests
                 Assert.Equal(gate, g.GateLinks[exit]);
                 Assert.NotEqual(g.Stars[gate].Region, g.Stars[exit].Region);
                 Assert.Equal(StationKind.Gate, Missions.KindOf(g, gate));
-                Assert.Empty(Missions.Board(g, gate, 0, Array.Empty<Consignment>()));
+                Assert.Empty(Missions.Board(g, Market.Open(g), gate, 0, Array.Empty<Consignment>()));
                 Assert.DoesNotContain(gate, g.Ports.Concat(g.Depots));
                 Assert.True(g.HasStation(gate));
             });

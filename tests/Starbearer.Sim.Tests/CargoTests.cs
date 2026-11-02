@@ -5,26 +5,67 @@ using Xunit;
 public partial class SimTests
 {
     [Fact]
-    public void ABoardOffersWhatItsStationMakesToWhereItIsUsed()
+    public void ABoardHaulsSpareStockToStationsShortOfIt()
     {
         var g = Galaxy.Generate(5);
+        var m = Market.Open(g);
+        m.AdvanceTo(g, 120);   // let the shortages show
         var wareJobs = 0;
         foreach (var port in g.Ports.Concat(g.Depots))
-            foreach (var m in Missions.Board(g, port, 0, Array.Empty<Consignment>()))
+            foreach (var job in Missions.Board(g, m, port, 0, Array.Empty<Consignment>()))
             {
-                Assert.Equal(port, m.Origin);
-                Assert.NotEqual(m.Origin, m.Target);
-                Assert.True(g.HasStation(m.Target));
-                Assert.True(m.Pay > 0);
-                if (m.Cargo.Ware is not { } ware) continue;
+                Assert.Equal(port, job.Origin);
+                Assert.NotEqual(job.Origin, job.Target);
+                Assert.True(g.HasStation(job.Target));
+                Assert.True(job.Pay > 0);
+                if (job.Cargo.Ware is not { } ware) continue;
                 wareJobs++;
+                var w = Wares.Get(ware);
                 Assert.True(g.Economies[port].Makes(ware));
-                Assert.True(g.Economies[m.Target].Uses(ware));
-                Assert.Equal(Wares.Get(ware).Kind, m.Cargo.Kind);
+                Assert.True(g.Economies[job.Target].Uses(ware));
+                Assert.True(m.Fill(g, job.Target, ware) < 0.8);
+                Assert.True(m.StockOf(g, port, ware) >= job.Cargo.Volume);
+                Assert.Equal(w.Kind, job.Cargo.Kind);
+                Assert.Equal(w.Mass * job.Cargo.Volume, job.Cargo.Mass, 9);
+                Assert.True(job.Pay >= job.Cargo.Volume * w.Price * 0.2);
             }
         Assert.True(wareJobs > 10, $"{wareJobs} ware jobs");
-        var board = Missions.Board(g, g.Ports[0], 0, Array.Empty<Consignment>());
-        Assert.NotEqual(board.Select(m => m.Id), Missions.Board(g, g.Ports[0], 1, Array.Empty<Consignment>()).Select(m => m.Id));
+        var board = Missions.Board(g, m, g.Ports[0], 0, Array.Empty<Consignment>());
+        Assert.NotEqual(board.Select(x => x.Id), Missions.Board(g, m, g.Ports[0], 1, Array.Empty<Consignment>()).Select(x => x.Id));
+    }
+
+    /// <summary>A docked save whose board has a ware job a courier can take.</summary>
+    static (SaveData S, Galaxy G, Mission Job) WithAWareJob()
+    {
+        var (s, g) = SaveData.NewGalaxy(5);
+        s.TotalDays = 120;
+        foreach (var port in g.Ports)
+        {
+            s.PortStar = port;
+            if (Missions.OffersFor(s, g).FirstOrDefault(j => j.Cargo.Ware != null && Missions.Fits(s, j)) is { } job) return (s, g, job);
+        }
+        throw new InvalidOperationException("no ware job a courier can take");
+    }
+
+    [Fact]
+    public void TakingAWareJobLoadsItFromStockAndDeliveringFillsTheStationShortOfIt()
+    {
+        var (s, g, job) = WithAWareJob();
+        var m = s.MarketIn(g);
+        var ware = job.Cargo.Ware!;
+        var (origin, target) = (m.StockOf(g, job.Origin, ware), m.StockOf(g, job.Target, ware));
+        var others = Missions.OffersFor(s, g).Where(j => j != job).ToList();
+        Assert.True(Missions.Take(s, g, job));
+        Assert.Equal(origin - job.Cargo.Volume, m.StockOf(g, job.Origin, ware), 9);
+        Assert.Equal(others, Missions.OffersFor(s, g));            // the rest of the board stays put
+        var back = SaveData.FromJson(s.ToJson())!;
+        Assert.Equal(others, Missions.OffersFor(back, g));         // and a reload shows the same
+        var c = s.Hold.Single(x => x.Mission == job);
+        c.Integrity = 0.5;
+        Missions.Deliver(s, g, c);
+        Assert.Equal(target + job.Cargo.Volume * 0.5, m.StockOf(g, job.Target, ware), 9);
+        s.TotalDays += 10;                                         // a new day posts a new board
+        Assert.NotEqual(others, Missions.OffersFor(s, g));
     }
 
     [Fact]
@@ -33,14 +74,14 @@ public partial class SimTests
         var cargo = new Cargo("crate", 0.5, 0.9, 100, 3);
         Mission Job(int i) => new($"{i}", 0, 1, cargo, 100);
         var s = new SaveData();
-        Assert.True(Missions.Take(s, Job(0)));
-        Assert.True(Missions.Take(s, Job(1)));
-        Assert.False(Missions.Take(s, Job(2)));
-        Assert.Equal(6, Missions.VolumeUsed(s.Hold));
         var g = Galaxy.Generate(5);
-        var board = Missions.Board(g, g.Ports[0], 0, Array.Empty<Consignment>());
+        Assert.True(Missions.Take(s, g, Job(0)));
+        Assert.True(Missions.Take(s, g, Job(1)));
+        Assert.False(Missions.Take(s, g, Job(2)));
+        Assert.Equal(6, Missions.VolumeUsed(s.Hold));
+        var board = Missions.Board(g, Market.Open(g), g.Ports[0], 0, Array.Empty<Consignment>());
         var taken = new[] { new Consignment { Mission = board[0] } };
-        Assert.DoesNotContain(Missions.Board(g, g.Ports[0], 0, taken), m => m.Id == board[0].Id);
+        Assert.DoesNotContain(Missions.Board(g, Market.Open(g), g.Ports[0], 0, taken), m => m.Id == board[0].Id);
     }
 
     static readonly ShipClass Tanker = Ships.Courier with { Id = "test", Bays = new[] { new Bay(BayKind.Fluid, 4), new Bay(BayKind.Fluid, 4), new Bay(BayKind.Bulk, 3), new Bay(BayKind.Container, 2) } };
@@ -99,7 +140,7 @@ public partial class SimTests
         foreach (var port in g.Ports.Concat(g.Depots))
             for (int d = 0; d < 4; d++)
             {
-                var board = Missions.Board(g, port, d, Array.Empty<Consignment>());
+                var board = Missions.Board(g, Market.Open(g), port, d, Array.Empty<Consignment>());
                 if (board.Count == 0) continue;   // a gate
                 Assert.Equal(CargoKind.Container, board[0].Cargo.Kind);
                 kinds.UnionWith(board.Select(m => m.Cargo.Kind));

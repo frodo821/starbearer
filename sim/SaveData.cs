@@ -17,6 +17,9 @@ public sealed class SaveData
     public int Flown { get; set; } = 1;
     /// <summary>The star the instruments steer for. Falls back when no cargo is bound there.</summary>
     public int Course { get; set; } = -1;
+    /// <summary>The board at the port of the checkpoint, as posted (see Missions.OffersFor).</summary>
+    public List<Mission> Offers { get; set; } = new();
+    public string OffersAt { get; set; } = "";
     /// <summary>The galaxy's stock, as of the checkpoint.</summary>
     public Market? Market { get; set; }
 

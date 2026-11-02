@@ -70,7 +70,7 @@ public partial class SimTests
         {
             var region = g.Stars[port].Region;
             var reach = g.LinkedRegions(region).Append(region).ToHashSet();
-            foreach (var m in Missions.Board(g, port, 0, Array.Empty<Consignment>()))
+            foreach (var m in Missions.Board(g, Market.Open(g), port, 0, Array.Empty<Consignment>()))
             {
                 Assert.Contains(g.Stars[m.Target].Region, reach);
                 Assert.False(g.Gates.Contains(m.Target));
