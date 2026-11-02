@@ -266,7 +266,8 @@ public sealed class Voyage
 
     /// <summary>
     /// Takes a burn actually flown off what remains of a node. Thrust off the node's axis leaves a
-    /// residual in the other axes, so pointing the ship properly matters.
+    /// residual in the other axes, so pointing the ship properly matters. Burning past the node
+    /// turns the residual around; the node stays until whoever flies it says it is done.
     /// </summary>
     public void ConsumeNode(Maneuver node, Vec3d flown) => ConsumeNode(node, flown, SubPosition, SubVelocity);
 
@@ -276,12 +277,9 @@ public sealed class Voyage
     public void ConsumeNode(Maneuver node, Vec3d flown, Vec3d position, Vec3d velocity)
     {
         var (t, r, n) = Sublight.Frame(position, velocity);
-        var before = node.DeltaV;
         node.Prograde -= flown.Dot(t);
         node.Radial -= flown.Dot(r);
         node.Normal -= flown.Dot(n);
-        if (node.DeltaV < 0.002) Nodes.Remove(node);
-        else if (flown.Length > before) Nodes.Remove(node);   // burned clean through it
     }
 
     public static double ChartFactor(double closest) =>

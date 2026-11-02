@@ -242,25 +242,64 @@ public partial class Main
         {
             if (v.Nodes.Count > 0) PlanFrozen = true;   // from here on the plan is the reference
             _forecastDirty = true;                      // keep "if I stop now" live
+            // The auto burn throttles its last moment down to exactly what is left.
+            if (v.AutoBurn && NextNode is { } aim && EngineOn && !IsDown(Key.X) && !IsDown(Key.Z))
+            {
+                var step = engine.Length * Tuning.SublightThrust * rate * delta;
+                if (step > aim.DeltaV) engine *= aim.DeltaV / step;
+            }
         }
         var fuelBefore = v.Fuel;
         v.AdvanceSublight(rate * delta, engine);
         if (engine.LengthSq > 0 && v.Fuel < fuelBefore && NextNode is { } burning)
         {
+            if (_burnNode != burning) { _burnNode = burning; _burnPlanned = _burnLeast = burning.DeltaV; }
+            var before = burning.DeltaV;
             var flown = engine * (Tuning.SublightThrust * rate * delta);
             if (SubForecast?.StageOf(burning) is { } stage)
                 v.ConsumeNode(burning, flown, stage.Position, stage.Velocity);
             else
                 v.ConsumeNode(burning, flown);
             _forecastDirty = true;
-            if (!v.Nodes.Contains(burning))
-            {
-                if (Selected == burning) Selected = NextNode;
-                CutEngine(v.Nodes.Count > 0 ? "ノード完了。残りの段を現在の軌道で計画し直した" : "ノード完了。エンジン停止");
-                Replan();   // what this stage actually achieved is now the baseline for the rest
-            }
+            _burnLive = true;
+            NodeOvershot = burning.DeltaV > before;
+            _burnLeast = Math.Min(_burnLeast, burning.DeltaV);
+            if (v.AutoBurn && (NodeOvershot || burning.DeltaV < _burnPlanned * 1e-4)) CutEngine("自動噴射 完了");
         }
+        if (_burnLive && !EngineOn) EndBurn();
         if (v.Phase == Phase.Arrived) Dock();
         else if (v.Phase == Phase.Dead) Screen = Screen.Dead;
+    }
+
+    /// <summary>A node counts as flown once its burn came this close to nothing, whenever the pilot then stops.</summary>
+    const double NodeDoneFraction = 0.1;
+
+    Maneuver? _burnNode;
+    double _burnPlanned, _burnLeast;
+    bool _burnLive;
+
+    /// <summary>The burn has gone past the node: what is left grows again, so now is the time to stop.</summary>
+    public bool NodeOvershot { get; private set; }
+
+    /// <summary>
+    /// The engine was stopped on a node. Close enough, and the node is done and the rest of the plan
+    /// starts from the orbit actually flown; stopped short, the node stays with what is left of it.
+    /// </summary>
+    void EndBurn()
+    {
+        var v = V!;
+        _burnLive = false;
+        NodeOvershot = false;
+        if (_burnNode is not { } node || !v.Nodes.Contains(node)) { _burnNode = null; return; }
+        if (_burnLeast > _burnPlanned * NodeDoneFraction)
+        {
+            Message = $"ノード残 Δv {node.DeltaV:F4}。続けるなら再点火";
+            return;
+        }
+        v.Nodes.Remove(node);
+        _burnNode = null;
+        if (Selected == node) Selected = NextNode;
+        Message = $"ノード完了 (誤差 Δv {node.DeltaV:F4})" + (v.Nodes.Count > 0 ? "。残りの段を現在の軌道で計画し直した" : "");
+        Replan();   // what this stage actually achieved is now the baseline for the rest
     }
 }

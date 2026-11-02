@@ -576,7 +576,7 @@ public partial class Hud
         }
         if (Game.NextNode is { } burn)
         {
-            Line($"ノード残 Δv {burn.DeltaV:F3}   スロットル {Game.Throttle * 100:F0}%", Ink);
+            Line($"ノード残 Δv {burn.DeltaV:F4}   スロットル {Game.Throttle * 100:F0}%" + (Game.NodeOvershot ? "  過ぎた" : ""), Game.NodeOvershot ? Warn : Ink);
             if (Game.EngineAcceleration > 0)
             {
                 var days = burn.DeltaV / Game.EngineAcceleration;

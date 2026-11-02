@@ -125,7 +125,10 @@ public partial class Main
                 : (Key.U, "港に停泊中。時機を選んで出港する");
         var st = v.LocalStation;
         if (v.Goal == null) return (Key.J, "この星系に港はない。発進して次へ");
-        if (EngineOn && NextNode != null) return (Key.E, "ノード噴射中。完了すると自動で止まる");
+        if (EngineOn && NextNode != null)
+            return v.AutoBurn ? (null, "自動噴射中。終わると自動で止まる")
+                : NodeOvershot ? (Key.E, "ノードを過ぎた。E で止める")
+                : (Key.E, "ノード噴射中。残り Δv が 0 に近づいたら E で止める");
         if (st != null)
         {
             var (stationAt, stationSpeed) = v.StationNow();

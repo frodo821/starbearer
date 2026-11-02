@@ -277,7 +277,10 @@ public class SimTests
         v.ConsumeNode(node, along * 0.05);
         Assert.Equal(0.05, node.DeltaV, 9);
         v.ConsumeNode(node, along * 0.05);
-        Assert.Empty(v.Nodes);
+        Assert.Equal(0, node.DeltaV, 9);
+        Assert.Single(v.Nodes);   // done only when the pilot stops
+        v.ConsumeNode(node, along * 0.01);
+        Assert.Equal(-0.01, node.Prograde, 9);   // past the node, the residual points back
     }
 
     [Fact]
@@ -291,8 +294,8 @@ public class SimTests
         v.Nodes.Add(node);
         var stage = Sublight.Predict(v.Primary, null, v.SubPosition, v.SubVelocity, 0, v.Nodes, 1).Stages[0];
         var along = Sublight.Frame(stage.Position, stage.Velocity).T;
-        for (int i = 0; i < 10 && v.Nodes.Count > 0; i++) v.ConsumeNode(node, along * 0.01, stage.Position, stage.Velocity);
-        Assert.Empty(v.Nodes);
+        for (int i = 0; i < 10; i++) v.ConsumeNode(node, along * 0.01, stage.Position, stage.Velocity);
+        Assert.Equal(0, node.DeltaV, 9);
     }
 
     [Fact]

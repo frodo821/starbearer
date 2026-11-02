@@ -481,6 +481,7 @@ public partial class Autotest : Node
         Do(() =>
         {
             Check("a stopped engine keeps the plan frozen", _g.PlanFrozen && ReferenceEquals(_g.SubForecast, _plan));
+            Check("stopping short leaves the node with what is left", _g.V!.Nodes.Count == _count + 1 && _g.NextNode!.DeltaV < _dv);
             _g.CommandForTest(Key.Y);
         });
         Do(() => Check("replan rebuilds the plan from here", !_g.PlanFrozen && !ReferenceEquals(_g.SubForecast, _plan)));
@@ -492,10 +493,15 @@ public partial class Autotest : Node
         });
         Until(() => _g.NodeDirection() is not { } d || Off(d) < 0.03 || Time.GetTicksMsec() - _clock > 5000);
         Do(() => { Press(Key.O); Press(Key.E); _clock = Time.GetTicksMsec(); }, 1);
-        Until(() => !_g.EngineOn || Time.GetTicksMsec() - _clock > 25000);
+        Until(() => _g.NodeOvershot || !_g.EngineOn || Time.GetTicksMsec() - _clock > 25000);
         Do(() =>
         {
-            Check("finishing a node cuts the engine", !_g.EngineOn);
+            Check("the engine keeps running past the node until stopped", _g.EngineOn && _g.NodeOvershot && _g.V!.Nodes.Count == _count + 1);
+            Press(Key.E);
+        });
+        Do(() =>
+        {
+            Check("stopping at the node finishes it", !_g.EngineOn && _g.V!.Nodes.Count == _count);
             Check("a finished stage releases the plan", !_g.PlanFrozen);
         });
         Do(() =>
