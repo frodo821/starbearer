@@ -226,7 +226,7 @@ public class SimTests
         var (v, from, to) = AtGate();
         var t = v.AbsoluteTime;
         var (tf, rf, nf) = Sublight.Frame(from.Position(t), from.Velocity(t));
-        var offset = tf * 0.002 + nf * 0.001;
+        var offset = tf * (Tuning.DockRange * 0.4) + nf * (Tuning.DockRange * 0.2);
         var relative = tf * 0.03 - rf * 0.01;
         v.PlaceSublightForTest(from.Position(t) + offset, from.Velocity(t) + relative);
         v.BookGate(25);
@@ -251,7 +251,7 @@ public class SimTests
         var (v, from, _) = AtGate();
         var t = v.AbsoluteTime;
         var star = v.SystemStar;
-        v.PlaceSublightForTest(from.Position(t) + new Vec3d(0.002, 0, 0), from.Velocity(t) + new Vec3d(0.03, 0, 0));
+        v.PlaceSublightForTest(from.Position(t) + new Vec3d(Tuning.DockRange * 0.4, 0, 0), from.Velocity(t) + new Vec3d(0.03, 0, 0));
         v.AdvanceSublight(1e-4, Vec3d.Zero);
         Assert.Equal(star, v.SystemStar);
         Assert.Equal(0, v.Passages);
@@ -785,13 +785,11 @@ public class SimTests
                 continue;
             }
             if ((v.StationNow().Position - v.SubPosition).Length > 0.05 && attempt < 23) continue;
-            for (int i = 0; i < 2000 && v.Phase == Phase.Sublight && v.Primary.Key == at; i++)
+            // X to close, then dock once the readout allows it.
+            for (int i = 0; i < 4000 && v.Phase == Phase.Sublight && v.Primary.Key == at; i++)
             {
-                var (sp, sv) = v.StationNow();
-                var toward = sp - v.SubPosition;
-                var rel = sv - v.SubVelocity;
-                var want = rel + toward.Normalized() * Math.Min(0.02, toward.Length);
-                v.AdvanceSublight(0.02, want.Length > 0.005 ? want.Normalized() : Vec3d.Zero);
+                if (v.RequestDock()) break;
+                v.AdvanceSublight(0.005, v.AssistTowardStation(approach: true) ?? Vec3d.Zero);
             }
         }
     }
@@ -855,6 +853,8 @@ public class SimTests
         v.PlaceForTest(g.Stars[depot].Position + (st.Host!.StarPosition(v.AbsoluteTime) + st.Position(v.AbsoluteTime)) * Sublight.Scale, st.Host.StarVelocity(v.AbsoluteTime) + st.Velocity(v.AbsoluteTime));
         Assert.True(v.Descend());
         v.AdvanceSublight(0.01, Vec3d.Zero);
+        Assert.Equal(Phase.Sublight, v.Phase);   // matched, but docking is the pilot's call
+        Assert.True(v.RequestDock());
         Assert.Equal(Phase.Arrived, v.Phase);
     }
 
@@ -1354,7 +1354,7 @@ public class SimTests
             Assert.All(system.Children.SelectMany(p => p.Children), m => Assert.True(m.OrbitRadius + m.Edge < m.Parent!.Edge));
             var st = g.StationAt(star);
             Assert.True(system.Holds(st.Host!));
-            Assert.True(st.Radius > Tuning.DockRange * 3 && st.Radius < st.Host!.Edge);
+            Assert.True(st.Radius > Tuning.HostClearance && st.Radius < st.Host!.Edge);
             Assert.True(st.Radius > st.Host!.BodyRadius);
         }
         Assert.Contains(Enumerable.Range(1, 8).Select(i => Galaxy.Generate((ulong)i)).SelectMany(x => x.Ports.Select(x.StationAt)), s => s.Host!.Kind == BodyKind.Star);

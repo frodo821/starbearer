@@ -1,0 +1,12 @@
+{
+  "bounds": "[P: (-6.0, -1.295, -3.6), S: (12.21098, 4.275, 7.2)]",
+  "emission_enabled": true,
+  "exported_vertices": 15124,
+  "godot_version": "4.7.2-stable (official)",
+  "mesh_instances": 1,
+  "normal_enabled": true,
+  "normal_texture_size": "(4096.0, 4096.0)",
+  "surfaces": 1,
+  "tangents_present": true,
+  "triangles": 5891
+}

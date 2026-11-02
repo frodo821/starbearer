@@ -1,0 +1,18 @@
+{
+  "class": "KESTREL K-40",
+  "meters_per_unit": 1,
+  "base_hull_dimensions_m": [
+    25,
+    40,
+    15
+  ],
+  "base_hull_preserved": true,
+  "hull_plates": 0,
+  "cargo_bays": 6,
+  "main_engines": 2,
+  "crew_airlock_height_m": 2.05,
+  "blender_bow_axis": "+Y",
+  "godot_bow_axis": "-Z",
+  "surface": "continuous hull, functional bulkhead joints",
+  "cargo_loading": "three-panel folding ramp"
+}

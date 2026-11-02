@@ -541,7 +541,8 @@ public partial class Hud
             var (goalAt, goalSpeed) = v.RelativeNow(goal);
             var d = (goalAt - v.SubPosition).Length;
             var rel = (goalSpeed - v.SubVelocity).Length;
-            Line($"目標 {Main.NameOf(goal)}  {d:F3} AU   相対 {rel:F3}", goal is Station && d < Tuning.DockRange * 3 ? Good : Ink);
+            var dockable = goal is Station && v.CanDock;
+            Line($"目標 {Main.NameOf(goal)}  {d:F4} AU   相対 {rel:F4}" + (dockable ? "   入港可 U" : ""), dockable ? Good : goal is Station && d < Tuning.DockRange * 10 ? Warn : Ink);
         }
         if (watched != null)
         {
@@ -559,7 +560,7 @@ public partial class Hud
         }
         else if (goal != null && v.Waypoint == null) Line(goal is Center c && c.Key == v.Primary.Key ? "目標を周回中" : "目標はこの天体の外", Dim);
         if (st != null && goal is Station)
-            Line($"港 半径 {st.Radius:F2} AU   入港 {Tuning.DockRange:F2} AU / 相対 {Tuning.DockRelativeSpeed:F2}", Dim);
+            Line($"港 半径 {st.Radius:F2} AU   入港 {Tuning.DockRange:F3} AU / 相対 {Tuning.DockRelativeSpeed:F3}", Dim);
         if (Game.SubForecast?.Impact == true) Line("天体に衝突する軌道", Bad);
         y += 4;
         var fc = Game.SubForecast;

@@ -78,6 +78,7 @@ public partial class Autotest : Node
     ShipClass? _boughtClass;
     (Vec3d, float) _chartBefore;
     int _parkedAt;
+    bool _sawDockable;
     double _toll;
     double _credits, _heldFuel;
     int _retries;
@@ -632,7 +633,19 @@ public partial class Autotest : Node
             Key_(Key.X, true);
             _clock = Time.GetTicksMsec();
         }, 1);
-        Until(() => { Key_(Key.X, true); return _g.Screen == Screen.Port || Time.GetTicksMsec() - _clock > 120000; });   // the window can lose a held key
+        Until(() =>
+        {
+            // X closes in; once the readout allows it, the pilot docks with U. Matching alone never docks.
+            if (_g.Screen == Screen.Orbit && _g.V!.CanDock)
+            {
+                if (!_sawDockable) Check("matched and close, the ship waits for U to dock", _g.V.Phase == Phase.Sublight);
+                _sawDockable = true;
+                Key_(Key.X, false);
+                Press(Key.U);
+            }
+            else Key_(Key.X, true);   // the window can lose a held key
+            return _g.Screen == Screen.Port || Time.GetTicksMsec() - _clock > 120000;
+        });
         Do(() =>
         {
             Key_(Key.X, false);

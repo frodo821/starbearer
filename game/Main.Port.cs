@@ -191,7 +191,7 @@ public partial class Main
             _forecastDirty = true;
         }
         else if (v.RequestDock()) Dock();
-        else Message = $"港まで {Tuning.DockRange:F2} AU、相対 {Tuning.DockRelativeSpeed:F2} 以内で入港できる";
+        else Message = $"港まで {Tuning.DockRange:F3} AU、相対 {Tuning.DockRelativeSpeed:F3} 以内で入港できる（X 接近、Z 相対0 で寄せる）";
     }
 
     public void OpenPort()

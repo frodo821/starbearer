@@ -203,6 +203,21 @@ public sealed class Voyage
         && (StationNow().Position - SubPosition).Length < Tuning.DockRange
         && (StationNow().Velocity - SubVelocity).Length < Tuning.DockRelativeSpeed;
 
+    /// <summary>
+    /// The pilot's assist toward this system's station: with approach, close on it, slowing as it nears;
+    /// without, only match its velocity. Zero once there is nothing left worth a burn, null with no station.
+    /// It stops well inside the docking speed, so letting go there leaves the ship able to dock.
+    /// </summary>
+    public Vec3d? AssistTowardStation(bool approach)
+    {
+        if (LocalStation == null) return null;
+        var (sp, sv) = StationNow();
+        var toward = sp - SubPosition;
+        var want = sv - SubVelocity;
+        if (approach) want += toward.Normalized() * Math.Min(0.02, toward.Length);
+        return want.Length < Tuning.DockRelativeSpeed * 0.25 ? Vec3d.Zero : want.Normalized();
+    }
+
     public bool RequestDock()
     {
         if (!CanDock) return false;
@@ -266,8 +281,7 @@ public sealed class Voyage
                 var near = (sp - p).Length < Tuning.DockRange;
                 if (!near) _clearOfDock = true;
                 else if (GateBooked != null && G.GateLinks.TryGetValue(SystemStar, out var exit)) PassGate(ref p, ref v, sp, sv, exit);
-                else if (_clearOfDock && (sv - v).Length < Tuning.DockRelativeSpeed)
-                    Phase = Phase.Arrived;
+                // Docking is the pilot's call (RequestDock): passing close and slow is not enough.
             }
         }
         SubPosition = p; SubVelocity = v;

@@ -1,0 +1,28 @@
+{
+  "meters_per_unit": 1,
+  "base_hull_dimensions_m": [
+    25,
+    40,
+    15
+  ],
+  "full_dimensions_blender_xyz_m": [
+    25.94,
+    41.403,
+    17.74
+  ],
+  "triangles": 29560,
+  "materials": 11,
+  "bow_axis_godot": "-Z",
+  "scale": [
+    1,
+    1,
+    1
+  ],
+  "normal_maps_baked": false,
+  "body_opening_and_bevel_exported": true,
+  "purpose": "geometry preview for iteration",
+  "ramp_animation_exported": true,
+  "ramp_closed_frame": 1,
+  "ramp_open_frame": 48,
+  "static_triangles": 25512
+}

@@ -298,7 +298,7 @@ hangar.box((2.18,0,-1.06),(.25,.68,.13),1,.7)
 # Three main thrusters with open, double-walled nozzles and four auxiliary engines.
 engines = MeshBatch('Engine bells and cooling rings', '05 Engines', [dark,trim,armor[1],blue])
 for y,z,r in [(0,0,.46),(-.99,0,.35),(.99,0,.35),
-              (-1.85,.13,.18),(-1.85,-.18,.16),(1.85,.13,.18),(1.85,-.18,.16)]:
+              (-1.85,.20,.15),(-1.85,-.20,.14),(1.85,.20,.15),(1.85,-.20,.14)]:
     x0,x1=5.86,6.62 if r>.3 else 6.32
     engines.cylinder((x0,y,z),(x1,y,z),r*.65,r,0,48,False)
     engines.cylinder((x0+.10,y,z),(x1,y,z),r*.49,r*.84,1,48,False)
@@ -314,6 +314,53 @@ for y,z,r in [(0,0,.46),(-.99,0,.35),(.99,0,.35),
     pts=[Vector((x1,y+rr*math.cos(i*math.tau/48),z+rr*math.sin(i*math.tau/48)))
          for rr in [r,r*.84] for i in range(48)]
     engines.polyhedron(pts,[(i,(i+1)%48,(i+1)%48+48,i+48) for i in range(48)],1)
+
+# Keep the nozzles mostly within the stern silhouette rather than on long stalks.
+engines.v=[(5.86+(x-5.86)*.46,y,z) for x,y,z in engines.v]
+
+def add_engine_foundations():
+    mounts=MeshBatch('Recessed engine mounting wells','05 Engines',[dark,trim,armor[2]])
+    tech=MeshBatch('Aft bulkhead machinery and conduits','05 Engines',[dark,trim,armor[1]])
+    specs=[(0,0,.46),(-.99,0,.35),(.99,0,.35),
+           (-1.85,.20,.15),(-1.85,-.20,.14),(1.85,.20,.15),(1.85,-.20,.14)]
+    for y,z,r in specs:
+        # Four rings form a hollow, chamfered collar. Its bottom is embedded in
+        # the existing recessed bulkhead; the nozzle passes through the opening.
+        lip=6.04 if r>.3 else 6.015
+        outer=r+(.075 if r>.3 else .035)
+        rings=[(5.79,outer),(lip,outer*.94),(lip,r*.92),(5.79,r*.58)]
+        n=32
+        pts=[(x,y+rr*math.cos(i*math.tau/n),z+rr*math.sin(i*math.tau/n))
+             for x,rr in rings for i in range(n)]
+        for row,mi in [(0,2),(1,1),(2,0),(3,0)]:
+            nxt=(row+1)%4
+            mounts.polyhedron(pts,[(row*n+i,row*n+(i+1)%n,
+                                  nxt*n+(i+1)%n,nxt*n+i) for i in range(n)],mi)
+        # Radial mounting lugs make each engine read as a separate machine.
+        for k in range(8):
+            angle=(k+.5)*math.tau/8
+            yy,zz=y+math.cos(angle)*outer,z+math.sin(angle)*outer
+            tech.box((5.94,yy,zz),(.17,.038,.035),1)
+    # Layer small housings on the exposed bulkhead, avoiding the open throats.
+    for j in range(33):
+        y=-2.40+j*.15
+        for z in [-.48,-.32,-.16,0,.16,.32,.48]:
+            if any(math.hypot(y-cy,z-cz)<r+.12 for cy,cz,r in specs):continue
+            hit,p,n,index=body.ray_cast(Vector((8,y,z)),Vector((-1,0,0)))
+            if not hit or p.x>5.85:continue
+            depth=.055+.018*((j+round(z*100))%4)
+            tech.box((5.805+depth/2,y,z),(depth,.11,.085),0)
+            tech.box((5.811+depth,y,z),(.014,.08,.05),2 if j%3 else 1)
+            if j%3==0:
+                tech.cylinder((5.84,y-.045,z+.045),(5.84,y+.045,z+.045),.012,mat=1,sides=8)
+    for sign in [-1,1]:
+        for y in [sign*1.48,sign*2.15]:
+            tech.cylinder((5.94,y,-.24),(5.94,y,.24),.022,mat=1,sides=12)
+            for z in [-.21,0,.21]:
+                tech.box((5.94,y,z),(.065,.07,.028),2)
+    return mounts.finish(.004),tech.finish(.003)
+
+add_engine_foundations()
 
 def detail_deck_roofs():
     roofs=MeshBatch('Deck roof armor and service housings','02 Superstructure',armor+[dark,trim,seam])

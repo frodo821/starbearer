@@ -1,0 +1,13 @@
+{
+  "normal_size": [
+    4096,
+    4096
+  ],
+  "normal_nonflat_texel_fraction": 0.2722,
+  "uv_bounds": [
+    0.0,
+    1.0
+  ],
+  "textures_packed_in_blend": true,
+  "finite_pixels": true
+}

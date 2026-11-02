@@ -1,0 +1,24 @@
+KESTREL K-40 / Freighter
+
+1 unit = 1 meter. Godot では scale=(1,1,1) で使用します。
+元のBody: 幅25m / 全長40m / 高さ15m。
+艦首: Blender +Y、glTF / Godot -Z。Godot の上方向は +Y。
+
+source/freighter.blend: 編集用モデル。Body の元形状とスケールを保持。
+source/freighter_blockout.blend: ユーザーが用意したBodyの変更前バックアップ。
+source/freighter_bow.png / freighter_stern.png: 制作モデルのレンダー。
+freighter.glb: 細部を実ジオメトリで持つ形状確認用。ランプの開閉アニメーション付き。
+今回のモデルはノーマルマップへのベイク前の制作版です。
+
+6つの側面貨物区画、前部操縦席、双発主エンジン、後部折り畳みランプ、
+高さ2.05mの乗員用エアロック、3点式着陸脚を備えます。
+
+Freighter Game Preview は書き出し用の非表示オブジェクトです。
+Body と Freighter Details が編集対象です。
+
+外板は格子を持たない連続した面です。継ぎ目は主要隔壁の位置だけにあります。
+側面は滑らかな貨物区画カバーで、搬入出は後部ランプを使用します。
+ランプは幅5.47m、展開長8.84m、展開時の傾斜18.6度。
+Blender のフレーム1で収納、フレーム48で展開。保存時は展開状態です。
+GLB の初期状態は収納。Scene アニメーションを最後まで再生すると展開します。
+船体の開口は元のメッシュを保持するBooleanモディファイアで作成しています。

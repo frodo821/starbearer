@@ -119,20 +119,11 @@ public partial class Main
         if (v.Docked) { Helm.Firing = false; return Vec3d.Zero; }
         var here = v.LocalStation != null;
         Vec3d? assist = null;
-        if (here && IsDown(Key.X))
+        if (here && (IsDown(Key.X) || IsDown(Key.Z)))
         {
-            var (sp, sv) = v.StationNow();
-            var toward = sp - v.SubPosition;
-            var rel = sv - v.SubVelocity;
-            var want = rel + toward.Normalized() * Math.Min(0.02, toward.Length);
-            if (want.Length < 0.005) { Helm.Firing = false; return Vec3d.Zero; }
-            assist = want.Normalized();
-        }
-        else if (here && IsDown(Key.Z))
-        {
-            var rel = v.StationNow().Velocity - v.SubVelocity;
-            if (rel.Length < 0.002) { Helm.Firing = false; return Vec3d.Zero; }
-            assist = rel.Normalized();
+            var want = v.AssistTowardStation(approach: IsDown(Key.X))!.Value;
+            if (want.LengthSq == 0) { Helm.Firing = false; return Vec3d.Zero; }
+            assist = want;
         }
         if (assist is not { } dir) return EngineCommand();
         Helm.Hold = ViewHold.Free;

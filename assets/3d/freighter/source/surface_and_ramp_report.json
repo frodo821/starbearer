@@ -1,0 +1,12 @@
+{
+  "surface": "continuous hull, two structural roof joints; no tiled cladding",
+  "side_cargo_covers": "six smooth fixed covers",
+  "loading": "rear three-panel folding ramp and actual hull opening",
+  "closed_frame": 1,
+  "deployed_frame": 48,
+  "ramp_length_m": 8.84,
+  "ramp_width_m": 5.47,
+  "ramp_slope_degrees": 18.6,
+  "meters_per_unit": 1,
+  "original_body_vertices_preserved": true
+}

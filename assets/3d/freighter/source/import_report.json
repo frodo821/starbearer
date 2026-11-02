@@ -1,0 +1,13 @@
+{
+  "animation_duration_seconds": 2.0,
+  "dimensions_godot_xyz_m": "(25.94, 17.74, 41.4025)",
+  "godot_version": "4.7.2-stable (official)",
+  "import_passed": true,
+  "mesh_instances": 7,
+  "meters_per_unit": 1,
+  "open_dimensions_godot_xyz_m": "(25.94, 17.83342, 48.97035)",
+  "ramp_animation": "Scene",
+  "ramp_animation_verified": true,
+  "surfaces": 27,
+  "triangles": 29560
+}

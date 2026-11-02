@@ -60,9 +60,9 @@ public sealed class Galaxy
     /// circle planets, labs and foundries the moons, anything else the first planet going.</summary>
     Center HostFor(StationKind kind, Center system, Rng r)
     {
-        // Only bodies whose sphere leaves room for an orbit clear of the docking range (see PlaceStation).
-        var planets = system.Children.Where(p => p.Edge * 0.22 > Tuning.DockRange * 3).ToList();
-        var moons = system.Children.SelectMany(p => p.Children).Where(m => m.Edge * 0.25 > Tuning.DockRange * 3).ToList();
+        // Only bodies whose sphere leaves room for an orbit clear of the body (see PlaceStation).
+        var planets = system.Children.Where(p => p.Edge * 0.22 > Tuning.HostClearance).ToList();
+        var moons = system.Children.SelectMany(p => p.Children).Where(m => m.Edge * 0.25 > Tuning.HostClearance).ToList();
         return kind switch
         {
             StationKind.Mine or StationKind.Gate => system,

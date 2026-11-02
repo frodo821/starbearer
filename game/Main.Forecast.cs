@@ -82,7 +82,9 @@ public partial class Main
                 OrbitForecast Path(IReadOnlyCollection<Maneuver> n) => Sublight.PredictPath(g, primary, p, vel, t, n, span, goal);
                 var current = path ? Path(Array.Empty<Maneuver>()) : null;
                 var plan = !path ? kept : nodes.Count == 0 ? current : Path(nodes);
-                double? PassesAt(OrbitForecast? f) => new[] { f?.Closest?.Time, f?.Crossing?.Time, f?.Exit?.Time, f?.Next?.Time, f?.Enter?.Time }
+                // Moving away, the closest approach is now, at the start: that is no event to wait for,
+                // or the path would be worked out again every refresh.
+                double? PassesAt(OrbitForecast? f) => new[] { f?.Closest?.Time is > 0 and var c && c > t + 1e-3 ? c : null, f?.Crossing?.Time, f?.Exit?.Time, f?.Next?.Time, f?.Enter?.Time }
                     .Where(x => x > t).Min();
                 var until = new[] { PassesAt(current), PassesAt(plan) }.Min() ?? double.PositiveInfinity;
                 return new ForecastResult(v, screen, path, current, plan, until, null, null, null);

@@ -30,8 +30,9 @@ public static class Tuning
     // Normal space
     public const double SublightThrust = 0.2;      // AU/day^2
     public const double SublightFuelFactor = 0.5;  // sublight delta-v is cheaper than FTL delta-v
-    public const double DockRange = 0.01;          // AU
-    public const double DockRelativeSpeed = 0.02;  // AU/day
+    public const double DockRange = 0.001;         // AU, about 150,000 km
+    public const double DockRelativeSpeed = 0.002; // AU/day, about 3.5 km/s
+    public const double HostClearance = 0.03;      // AU a station's orbit keeps clear of its host's body
     public const double RendezvousFuelReserve = 0.5;  // covers about 90% of rendezvous, flown well
 
     // Flyby hazards

@@ -1,0 +1,49 @@
+{
+  "source_blend": "art/ships/body_detail_study.blend",
+  "game_mesh": "capital_ship.glb",
+  "normal": "textures/capital_ship_normal.png",
+  "base_color": "textures/capital_ship_base_color.png",
+  "emission": "textures/capital_ship_emission.png",
+  "normal_convention": "OpenGL +Y tangent space, glTF tangents included",
+  "source_triangles": 304984,
+  "game_triangles": 5891,
+  "triangle_reduction_percent": 98.07,
+  "materials": 1,
+  "atlas_resolution": [
+    4096,
+    4096
+  ],
+  "emission_resolution": [
+    2048,
+    2048
+  ],
+  "kept_geometry": [
+    "Body",
+    "Terraced command decks",
+    "Hull-conforming command foundation",
+    "Bridge glazing and antenna supports",
+    "Faceted sensor dome port",
+    "Faceted sensor dome starboard",
+    "Eight twin heavy batteries",
+    "Engine bells and cooling rings",
+    "Recessed engine mounting wells",
+    "Ventral hangar frame",
+    "Hangar attachment fairing"
+  ],
+  "baked_details": [
+    "armor plates",
+    "service machinery",
+    "radiator louvres",
+    "trench ribs",
+    "deck fittings",
+    "windows",
+    "engine cooling tabs",
+    "aft bulkhead machinery",
+    "small bevels"
+  ],
+  "roughness": 0.6,
+  "metallic": 0.25,
+  "design_meters_per_unit": 100,
+  "runtime_scale_applied": false,
+  "collision_mesh": false
+}
