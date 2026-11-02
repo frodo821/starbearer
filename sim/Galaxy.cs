@@ -43,6 +43,21 @@ public sealed class Galaxy
     public bool HasStation(int star) => IsPort(star) || IsDepot(star) || GateLinks.ContainsKey(star);
     public Station? StationOrNull(int star) => HasStation(star) ? StationAt(star) : null;
 
+    Dictionary<int, StationEconomy>? _economies;
+    /// <summary>What each station makes and uses, by star. Gates and depots included: they keep fuel for ships.</summary>
+    public IReadOnlyDictionary<int, StationEconomy> Economies => _economies ??=
+        Ports.Concat(Depots).Concat(Gates).ToDictionary(s => s, s => Economy.Of(this, s));
+
+    (int A, int B, double Closeness)[]? _neighbours;
+    /// <summary>
+    /// Station pairs whose stock evens out, and how strongly: every pair within a region, closer ones more,
+    /// and each pair of linked gates. Goods cross between regions only in ships' holds.
+    /// </summary>
+    public (int A, int B, double Closeness)[] Neighbours => _neighbours ??= Economies.Keys.OrderBy(s => s)
+        .SelectMany(a => Economies.Keys.Where(b => b > a && (Stars[a].Region == Stars[b].Region || GateLinks.TryGetValue(a, out var x) && x == b))
+            .Select(b => (a, b, GateLinks.TryGetValue(a, out var y) && y == b ? 1.0 : Math.Exp(-(Stars[a].Position - Stars[b].Position).Length / Economy.SpreadLy))))
+        .ToArray();
+
     readonly Dictionary<int, Center> _systems = new();
     readonly Dictionary<int, Station> _stations = new();
 
@@ -56,17 +71,30 @@ public sealed class Galaxy
         }
     }
 
-    /// <summary>What a kind of station circles: mining stations work a belt around the star, cities
-    /// circle planets, labs and foundries the moons, anything else the first planet going.</summary>
-    Center HostFor(StationKind kind, Center system, Rng r)
+    // Only bodies whose sphere leaves room for an orbit clear of the body (see PlaceStation).
+    static List<Center> Planets(Center system) => system.Children.Where(p => p.Edge * 0.22 > Tuning.HostClearance).ToList();
+    static List<Center> Moons(Center system) => system.Children.SelectMany(p => p.Children).Where(m => m.Edge * 0.25 > Tuning.HostClearance).ToList();
+
+    /// <summary>Whether a system has the body a kind of station works: gas harvesting needs a giant, ice a moon.</summary>
+    static bool Fits(StationKind kind, Center system) => kind switch
     {
-        // Only bodies whose sphere leaves room for an orbit clear of the body (see PlaceStation).
-        var planets = system.Children.Where(p => p.Edge * 0.22 > Tuning.HostClearance).ToList();
-        var moons = system.Children.SelectMany(p => p.Children).Where(m => m.Edge * 0.25 > Tuning.HostClearance).ToList();
+        StationKind.GasHarvester => Planets(system).Any(p => p.Kind == BodyKind.Giant),
+        _ => true,   // ice is cut from a moon where there is one, else from the outer belt
+    };
+
+    /// <summary>What a kind of station circles: mines and gates the star (a belt, open space), harvesters their
+    /// giant or moon, refineries, factories and shipyards a moon if there is one, the rest a planet.</summary>
+    static Center HostFor(StationKind kind, Center system, Rng r)
+    {
+        var planets = Planets(system);
+        var moons = Moons(system);
+        var giants = planets.Where(p => p.Kind == BodyKind.Giant).ToList();
         return kind switch
         {
             StationKind.Mine or StationKind.Gate => system,
-            StationKind.Lab or StationKind.Foundry or StationKind.Shipyard when moons.Count > 0 => moons[r.Index(moons.Count)],
+            StationKind.GasHarvester when giants.Count > 0 => giants[r.Index(giants.Count)],
+            StationKind.IceMine or StationKind.Refinery or StationKind.Factory or StationKind.Shipyard when moons.Count > 0 => moons[r.Index(moons.Count)],
+            StationKind.IceMine => system,
             _ when planets.Count > 0 => planets[r.Index(planets.Count)],
             _ => system,
         };
@@ -147,10 +175,13 @@ public sealed class Galaxy
 
         var kinds = new Dictionary<int, StationKind>();
         var links = PlaceGates(r, stars, regions.List, kinds);
+        var systems = new Dictionary<int, Center>();
+        Center SystemOf(int star) => systems.TryGetValue(star, out var c) ? c : systems[star] = Bodies.Build(seed, stars[star]);
         for (int k = 0; k < regions.List.Length; k++)
-            PlaceStations(r, stars, stars.Where(s => s.Region == k).ToList(), kinds);
+            PlaceStations(r, stars, stars.Where(s => s.Region == k).ToList(), kinds, SystemOf);
+        SpreadEveryKind(r, kinds, SystemOf);
         var stations = kinds.Keys.ToList();   // in placement order: each region's guaranteed ones first
-        return new Galaxy
+        var galaxy = new Galaxy
         {
             Seed = seed, Stars = stars.ToArray(), Nebulae = nebulae, Regions = regions.List, Kinds = kinds,
             Ports = stations.Where(s => kinds[s] is not (StationKind.Depot or StationKind.Gate)).ToArray(),
@@ -158,6 +189,8 @@ public sealed class Galaxy
             Gates = stations.Where(s => kinds[s] == StationKind.Gate).ToArray(),
             GateLinks = links,
         };
+        foreach (var (star, c) in systems) galaxy._systems[star] = c;   // built already, to fit the stations
+        return galaxy;
     }
 
     /// <summary>
@@ -203,30 +236,74 @@ public sealed class Galaxy
 
     /// <summary>
     /// A region's stations. The guaranteed ones (see Tuning.RegionMinimum) are spread by greedy farthest
-    /// point so jobs cross the region; the rest, a varying number, go to random stars and kinds.
+    /// point so jobs cross the region, each on a star whose system has the body it works; the rest, a
+    /// varying number, go to random stars as kinds their systems suit.
     /// </summary>
-    static void PlaceStations(Rng r, List<Star> all, List<Star> mine, Dictionary<int, StationKind> kinds)
+    static void PlaceStations(Rng r, List<Star> all, List<Star> mine, Dictionary<int, StationKind> kinds, Func<int, Center> system)
     {
         if (mine.Count == 0) return;
-        var production = Enumerable.Range(0, (int)StationKind.Depot).Select(i => (StationKind)i).ToArray();
+        var economic = Enumerable.Range(0, (int)StationKind.Depot).Select(i => (StationKind)i).ToArray();
+        // What the region's stations make and use so far, so the open slots go where it falls short.
+        var makes = new Dictionary<string, double>(); var uses = new Dictionary<string, double>();
+        void Tally(StationKind kind)
+        {
+            var (m, u) = Economy.Nominal(kind);
+            foreach (var (w, q) in m) makes[w] = makes.GetValueOrDefault(w) + q;
+            foreach (var (w, q) in u) uses[w] = uses.GetValueOrDefault(w) + q;
+        }
+        double Shortfall(StationKind kind) => Economy.Nominal(kind).Makes
+            .Sum(x => x.Value * Math.Max(0, uses.GetValueOrDefault(x.Key) - makes.GetValueOrDefault(x.Key)) / Math.Max(uses.GetValueOrDefault(x.Key), 1e-9));
+        void Place(int star, StationKind kind) { kinds[star] = kind; Tally(kind); }
+        StationKind EconomicFor(int star)
+        {
+            var fit = economic.Where(k => Fits(k, system(star))).ToArray();
+            // Mostly what the region lacks; now and then anything, so no two regions come out alike.
+            if (r.Unit() < 0.3) return fit[r.Index(fit.Length)];
+            return fit.MaxBy(k => Shortfall(k) + r.Range(0, 0.25));
+        }
+        foreach (var s in mine.Where(s => kinds.ContainsKey(s.Id))) Tally(kinds[s.Id]);   // the gates
         var guaranteed = Tuning.RegionMinimum.OrderBy(_ => r.Next()).ToList();
         // The gates already here count for the spread, so the rest keep away from them.
         var placed = mine.Where(s => kinds.ContainsKey(s.Id)).Select(s => s.Id).ToList();
-        var preset = placed.Count;
-        if (preset == 0) placed.Add(mine[r.Index(mine.Count)].Id);
-        while (placed.Count - preset < Math.Min(guaranteed.Count, mine.Count - preset))
-            placed.Add(mine.Where(s => !placed.Contains(s.Id)).MaxBy(s => placed.Min(p => (all[p].Position - s.Position).Length))!.Id);
-        for (int i = preset; i < placed.Count; i++)
-            kinds[placed[i]] = guaranteed[i - preset] == StationKind.Farm ? production[r.Index(production.Length)] : guaranteed[i - preset];
+        foreach (var kind in guaranteed)
+        {
+            var free = mine.Where(s => !kinds.ContainsKey(s.Id)).ToList();
+            if (free.Count == 0) break;
+            var suited = free.Where(s => Fits(kind, system(s.Id))).ToList();
+            var pool = suited.Count > 0 ? suited : free;
+            var star = placed.Count == 0 ? pool[r.Index(pool.Count)] : pool.MaxBy(s => placed.Min(p => (all[p].Position - s.Position).Length))!;
+            Place(star.Id, suited.Count > 0 ? kind : EconomicFor(star.Id));
+            placed.Add(star.Id);
+        }
         var total = (int)Math.Round(mine.Count * r.Range(Tuning.StationShareMin, Tuning.StationShareMax));
         var rest = mine.Where(s => !kinds.ContainsKey(s.Id)).OrderBy(_ => r.Next()).Take(Math.Max(0, total - placed.Count));
         foreach (var s in rest)
         {
             var roll = r.Unit();
-            kinds[s.Id] = roll < 0.45 ? production[r.Index(production.Length)]
-                : roll < 0.8 ? StationKind.Depot
+            Place(s.Id, roll < 0.6 ? EconomicFor(s.Id)
+                : roll < 0.82 ? StationKind.Depot
                 : roll < 0.93 ? StationKind.Colony
-                : StationKind.Shipyard;
+                : StationKind.Shipyard);
+        }
+    }
+
+    /// <summary>
+    /// A region has room for only part of the chains, so each economic kind missing from the whole galaxy
+    /// takes the place of one that has the most of its kind, keeping each region's guaranteed ones.
+    /// Then every ware is made somewhere, and the gaps between regions are what ships carry across.
+    /// </summary>
+    static void SpreadEveryKind(Rng r, Dictionary<int, StationKind> kinds, Func<int, Center> system)
+    {
+        var economic = Enumerable.Range(0, (int)StationKind.Depot).Select(i => (StationKind)i).ToArray();
+        var must = Tuning.RegionMinimum.ToHashSet();
+        foreach (var missing in economic.Where(k => !kinds.ContainsValue(k)).OrderBy(_ => r.Next()).ToList())
+        {
+            var counts = kinds.Values.GroupBy(k => k).ToDictionary(k => k.Key, k => k.Count());
+            var spare = kinds.Where(x => (!must.Contains(x.Value) || counts[x.Value] > 4) && x.Value is not (StationKind.Gate or StationKind.Colony or StationKind.Shipyard)
+                    && Fits(missing, system(x.Key)))
+                .OrderByDescending(x => x.Value == StationKind.Depot ? 0 : counts[x.Value]).ThenBy(x => x.Key).ToList();
+            if (spare.Count == 0) continue;
+            kinds[spare[0].Key] = missing;
         }
     }
 

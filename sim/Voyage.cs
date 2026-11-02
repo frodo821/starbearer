@@ -6,7 +6,11 @@ public enum DeathCause { None, Collision, HullFailure, Stranded, LifeSupport }
 /// <param name="Reward">Pay for a standard haul; a mission scales it by distance.</param>
 /// <param name="Volume">Room it takes in the hold.</param>
 /// <param name="Kind">Which bays can carry it.</param>
-public sealed record Cargo(string Name, double Mass, double HeatTolerance, double Reward, double Volume = 1, CargoKind Kind = CargoKind.Container);
+public sealed record Cargo(string Name, double Mass, double HeatTolerance, double Reward, double Volume = 1, CargoKind Kind = CargoKind.Container)
+{
+    /// <summary>The traded good it is, or null for a one-off item that exists only as a job.</summary>
+    public string? Ware { get; init; }
+}
 /// <summary>The ship as the last dock left it.</summary>
 public sealed record ShipState(double Fuel, double Hull, double Life);
 
@@ -73,7 +77,6 @@ public sealed class Voyage
     public bool IdealNodesForTest { get; set; }
     public Star System => G.Stars[SystemStar];
     public Station? LocalStation => G.StationOrNull(SystemStar);
-    bool _clearOfDock;   // a ship starts on the station it left; it has to get away before it can dock
 
     /// <summary>A ship with one load, as the tools and tests fly it.</summary>
     public Voyage(Galaxy g, int origin, int target, Cargo cargo, double[] closestApproach, ulong rngSeed, double epoch = 0, ShipState? ship = null, ShipClass? shipClass = null)
@@ -148,7 +151,6 @@ public sealed class Voyage
         (TruePosition, Velocity) = JumpState;
         Nodes.Clear();
         Docked = false;
-        _clearOfDock = true;
         Phase = Phase.Flight;
     }
 
@@ -279,8 +281,7 @@ public sealed class Voyage
             {
                 var (sp, sv) = StationNow();
                 var near = (sp - p).Length < Tuning.DockRange;
-                if (!near) _clearOfDock = true;
-                else if (GateBooked != null && G.GateLinks.TryGetValue(SystemStar, out var exit)) PassGate(ref p, ref v, sp, sv, exit);
+                if (near && GateBooked != null && G.GateLinks.TryGetValue(SystemStar, out var exit)) PassGate(ref p, ref v, sp, sv, exit);
                 // Docking is the pilot's call (RequestDock): passing close and slow is not enough.
             }
         }
@@ -329,7 +330,6 @@ public sealed class Voyage
         _bookedAt = -1;
         Passages++;
         Nodes.Clear();
-        _clearOfDock = false;   // out beside the exit gate: no docking there until clear of it
     }
 
     void PassSublightTime(double days)

@@ -26,7 +26,10 @@ public partial class SimTests
         v.PlaceForTest(g.Stars[depot].Position + (st.Host!.StarPosition(v.AbsoluteTime) + st.Position(v.AbsoluteTime)) * Sublight.Scale, st.Host.StarVelocity(v.AbsoluteTime) + st.Velocity(v.AbsoluteTime));
         Assert.True(v.Descend());
         v.AdvanceSublight(0.01, Vec3d.Zero);
-        Assert.Equal(Phase.Sublight, v.Phase);   // matched, but docking is the pilot's call
+        Assert.Equal(Phase.Sublight, v.Phase);   // close, but docking is the pilot's call
+        // The last of the speed is trimmed with the assist, as a pilot would with X.
+        for (int i = 0; i < 400 && !v.CanDock; i++) v.AdvanceSublight(0.002, v.AssistTowardStation(approach: true)!.Value);
+        Assert.Equal(Phase.Sublight, v.Phase);
         Assert.True(v.RequestDock());
         Assert.Equal(Phase.Arrived, v.Phase);
     }

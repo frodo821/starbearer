@@ -65,7 +65,8 @@ public static class Tuning
     public const double MinStarSeparation = 4.0;
     public const int NebulaCount = 6 * StarCount / 28;
     /// <summary>Stations every region has. Farm stands for any production station.</summary>
-    public static readonly StationKind[] RegionMinimum = { StationKind.Farm, StationKind.Farm, StationKind.Colony, StationKind.Shipyard };
+    /// <summary>Every region has these, so fuel can be made from its own deuterium, water and ore mined, and ships built and fed.</summary>
+    public static readonly StationKind[] RegionMinimum = { StationKind.GasHarvester, StationKind.FuelPlant, StationKind.Mine, StationKind.IceMine, StationKind.Farm, StationKind.Colony, StationKind.Shipyard };
     /// <summary>Share of a region's stars with a station, drawn per region; the old galaxy had 12 in 28.</summary>
-    public const double StationShareMin = 0.25, StationShareMax = 0.45;
+    public const double StationShareMin = 0.35, StationShareMax = 0.55;
 }

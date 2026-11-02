@@ -5,17 +5,25 @@ using Xunit;
 public partial class SimTests
 {
     [Fact]
-    public void ABoardOffersWhatItsStationDeals()
+    public void ABoardOffersWhatItsStationMakesToWhereItIsUsed()
     {
         var g = Galaxy.Generate(5);
-        var goods = g.Ports.Concat(g.Depots).GroupBy(p => Missions.KindOf(g, p))
-            .ToDictionary(k => k.Key, k => k.SelectMany(p => Missions.Board(g, p, 0, Array.Empty<Consignment>())).Select(m => m.Cargo.Name).ToHashSet());
-        Assert.True(goods.Count >= 3);
-        foreach (var (kind, names) in goods)
-            foreach (var (other, others) in goods)
-                if (kind != other) Assert.Empty(names.Intersect(others));
+        var wareJobs = 0;
+        foreach (var port in g.Ports.Concat(g.Depots))
+            foreach (var m in Missions.Board(g, port, 0, Array.Empty<Consignment>()))
+            {
+                Assert.Equal(port, m.Origin);
+                Assert.NotEqual(m.Origin, m.Target);
+                Assert.True(g.HasStation(m.Target));
+                Assert.True(m.Pay > 0);
+                if (m.Cargo.Ware is not { } ware) continue;
+                wareJobs++;
+                Assert.True(g.Economies[port].Makes(ware));
+                Assert.True(g.Economies[m.Target].Uses(ware));
+                Assert.Equal(Wares.Get(ware).Kind, m.Cargo.Kind);
+            }
+        Assert.True(wareJobs > 10, $"{wareJobs} ware jobs");
         var board = Missions.Board(g, g.Ports[0], 0, Array.Empty<Consignment>());
-        Assert.All(board, m => { Assert.Equal(g.Ports[0], m.Origin); Assert.NotEqual(m.Origin, m.Target); Assert.True(g.HasStation(m.Target)); Assert.True(m.Pay > 0); });
         Assert.NotEqual(board.Select(m => m.Id), Missions.Board(g, g.Ports[0], 1, Array.Empty<Consignment>()).Select(m => m.Id));
     }
 

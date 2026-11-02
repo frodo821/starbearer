@@ -1,8 +1,11 @@
 namespace Starbearer.Sim;
 
-/// <summary>What a station does. It decides which jobs its board offers.</summary>
-/// <summary>Production kinds come first, up to Depot; the ones after it each have a role of their own.</summary>
-public enum StationKind { Farm, Foundry, Lab, Clinic, Mine, City, Depot, Shipyard, Colony, Gate }
+/// <summary>
+/// What a station does: what it makes and uses, and so which jobs its board offers. The economic kinds
+/// come first, up to Depot; the ones after it each have a role of their own. Harvesters need the body
+/// their work needs: gas a giant, ice a moon; mines work the belt around the star.
+/// </summary>
+public enum StationKind { Mine, IceMine, GasHarvester, Refinery, ChemPlant, FuelPlant, Farm, Clinic, Factory, City, Depot, Shipyard, Colony, Gate }
 
 /// <summary>A job from a mission board: carry Cargo to Target for Pay, less whatever the cargo loses.</summary>
 public sealed record Mission(string Id, int Origin, int Target, Cargo Cargo, double Pay);
@@ -22,29 +25,29 @@ public static class Missions
     /// <summary>Colonies need more than they make: jobs go there more often, and pay more for it.</summary>
     const double ColonyPull = 2, ColonyPay = 1.25;
 
-    const CargoKind F = CargoKind.Fluid, P = CargoKind.PressurizedFluid, B = CargoKind.Bulk;
-
-    /// <summary>What each kind of station ships. Most of it travels in containers, so a container ship finds work anywhere.</summary>
-    static readonly Dictionary<StationKind, Cargo[]> Catalog = new()
+    /// <summary>One-off things that exist only as jobs: no station makes or stocks them.</summary>
+    static readonly Cargo[] Specials =
     {
-        [StationKind.Farm] = new Cargo[] { new("冷凍種子", 0.3, 0.45, 160, 2), new("穀物", 0.8, 0.8, 90, 4, B), new("培養土", 0.6, 0.9, 70, 3, B), new("液体肥料", 0.9, 0.85, 80, 3, F) },
-        [StationKind.Foundry] = new Cargo[] { new("合金材", 1.0, 0.95, 120, 2), new("機械部品", 0.6, 0.85, 110, 2), new("封印コンテナ", 0.5, 0.9, 100, 3), new("工業用ガス", 0.4, 0.7, 140, 2, P) },
-        [StationKind.Lab] = new Cargo[] { new("精密機器", 0.7, 0.7, 180, 2), new("観測試料", 0.2, 0.4, 170, 1), new("実験装置", 0.5, 0.6, 150, 3), new("液体ヘリウム", 0.3, 0.3, 210, 2, P) },
-        [StationKind.Clinic] = new Cargo[] { new("医薬品", 0.2, 0.55, 130, 1), new("血漿", 0.3, 0.4, 190, 1), new("医療機材", 0.5, 0.75, 120, 2), new("医療用酸素", 0.4, 0.6, 150, 2, P) },
-        [StationKind.Mine] = new Cargo[] { new("鉱石", 1.2, 0.95, 100, 3, B), new("レアメタル", 0.9, 0.9, 170, 1), new("採掘機材", 0.8, 0.85, 110, 3), new("水氷", 1.0, 0.6, 80, 4, B) },
-        [StationKind.City] = new Cargo[] { new("生活物資", 0.7, 0.8, 100, 3), new("加工食品", 0.5, 0.7, 110, 2), new("美術品", 0.2, 0.5, 200, 1), new("再生水", 1.0, 0.85, 70, 3, F) },
-        [StationKind.Depot] = new Cargo[] { new("予備部品", 0.3, 0.85, 60, 1), new("空タンク", 0.2, 0.95, 40, 2), new("郵便", 0.1, 0.8, 70, 1), new("推進剤", 0.8, 0.6, 90, 3, P) },
-        [StationKind.Shipyard] = new Cargo[] { new("船体部材", 1.1, 0.95, 110, 3), new("推進器", 0.8, 0.8, 140, 2), new("航法機器", 0.3, 0.6, 160, 1), new("冷却材", 0.7, 0.8, 100, 2, F) },
-        [StationKind.Colony] = new Cargo[] { new("入植地の標本", 0.2, 0.5, 150, 1), new("工芸品", 0.2, 0.6, 130, 1), new("帰郷者の荷物", 0.4, 0.75, 90, 2), new("廃棄物", 1.0, 0.95, 60, 4, B) },
+        new("冷凍種子", 0.3, 0.45, 160, 2), new("観測試料", 0.2, 0.4, 170, 1), new("精密機器", 0.7, 0.7, 180, 2),
+        new("美術品", 0.2, 0.5, 200, 1), new("郵便", 0.1, 0.8, 70, 1), new("予備部品", 0.3, 0.85, 60, 1),
+        new("入植地の標本", 0.2, 0.5, 150, 1), new("工芸品", 0.2, 0.6, 130, 1), new("帰郷者の荷物", 0.4, 0.75, 90, 2),
+        new("航法機器", 0.3, 0.6, 160, 1), new("医療機材", 0.5, 0.75, 120, 2), new("実験装置", 0.5, 0.6, 150, 3),
     };
+
+    /// <summary>A ware job's reward per unit, as a share of the ware's base price.</summary>
+    const double WareReward = 0.5;
 
     public static string Name(StationKind kind) => kind switch
     {
-        StationKind.Farm => "農業ステーション",
-        StationKind.Foundry => "工業ステーション",
-        StationKind.Lab => "研究ステーション",
-        StationKind.Clinic => "医療ステーション",
         StationKind.Mine => "小惑星採掘ステーション",
+        StationKind.IceMine => "氷採取ステーション",
+        StationKind.GasHarvester => "ガス採取ステーション",
+        StationKind.Refinery => "精錬所",
+        StationKind.ChemPlant => "化学プラント",
+        StationKind.FuelPlant => "燃料プラント",
+        StationKind.Farm => "農業ステーション",
+        StationKind.Clinic => "医療ステーション",
+        StationKind.Factory => "工場",
         StationKind.City => "都市ステーション",
         StationKind.Shipyard => "造船所",
         StationKind.Colony => "コロニー",
@@ -88,26 +91,40 @@ public static class Missions
         return Math.Round(cargo.Reward * Math.Max(0.4, ly / Tuning.StandardHaulLy) * demand);
     }
 
-    /// <summary>What a station offers. It changes with each delivery; jobs already in the hold are gone from it.</summary>
+    /// <summary>
+    /// What a station offers: a one-off item first, so any ship finds something to carry, then lots of what
+    /// it makes, each to a station that uses it. It changes with each delivery; jobs in the hold are gone from it.
+    /// </summary>
     public static List<Mission> Board(Galaxy g, int star, int deliveries, IEnumerable<Consignment> hold)
     {
         var r = new Rng(g.Seed * 7919 + (ulong)star * 104729 + (ulong)deliveries * 31);
         var kind = KindOf(g, star);
-        if (!Catalog.TryGetValue(kind, out var goods)) return new();   // a gate posts no jobs
+        if (kind == StationKind.Gate) return new();   // a gate posts no jobs
         // Within the region, or one a gate from here leads to.
         var region = g.Stars[star].Region;
         var reach = g.LinkedRegions(region).Append(region).ToHashSet();
         var places = g.Ports.Concat(g.Depots).Where(s => s != star && reach.Contains(g.Stars[s].Region))
             .OrderBy(s => r.Unit() / (KindOf(g, s) == StationKind.Colony ? ColonyPull : 1)).ToArray();
-        var count = Math.Min(kind is StationKind.Depot or StationKind.Shipyard ? SmallOffers : PortOffers, places.Length);
+        if (places.Length == 0) return new();
+        var count = kind is StationKind.Depot or StationKind.Shipyard ? SmallOffers : PortOffers;
+        var made = g.Economies.TryGetValue(star, out var here) ? here.Wares.Where(here.Makes).ToArray() : Array.Empty<string>();
         var offers = new List<Mission>();
-        var boxed = goods.Where(c => c.Kind == CargoKind.Container).ToArray();
         for (int i = 0; i < count; i++)
         {
-            // The first job is always containers, so any ship finds something to carry.
-            var pool = i == 0 ? boxed : goods;
-            var cargo = pool[r.Index(pool.Length)];
-            offers.Add(new Mission($"{star}-{deliveries}-{i}", star, places[i], cargo, PayFor(g, star, places[i], cargo)));
+            var id = $"{star}-{deliveries}-{i}";
+            var ware = i > 0 && made.Length > 0 ? made[r.Index(made.Length)] : null;
+            var to = ware == null ? places[i % places.Length]
+                : places.Where(p => g.Economies[p].Uses(ware)).Cast<int?>().FirstOrDefault(p => offers.All(o => o.Target != p));
+            if (ware == null || to == null)
+            {
+                var item = Specials[r.Index(Specials.Length)];
+                offers.Add(new Mission(id, star, places[i % places.Length], item, PayFor(g, star, places[i % places.Length], item)));
+                continue;
+            }
+            var w = Wares.Get(ware);
+            var cargo = w.Load(2 + r.Index(3), 0);
+            cargo = cargo with { Reward = cargo.Volume * w.Price * WareReward };
+            offers.Add(new Mission(id, star, to.Value, cargo, PayFor(g, star, to.Value, cargo)));
         }
         var taken = hold.Select(c => c.Mission.Id).ToHashSet();
         return offers.Where(m => !taken.Contains(m.Id)).ToList();
