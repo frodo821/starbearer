@@ -144,13 +144,21 @@ public static partial class Sublight
         return best;
     }
 
-    /// <summary>What to steer for from a body to reach a station: the station itself when they share the
-    /// body, else the body one level down toward it. Null when the ship has to climb out first.</summary>
-    public static IOrbiter? Waypoint(Center from, Station? st)
+    /// <summary>What to steer for from a body to reach a goal, a station or a body: the goal itself when it
+    /// circles this body, else the body one level down toward it. Null when the ship has to climb out first,
+    /// or is already circling the goal.</summary>
+    public static IOrbiter? Waypoint(Center from, IOrbiter? goal)
     {
-        if (st == null) return null;
-        var host = st.Host;
-        if (host == null || host.Key == from.Key) return st;
+        Center? host;
+        switch (goal)
+        {
+            case Station st:
+                if (st.Host == null || st.Host.Key == from.Key) return st;
+                host = st.Host;
+                break;
+            case Center body: host = body; break;
+            default: return null;
+        }
         for (var c = host; c != null; c = c.Parent)
             if (c.Parent?.Key == from.Key) return c;
         return null;

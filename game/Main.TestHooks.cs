@@ -58,5 +58,6 @@ public partial class Main
     public Vector2 DeleteButtonForTest => _hud.DeleteButton(Selected!)!.Value;
     public void ReloadForTest() => Continue();
     public Hud HudForTest => _hud;
+    public Vector2 BodyPointForTest(Center c) => _hud.BodyPointForTest(c);
     public bool ForecastBusyForTest => _forecastJob != null || (_forecastDirty && Screen is Screen.Orbit or Screen.Plan or Screen.Flight);
 }

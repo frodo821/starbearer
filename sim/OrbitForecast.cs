@@ -81,6 +81,8 @@ public sealed class OrbitForecast
     public List<Stage> Stages { get; } = new();
     /// <summary>Points where the path crosses the station's plane: ascending when the flag is true.</summary>
     public List<(Vec3d Position, bool Ascending)> PlaneCrossings { get; } = new();
+    /// <summary>What Closest, Crossing and PlaneCrossings are measured against: a station or a body circling Center.</summary>
+    public IOrbiter? Watched { get; init; }
     public Approach? Closest { get; set; }
     public Crossing? Crossing { get; set; }
     /// <summary>Orbit after the last planned burn.</summary>

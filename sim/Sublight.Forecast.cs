@@ -8,19 +8,19 @@ public static partial class Sublight
     /// where they fall. Arriving from outside, an unpowered path always leaves again or hits the star,
     /// so each leg ends unless a burn captures it.
     /// </summary>
-    public static void FollowOn(Galaxy g, int star, OrbitForecast f, IEnumerable<Maneuver>? nodes = null, int legs = 6)
+    public static void FollowOn(Galaxy g, int star, OrbitForecast f, IEnumerable<Maneuver>? nodes = null, int legs = 6, IOrbiter? goal = null)
     {
         var rest = (nodes ?? Array.Empty<Maneuver>()).Where(n => f.Stages.All(s => s.Node != n)).OrderBy(n => n.Time).ToList();
         OrbitForecast Fly(Center c, Vec3d p, Vec3d v, double t)
         {
             var el = OrbitOf(c.Mu, p, v);
             var span = el.Bound ? el.Period : 2 * c.Edge / Math.Max(v.Length, 1e-3);
-            return Predict(c, TargetIn(g, c), p, v, t, rest, span);
+            return Predict(c, Watch(g, c, goal), p, v, t, rest, span);
         }
         void Carry(Center c, Vec3d p, Vec3d v, double t)
         {
             f.Beyond = Fly(c, p, v, t);
-            FollowOn(g, c.Star, f.Beyond, rest, legs - 1);
+            FollowOn(g, c.Star, f.Beyond, rest, legs - 1, goal);
         }
         if (f.Enter is { } entry)
         {
@@ -43,8 +43,11 @@ public static partial class Sublight
         Carry(g.System(n.Star), arrive, velocity, n.Time);
     }
 
-    /// <summary>The port's station, on the legs flown around the body it circles.</summary>
-    static Station? TargetIn(Galaxy g, Center c) => g.StationOrNull(c.Star) is { } st && st.Host?.Key == c.Key ? st : null;
+    /// <summary>What a leg around c is measured against: the step toward the goal in the goal's own system,
+    /// and elsewhere that system's station on the legs flown around the body it circles.</summary>
+    static IOrbiter? Watch(Galaxy g, Center c, IOrbiter? goal) =>
+        goal != null && goal.Star == c.Star ? Waypoint(c, goal)
+        : g.StationOrNull(c.Star) is { } st && st.Host?.Key == c.Key ? st : null;
 
     /// <summary>The straight run from a Disengage to the next star, flying and removing the burns in rest
     /// that fall on it. Stages stay in the frame of the star left behind, as the ship's state does.</summary>
@@ -80,11 +83,13 @@ public static partial class Sublight
         return (drift, v);
     }
 
-    /// <summary>The whole path from a state: this star's reach, and everything past it.</summary>
-    public static OrbitForecast PredictPath(Galaxy g, Center from, Vec3d p, Vec3d v, double t0, IReadOnlyCollection<Maneuver> nodes, double horizon)
+    /// <summary>The whole path from a state: this star's reach, and everything past it. Each leg is measured
+    /// against the step toward the goal, by default this system's station.</summary>
+    public static OrbitForecast PredictPath(Galaxy g, Center from, Vec3d p, Vec3d v, double t0, IReadOnlyCollection<Maneuver> nodes, double horizon, IOrbiter? goal = null)
     {
-        var f = Predict(from, TargetIn(g, from), p, v, t0, nodes, horizon);
-        FollowOn(g, from.Star, f, nodes);
+        goal ??= g.StationOrNull(from.Star);
+        var f = Predict(from, Watch(g, from, goal), p, v, t0, nodes, horizon);
+        FollowOn(g, from.Star, f, nodes, goal: goal);
         return f;
     }
 
@@ -183,7 +188,7 @@ public static partial class Sublight
     public static OrbitForecast Predict(Center star, IOrbiter? target, Vec3d p, Vec3d v, double t0, IEnumerable<Maneuver> nodes, double horizon, int samples = 500, bool coarse = false)
     {
         var mu = star.Mu;
-        var res = new OrbitForecast { Star = star.Star, Center = star };
+        var res = new OrbitForecast { Star = star.Star, Center = star, Watched = target };
         var pending = nodes.OrderBy(n => n.Time).ToList();
         var lastNode = pending.Count > 0 ? Math.Max(pending[^1].Time, t0) : t0;
         var end = lastNode + horizon;

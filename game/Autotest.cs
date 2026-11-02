@@ -21,6 +21,7 @@ public partial class Autotest : Node
     Vec3d _aim, _view, _center;
     double _kick, _fuel, _pro, _time;
     float _zoom;
+    Center? _picked;
     int _frames, _port, _count;
     Vec3d _vel, _before;
     string _clockText = "";
@@ -237,6 +238,30 @@ public partial class Autotest : Node
         Do(() =>
         {
             Check("forward delete removes the node", _g.V!.Nodes.Count == 0);
+            Check("the station is the target to begin with", _g.V.Goal == _g.V.LocalStation);
+            Press(Key.C);
+        });
+        Do(() =>
+        {
+            var v = _g.V!;
+            Check("C moves the target on to a body", v.Goal is Center);
+            // A body circling the ship's primary, so its nodes and closest approach are worked out from here.
+            _picked = _g.TargetChoices().OfType<Center>().FirstOrDefault(c => Sublight.Waypoint(v.Primary, c) == c);
+            _g.SetTarget(null);   // C may have landed on it already, and a tap on the target lets it go
+            if (_picked != null) Click(MouseButton.Left, _g.BodyPointForTest(_picked));
+        });
+        Do(() =>
+        {
+            var v = _g.V!;
+            var f = _g.SubForecast;
+            Check("tapping a body targets it", _picked != null && v.Goal == _picked);
+            Check("the path is measured against the target", f?.Watched == _picked && f!.Closest != null && f.PlaneCrossings.Count > 0);
+            Shot("02e_target_body");
+            if (_picked != null) Click(MouseButton.Left, _g.BodyPointForTest(_picked));
+        });
+        Do(() =>
+        {
+            Check("tapping the target again goes back to the station", _g.V!.Goal == _g.V.LocalStation && _g.V.Nodes.Count == 0);
             _zoom = _g.OrbitYaw;
             Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Position = new Vector2(1300, 100), Pressed = true });
             Input.ParseInputEvent(new InputEventMouseMotion { Position = new Vector2(1360, 120), Relative = new Vector2(60, 20) });

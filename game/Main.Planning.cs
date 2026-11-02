@@ -93,11 +93,11 @@ public partial class Main
         {
             // A coast is exact, so the path only needs working out again when something changes it.
             var path = full || SubCurrent == null || t >= _pathGoodUntil;
-            var (primary, p, vel, span, nodes) = (v.Primary, v.SubPosition, v.SubVelocity, ForecastSpan(), v.Nodes.ToList());
+            var (primary, p, vel, span, nodes, goal) = (v.Primary, v.SubPosition, v.SubVelocity, ForecastSpan(), v.Nodes.ToList(), v.Goal);
             var kept = SubForecast;
             _forecastJob = Task.Run(() =>
             {
-                OrbitForecast Path(IReadOnlyCollection<Maneuver> n) => Sublight.PredictPath(g, primary, p, vel, t, n, span);
+                OrbitForecast Path(IReadOnlyCollection<Maneuver> n) => Sublight.PredictPath(g, primary, p, vel, t, n, span, goal);
                 var current = path ? Path(Array.Empty<Maneuver>()) : null;
                 var plan = !path ? kept : nodes.Count == 0 ? current : Path(nodes);
                 double? PassesAt(OrbitForecast? f) => new[] { f?.Closest?.Time, f?.Crossing?.Time, f?.Exit?.Time, f?.Next?.Time, f?.Enter?.Time }

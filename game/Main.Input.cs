@@ -110,6 +110,7 @@ public partial class Main
                 if (k.Keycode is Key.Backspace or Key.Delete) { if (k.ShiftPressed) ClearNodes(); else DeleteNode(); }
                 if (k.Keycode == Key.T) RunTransferComputer();
                 if (k.Keycode == Key.G) ToggleAutoBurn();
+                if (k.Keycode == Key.C) CycleTarget();
                 if (k.Keycode == Key.R) GlideChart(PrimaryOnChart, ZoomFor(V!.Primary));
                 if (k.Keycode >= Key.Key1 && k.Keycode < Key.Key1 + Rates.Length) { SubRateIndex = (int)(k.Keycode - Key.Key1); Paused = false; ToNode = false; Aligning = false; }
                 break;

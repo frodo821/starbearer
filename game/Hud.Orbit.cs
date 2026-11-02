@@ -81,6 +81,8 @@ public partial class Hud
         }
         foreach (var n in v.Nodes)
             if (NodePoint(n) is { } np && np.DistanceTo(at) < 14) { Game.SelectNode(n); return; }
+        // A tap on a body targets it; on the target again, the station comes back.
+        if (OrbiterAt(at) is { } picked) { Game.SetTarget(picked == v.Goal ? null : picked); return; }
         if (Game.SubForecast is { } fc && EarliestNear(fc, at, 14) is { } time) { Game.AddNode(time); return; }
         Game.HandlesOpen = false;
     }
@@ -300,7 +302,7 @@ public partial class Hud
             return;
         }
         DrawBodies();
-
+        DrawTarget();
         DrawLocalStation();
         if (Game.SubForecast is { } fc)
         {
@@ -311,14 +313,14 @@ public partial class Hud
                 DrawArc(p, 5, 0, Mathf.Tau, 12, new Color(1f, 0.5f, 0.9f), 1.4f, true);
                 Text(p + new Vector2(7, 4), asc ? "AN" : "DN", new Color(1f, 0.5f, 0.9f), 12);
             }
-            if (v.LocalStation != null)
+            if (fc.Watched is { } watched)
             {
                 if (fc.Crossing is { } x)
                 {
                     var (sh, sp) = (OrbitPoint(x.Ship), OrbitPoint(x.Station));
                     DrawCircle(sh, 3, new Color(1f, 0.8f, 0.4f));
                     DrawRect(new Rect2(sp - new Vector2(4, 4), 8, 8), new Color(Good, 0.55f));
-                    Text(sp + new Vector2(8, 14), "到着時の港", new Color(Good, 0.8f), 12);
+                    Text(sp + new Vector2(8, 14), $"到着時の{Main.NameOf(watched)}", new Color(Good, 0.8f), 12);
                 }
                 if (fc.Closest is { } a) DrawClosest(a, OrbitPoint);
             }
@@ -345,6 +347,48 @@ public partial class Hud
             DrawCircle(at, Mathf.Max(body.Kind == BodyKind.Moon ? 2f : 3.5f, (float)body.BodyRadius * Game.OrbitZoom), col);
             if (body.Edge * Game.OrbitZoom > 10 || body.Kind != BodyKind.Moon) Text(at + new Vector2(7, 12), body.Name, new Color(col, 0.8f), 12);
         }
+    }
+
+    /// <summary>Screen point of a body of this system now.</summary>
+    public Vector2 BodyPointForTest(Center body) => BodyPoint(body);
+    Vector2 BodyPoint(Center body) => StarPoint(body.StarPosition(Game.V!.AbsoluteTime));
+
+    /// <summary>The chosen body stands out: its orbit drawn brighter and corner marks round it. The body the
+    /// markers are measured against on the way, when that is another, is marked too.</summary>
+    void DrawTarget()
+    {
+        var v = Game.V!;
+        var t = v.AbsoluteTime;
+        void Mark(Center body, string label, Color c)
+        {
+            var around = body.Parent!.StarPosition(t);
+            var (u, w, rad) = (body.U, body.W, body.OrbitRadius);
+            if (rad * Game.OrbitZoom > 12)
+                for (int i = 0; i < 96; i++)
+                    DrawLine(StarPoint(around + (u * Math.Cos(i * Math.Tau / 96) + w * Math.Sin(i * Math.Tau / 96)) * rad),
+                        StarPoint(around + (u * Math.Cos((i + 1) * Math.Tau / 96) + w * Math.Sin((i + 1) * Math.Tau / 96)) * rad), new Color(c, 0.45f), 1.4f, true);
+            var at = BodyPoint(body);
+            var r = Mathf.Max(9f, (float)body.BodyRadius * Game.OrbitZoom + 5);
+            foreach (var (sx, sy) in new[] { (-1, -1), (1, -1), (-1, 1), (1, 1) })
+            {
+                var corner = at + new Vector2(sx * r, sy * r);
+                DrawLine(corner, corner - new Vector2(sx * 5, 0), c, 1.6f, true);
+                DrawLine(corner, corner - new Vector2(0, sy * 5), c, 1.6f, true);
+            }
+            Text(at + new Vector2(r + 4, -r), label, c, 12);
+        }
+        if (v.Goal is Center goal) Mark(goal, "目標", Good);
+        if (Game.SubForecast?.Watched is Center via && via != v.Goal) Mark(via, "経由", new Color(Good, 0.6f));
+    }
+
+    /// <summary>The planet or moon under a tap, if any. The station is left to the path it sits on.</summary>
+    IOrbiter? OrbiterAt(Vector2 at)
+    {
+        if (Game.OrbitZoom < 35) return null;
+        return Game.TargetChoices().OfType<Center>()
+            .Select(c => (c, d: BodyPoint(c).DistanceTo(at)))
+            .Where(x => x.d < Mathf.Max(12f, (float)x.c.BodyRadius * Game.OrbitZoom + 4))
+            .OrderBy(x => x.d).Select(x => (IOrbiter?)x.c).FirstOrDefault();
     }
 
     void DrawLocalStation()
@@ -440,24 +484,33 @@ public partial class Hud
         Line($"{(el.Bound ? $"周期 {el.Period:F1} 日   " : "")}{(Game.CurrentRate == 0 ? "一時停止 (P)" : $"時間 {Instruments.Rate(Game.CurrentRate)}")}", Dim);
         Line($"亜光速 Δv 残 {v.SublightDeltaV:F2}", Ink);
         var st = v.LocalStation;
-        if (st != null)
+        var goal = v.Goal;
+        var watched = Game.SubForecast?.Watched;
+        Line($"主天体 {v.Primary.Name}", Dim);
+        if (goal != null)
         {
-            var (stationAt, stationSpeed) = v.StationNow();
-            var d = (stationAt - v.SubPosition).Length;
-            var rel = (stationSpeed - v.SubVelocity).Length;
-            Line($"主天体 {v.Primary.Name}", Dim);
-            Line($"港まで {d:F3} AU   相対 {rel:F3}", d < Tuning.DockRange * 3 ? Good : Ink);
-            var incl = Sublight.RelativeInclination(st, v.SubPosition, v.SubVelocity);
+            var (goalAt, goalSpeed) = v.RelativeNow(goal);
+            var d = (goalAt - v.SubPosition).Length;
+            var rel = (goalSpeed - v.SubVelocity).Length;
+            Line($"目標 {Main.NameOf(goal)}  {d:F3} AU   相対 {rel:F3}", goal is Station && d < Tuning.DockRange * 3 ? Good : Ink);
+        }
+        if (watched != null)
+        {
+            var name = Main.NameOf(watched);
+            if (watched != goal) Line($"基準 {name} ({Main.NameOf(goal)} への経由)", Dim);
+            var incl = Sublight.RelativeInclination(watched, v.SubPosition, v.SubVelocity);
             var last = Game.SubForecast?.Stages.LastOrDefault();   // the plan within this star's reach
-            var planned = last is { Node: not null } ls ? Sublight.RelativeInclination(st, ls.Position, ls.Velocity + Sublight.Impulse(ls.Position, ls.Velocity, ls.Node)) : incl;
+            var planned = last is { Node: not null } ls ? Sublight.RelativeInclination(watched, ls.Position, ls.Velocity + Sublight.Impulse(ls.Position, ls.Velocity, ls.Node)) : incl;
             Line($"相対傾斜 {incl:F1}°" + (last is { Node: not null } ? $" → {planned:F1}°" : ""), planned < 1.5 ? Good : Warn);
             if (Game.SubForecast?.Closest is { } a)
                 Line($"最接近 {a.Distance:F3} AU  {a.Time - v.AbsoluteTime:F1}日後  相対 {a.RelativeSpeed:F2}", a.Distance < 0.05 ? Good : Warn);
             if (Game.SubForecast?.Crossing is { } x2)
-                Line($"交差時の港 {Math.Abs(x2.LeadDegrees):F0}° {(x2.LeadDegrees >= 0 ? "先" : "後ろ")}  {x2.Time - v.AbsoluteTime:F1}日後", Math.Abs(x2.LeadDegrees) < 8 ? Good : Warn);
-            else Line("港の軌道半径に届いていない", Warn);
-            Line($"港 半径 {st.Radius:F2} AU   入港 {Tuning.DockRange:F2} AU / 相対 {Tuning.DockRelativeSpeed:F2}", Dim);
+                Line($"交差時の{name} {Math.Abs(x2.LeadDegrees):F0}° {(x2.LeadDegrees >= 0 ? "先" : "後ろ")}  {x2.Time - v.AbsoluteTime:F1}日後", Math.Abs(x2.LeadDegrees) < 8 ? Good : Warn);
+            else Line($"{name}の軌道半径に届いていない", Warn);
         }
+        else if (goal != null && v.Waypoint == null) Line(goal is Center c && c.Key == v.Primary.Key ? "目標を周回中" : "目標はこの天体の外", Dim);
+        if (st != null && goal is Station)
+            Line($"港 半径 {st.Radius:F2} AU   入港 {Tuning.DockRange:F2} AU / 相対 {Tuning.DockRelativeSpeed:F2}", Dim);
         if (Game.SubForecast?.Impact == true) Line("天体に衝突する軌道", Bad);
         y += 4;
         var fc = Game.SubForecast;
@@ -466,7 +519,7 @@ public partial class Hud
         {
             var e3 = now.After;
             var stop = e3.Bound ? $"近 {e3.Periapsis:F2} 遠 {e3.Apoapsis:F2}" : "脱出軌道";
-            Line($"今止めると {stop}" + (now.Closest is { } ca ? $"  港まで {ca.Distance:F3}" : ""), Color.Color8(255, 255, 255));
+            Line($"今止めると {stop}" + (now.Closest is { } ca ? $"  {Main.NameOf(now.Watched)}まで {ca.Distance:F3}" : ""), Color.Color8(255, 255, 255));
         }
         if (Game.PlanDeviation() is { } dev)
             Line($"計画固定中  ずれ {dev:F3} AU   Y で再計画", dev > 0.05 ? Warn : Good);

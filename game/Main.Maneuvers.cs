@@ -64,12 +64,47 @@ public partial class Main
         return Math.Max(el.Bound ? Math.Clamp(el.Period * 1.5, 10, 150) : 60, target);
     }
 
-    string NoWaypoint => V!.LocalStation == null ? "この星系に港はない" : "港はこの天体の外にある。まずここを離れる";
+    public static string NameOf(IOrbiter? o) => o switch { Center c => c.Name, Station => "港", _ => "" };
 
-    /// <summary>The way out of a body that doesn't lead to the station.</summary>
+    /// <summary>Why there is nothing to steer for from here.</summary>
+    string NoWaypoint => V!.Goal switch
+    {
+        null => "この星系に港はない。C で目標を選ぶ",
+        Center c when c.Key == V.Primary.Key => $"{c.Name} を周回中。目標に着いている",
+        var goal => $"{NameOf(goal)}はこの天体の外にある。まずここを離れる",
+    };
+
+    /// <summary>Picks the target the plans and the chart's markers are for. Null goes back to the station.</summary>
+    public void SetTarget(IOrbiter? target)
+    {
+        var v = V!;
+        v.ChosenTarget = target is Station ? null : target;
+        Message = $"目標: {NameOf(v.Goal)}" + (v.Goal == null ? "なし" : "");
+        Replan();
+    }
+
+    /// <summary>The station, then every planet and moon of the system, round again.</summary>
+    public List<IOrbiter> TargetChoices()
+    {
+        var v = V!;
+        var list = new List<IOrbiter>();
+        if (v.LocalStation is { } st) list.Add(st);
+        list.AddRange(G!.System(v.SystemStar).Tree.Skip(1).Where(c => c.Key != v.Primary.Key));
+        return list;
+    }
+
+    void CycleTarget()
+    {
+        var choices = TargetChoices();
+        if (choices.Count == 0) return;
+        var at = V!.Goal is { } g ? choices.IndexOf(g) : -1;
+        SetTarget(choices[(at + 1) % choices.Count]);
+    }
+
+    /// <summary>The way out of a body that doesn't lead to the goal.</summary>
     void PlanEscape()
     {
-        if (V!.LocalStation == null || V.Primary.Parent == null) { Message = NoWaypoint; return; }
+        if (V!.Goal == null || V.Primary.Parent == null || V.Goal is Center c && c.Key == V.Primary.Key) { Message = NoWaypoint; return; }
         Selected = Sublight.SuggestEscape(V.Primary, V.SubPosition, V.SubVelocity, V.AbsoluteTime);
         V.Nodes.Add(Selected);
         Paused = true; HandlesOpen = false;

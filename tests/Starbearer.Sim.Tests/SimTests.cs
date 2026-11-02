@@ -983,6 +983,45 @@ public class SimTests
     }
 
     [Fact]
+    public void APlanetPickedAsTargetGetsNodesAndAClosestApproach()
+    {
+        var g = Galaxy.Generate(5);
+        var system = g.System(g.Ports[0]);
+        var planet = system.Children.First(c => c.Children.Count > 0);
+        var moon = planet.Children[0];
+        // A circular orbit in the star's equator, inside the planet's: planets are tilted, so it crosses their plane.
+        var r = planet.OrbitRadius * 0.6;
+        var (p, v) = (new Vec3d(r, 0, 0), new Vec3d(0, 0, Math.Sqrt(system.Mu / r)));
+        var f = Sublight.PredictPath(g, system, p, v, 0, Array.Empty<Maneuver>(), 150, planet);
+        Assert.Same(planet, f.Watched);
+        Assert.Contains(f.PlaneCrossings, c => c.Ascending);
+        Assert.Contains(f.PlaneCrossings, c => !c.Ascending);
+        Assert.NotNull(f.Closest);
+        Assert.InRange(f.Closest!.Value.Distance, r * 0.3, r * 2);
+        // A moon is reached through its planet, so the star's leg is measured against the planet.
+        Assert.Same(planet, Sublight.PredictPath(g, system, p, v, 0, Array.Empty<Maneuver>(), 150, moon).Watched);
+        Assert.Same(moon, Sublight.Waypoint(planet, moon));
+        Assert.Null(Sublight.Waypoint(planet, planet));
+        Assert.Null(Sublight.Waypoint(moon, planet));
+    }
+
+    [Fact]
+    public void TheTargetStaysWithItsSystem()
+    {
+        var g = Galaxy.Generate(5);
+        var v = new Voyage(g, g.Ports[0], g.Ports[1], new Cargo("t", 0.5, 0.8, 100), new double[g.Stars.Length], 1);
+        Assert.Same(v.LocalStation, v.Goal);
+        var other = g.System(g.Ports[1]).Children[0];
+        v.ChosenTarget = other;
+        Assert.Same(v.LocalStation, v.Goal);   // a body of another system can't be steered for from here
+        var here = g.System(g.Ports[0]).Children.First(c => c.Key != v.Primary.Key);
+        v.ChosenTarget = here;
+        Assert.Same(here, v.Goal);
+        var (at, _) = v.RelativeNow(here);
+        Assert.True((at - (here.StarPosition(v.AbsoluteTime) - v.Primary.StarPosition(v.AbsoluteTime))).Length < 1e-12);
+    }
+
+    [Fact]
     public void SpheresOfInfluenceNeverOverlap()
     {
         int stars = 0, planets = 0, moons = 0, belts = 0;

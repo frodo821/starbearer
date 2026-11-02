@@ -64,6 +64,7 @@ public partial class Main
             var nodes = v.Nodes.Count > 0;
             list.Add(("計画", new Command[]
             {
+                new(Key.C, "C", "目標:" + (v.Goal == null ? "なし" : NameOf(v.Goal))),
                 new(Key.H, "H", way == null && v.Primary.Parent != null ? "脱出案" : "遷移案", way != null || v.Primary.Parent != null),
                 new(Key.M, "M", "合流案", way is Station),
                 new(Key.T, "T", "計算機", way != null && Owns(Modules.Transfer)),
@@ -121,22 +122,28 @@ public partial class Main
                 ? (ToNode ? null : Key.N, $"次の点火まで {hold:F1} 日。その前に出港する")
                 : (Key.U, "港に停泊中。時機を選んで出港する");
         var st = v.LocalStation;
-        if (st == null) return (Key.J, "この星系に港はない。発進して次へ");
+        if (v.Goal == null) return (Key.J, "この星系に港はない。発進して次へ");
         if (EngineOn && NextNode != null) return (Key.Space, "ノード噴射中。完了すると自動で止まる");
-        var (stationAt, stationSpeed) = v.StationNow();
-        var distance = (stationAt - v.SubPosition).Length;
-        var relative = (stationSpeed - v.SubVelocity).Length;
-        if (v.CanDock) return (Key.J, "港のすぐそば。発進するか、U で入港し直す");
-        if (distance < 0.05)
-            return relative > 0.1 ? (Key.Z, $"港の近く。相対速度 {relative:F2} を押し続けて落とす") : (Key.X, $"港まで {distance:F3} AU。押し続けて寄せる");
+        if (st != null)
+        {
+            var (stationAt, stationSpeed) = v.StationNow();
+            var distance = (stationAt - v.SubPosition).Length;
+            var relative = (stationSpeed - v.SubVelocity).Length;
+            if (v.CanDock) return (Key.J, "港のすぐそば。発進するか、U で入港し直す");
+            if (distance < 0.05)
+                return relative > 0.1 ? (Key.Z, $"港の近く。相対速度 {relative:F2} を押し続けて落とす") : (Key.X, $"港まで {distance:F3} AU。押し続けて寄せる");
+        }
         if (IgnitionIn is { } wait)
             return wait > 0.05 ? (ToNode ? null : Key.N, $"次の点火まで {wait:F1} 日" + (v.AutoBurn ? "。自動噴射が点火する" : "。ノードまで時間を進める")) : (Key.Space, "点火の時機。機首をノードに向けて点火");
-        if (SubForecast?.Closest is { Distance: < 0.03 }) return (Key.M, "港に接近する軌道。最接近で速度を合わせる");
+        if (SubForecast is { Watched: Station, Closest.Distance: < 0.03 }) return (Key.M, "港に接近する軌道。最接近で速度を合わせる");
+        var goal = NameOf(v.Goal);
         return v.Waypoint switch
         {
             Station => (Key.H, "港へ向かう軌道を作る"),
-            Center body => (Key.H, $"港は {body.Name} の周りにある。{body.Name} へ向かう軌道を作る"),
-            _ => (Key.H, "港はこの天体の外にある。ここを離れる軌道を作る"),
+            Center body when body == v.Goal => (Key.H, $"{body.Name} へ向かう軌道を作る"),
+            Center body => (Key.H, $"{goal}は {body.Name} の周りにある。{body.Name} へ向かう軌道を作る"),
+            _ when v.Goal is Center c && c.Key == v.Primary.Key => (Key.C, $"{c.Name} を周回中。C で次の目標を選ぶ"),
+            _ => (Key.H, $"{goal}はこの天体の外にある。ここを離れる軌道を作る"),
         };
     }
 

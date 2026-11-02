@@ -5,6 +5,8 @@ public enum BodyKind { Star, Rocky, Giant, Moon }
 /// <summary>Something on a circular orbit: a station, or a planet or moon a course can be aimed at.</summary>
 public interface IOrbiter
 {
+    /// <summary>The system it belongs to.</summary>
+    int Star { get; }
     Vec3d Position(double t);
     Vec3d Velocity(double t);
     Vec3d PlaneNormal { get; }

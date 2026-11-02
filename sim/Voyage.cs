@@ -105,8 +105,22 @@ public sealed class Voyage
         return (host.StarPosition(t) - Primary.StarPosition(t) + st.Position(t), host.StarVelocity(t) - Primary.StarVelocity(t) + st.Velocity(t));
     }
 
-    /// <summary>What to steer for from here to reach this system's station. See <see cref="Sublight.Waypoint"/>.</summary>
-    public IOrbiter? Waypoint => Sublight.Waypoint(Primary, LocalStation);
+    /// <summary>A body or station picked as the target. Not saved: it is a setting of the ship's computer.</summary>
+    public IOrbiter? ChosenTarget { get; set; }
+    /// <summary>What the plans are for: the chosen target in this system, else the station.</summary>
+    public IOrbiter? Goal => ChosenTarget is { } c && c.Star == SystemStar ? c : LocalStation;
+
+    /// <summary>What to steer for from here to reach the goal. See <see cref="Sublight.Waypoint"/>.</summary>
+    public IOrbiter? Waypoint => Sublight.Waypoint(Primary, Goal);
+
+    /// <summary>Where an orbiter of this system is now, relative to the ship's primary.</summary>
+    public (Vec3d Position, Vec3d Velocity) RelativeNow(IOrbiter o)
+    {
+        var t = AbsoluteTime;
+        if (o is Center c) return (c.StarPosition(t) - Primary.StarPosition(t), c.StarVelocity(t) - Primary.StarVelocity(t));
+        var host = (o as Station)?.Host ?? G.System(SystemStar);
+        return (host.StarPosition(t) - Primary.StarPosition(t) + o.Position(t), host.StarVelocity(t) - Primary.StarVelocity(t) + o.Velocity(t));
+    }
 
     /// <summary>State a jump would start from. Speed carries over, so timing the orbit matters.</summary>
     public (Vec3d Position, Vec3d Velocity) JumpState =>
