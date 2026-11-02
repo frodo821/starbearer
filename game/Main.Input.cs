@@ -16,10 +16,34 @@ public partial class Main
     /// <summary>Planning is done on the chart and its buttons; these have no key of their own.</summary>
     static bool ButtonOnly(Key key) => key is Key.H or Key.M or Key.T or Key.Y or Key.C;
 
+    /// <summary>While a chart menu is open it takes the next click, and Esc closes it.</summary>
+    bool MenuInput(InputEvent e)
+    {
+        if (e is InputEventMouseButton { Pressed: false } && _menuPress) { _menuPress = false; return true; }
+        if (!_hud.MenuOpen) return false;
+        if (e is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left or MouseButton.Right } click)
+        {
+            _hud.MenuClick(click.Position);
+            _menuPress = true;
+            return true;
+        }
+        if (e is InputEventKey { Pressed: true, Keycode: Key.Escape }) { _hud.CloseMenu(); return true; }
+        return false;
+    }
+
+    bool _menuPress;
+    Vector2 _rightAt;
+
     void OrbitInput(InputEvent e)
     {
         if (e is InputEventMouseButton mb)
         {
+            if (mb.ButtonIndex == MouseButton.Right)
+            {
+                if (mb.Pressed) _rightAt = mb.Position;
+                else if (mb.Position.DistanceTo(_rightAt) < 6) _hud.OrbitMenu(mb.Position);
+                return;
+            }
             if (mb.ButtonIndex == MouseButton.Left && mb.Pressed && _hud.CompassTap(mb.Position)) return;
             if (mb.ButtonIndex == MouseButton.WheelUp && mb.Pressed) Chart.ZoomBy(1.1f);
             if (mb.ButtonIndex == MouseButton.WheelDown && mb.Pressed) Chart.ZoomBy(1 / 1.1f);
@@ -43,6 +67,7 @@ public partial class Main
     public override void _UnhandledInput(InputEvent e)
     {
         if (Screen == Screen.Loading) return;
+        if (MenuInput(e)) return;
         if (e is InputEventMouseButton { ButtonIndex: MouseButton.Left } click)
         {
             if (click.Pressed && _hud.ConsoleTap(click.Position)) { _consolePress = true; return; }

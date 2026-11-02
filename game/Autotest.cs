@@ -251,7 +251,7 @@ public partial class Autotest : Node
             Check("the target button moves the target on to a body", v.Goal is Center);
             // A body circling the ship's primary, so its nodes and closest approach are worked out from here.
             _picked = _g.TargetChoices().OfType<Center>().FirstOrDefault(c => Sublight.Waypoint(v.Primary, c) == c);
-            _g.SetTarget(null);   // C may have landed on it already, and a tap on the target lets it go
+            _g.SetTarget(v.LocalStation);   // C may have landed on it already, and a tap on the target lets it go
             if (_picked != null) Click(MouseButton.Left, _g.BodyPointForTest(_picked));
         });
         Do(() =>
@@ -265,7 +265,8 @@ public partial class Autotest : Node
         });
         Do(() =>
         {
-            Check("tapping the target again goes back to the station", _g.V!.Goal == _g.V.LocalStation && _g.V.Nodes.Count == 0);
+            Check("tapping the target again clears it", _g.V!.Goal == null && _g.V.Waypoint == null && _g.V.Nodes.Count == 0);
+            _g.SetTarget(_g.V.LocalStation);
             Check("a circular orbit has no apsides to mark", _g.ApsisPointForTest(true) == null && _g.ApsisPointForTest(false) == null);
             Click(MouseButton.Left, _g.OrbitPointForTest(_g.SubForecast!.Track[60].Position));
         });
@@ -283,9 +284,30 @@ public partial class Autotest : Node
             Check("tapping Ap puts a node on it", _g.V!.Nodes.Count == 2 && _g.V.Nodes.Any(n => Math.Abs(n.Time - _time) < 1e-9));
             Input.ParseInputEvent(new InputEventKey { Keycode = Key.Backspace, PhysicalKeycode = Key.Backspace, ShiftPressed = true, Pressed = true });   // shift clears them all
         });
+        Do(() => { if (_picked != null) Click(MouseButton.Right, _g.BodyPointForTest(_picked)); });
+        Do(() =>
+        {
+            var item = _g.HudForTest.MenuItemForTest("遷移案");
+            Check("a right click on a body opens its menu", item != null);
+            Shot("02g_body_menu");
+            if (item is { } at) Click(MouseButton.Left, at);
+        });
+        Do(() =>
+        {
+            Check("the menu targets the body and plans a transfer", _g.V!.Goal == _picked && _g.V.Nodes.Count > 0 && !_g.HudForTest.MenuOpen);
+            Input.ParseInputEvent(new InputEventKey { Keycode = Key.Backspace, PhysicalKeycode = Key.Backspace, ShiftPressed = true, Pressed = true });
+            if (_g.HudForTest.StationPointForTest is { } st) Click(MouseButton.Right, st);
+        });
+        Do(() =>
+        {
+            var item = _g.HudForTest.MenuItemForTest("目標にする");
+            Check("the station's menu offers it as the target", item != null && _g.HudForTest.MenuItemForTest("合流案") != null);
+            if (item is { } at) Click(MouseButton.Left, at);
+        });
         Do(() =>
         {
             Check("the Ap node can be deleted", _g.V!.Nodes.Count == 0);
+            Check("the station is the target again", _g.V.Goal == _g.V.LocalStation);
             _zoom = _g.Chart.Yaw;
             Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Position = new Vector2(1300, 100), Pressed = true });
             Input.ParseInputEvent(new InputEventMouseMotion { Position = new Vector2(1360, 120), Relative = new Vector2(60, 20) });
@@ -328,6 +350,31 @@ public partial class Autotest : Node
         {
             Check("pinch zooms the chart", _g.Chart.Zoom > _zoom);
             Check("pan moves the chart pivot", (_g.Chart.Center - _center).Length > 0.1);
+            // A star on screen, clear of its neighbours, that is neither here nor the destination.
+            var v = _g.V!;
+            var screen = new Rect2(200, 150, Size().X - 400, Size().Y - 350);
+            var points = Enumerable.Range(0, _g.G!.Stars.Length).Select(i => _g.HudForTest.SystemPoint(i, Vec3d.Zero)).ToList();
+            _heldTarget = v.TargetStar;
+            _count = Enumerable.Range(0, points.Count).FirstOrDefault(i => i != v.SystemStar && i != v.TargetStar && screen.HasPoint(points[i])
+                && points.Where((q, j) => j != i).All(q => q.DistanceTo(points[i]) > 40), -1);
+            if (_count >= 0) Click(MouseButton.Right, points[_count]);
+        });
+        Do(() =>
+        {
+            var item = _g.HudForTest.MenuItemForTest("目的地にする");
+            Check("a right click on a star offers it as the destination", _count >= 0 && item != null);
+            Shot("03b_star_menu");
+            if (item is { } at) Click(MouseButton.Left, at);
+        });
+        Do(() =>
+        {
+            Check("any star can be the destination, job or not", _g.V!.TargetStar == _count && _g.FreeCourse);
+            Click(MouseButton.Right, _g.HudForTest.SystemPoint(_count, Vec3d.Zero));
+        });
+        Do(() => { if (_g.HudForTest.MenuItemForTest("目的地を解除") is { } at) Click(MouseButton.Left, at); });
+        Do(() =>
+        {
+            Check("clearing the destination goes back to the job's", _g.V!.TargetStar == _heldTarget && !_g.FreeCourse);
             Press(Key.Tab); Press(Key.Enter);
         });
         Do(() => _g.LookAtPublic(_g.NearestStarDirection()!.Value));

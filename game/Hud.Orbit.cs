@@ -81,7 +81,7 @@ public partial class Hud
             if (NodePoint(n) is { } np && np.DistanceTo(at) < 14) { Game.SelectNode(n); return; }
         // An apsis marker puts a node right on it.
         if (ApsisAt(at) is { } apsis) { Game.AddNode(apsis); return; }
-        // A tap on a body targets it; on the target again, the station comes back.
+        // A tap on a body targets it; on the target again, lets it go.
         if (OrbiterAt(at) is { } picked) { Game.SetTarget(picked == v.Goal ? null : picked); return; }
         if (Game.SubForecast is { } fc && EarliestNear(fc, at, 14) is { } time) { Game.AddNode(time); return; }
         Game.HandlesOpen = false;
@@ -425,6 +425,18 @@ public partial class Hud
             .OrderBy(x => x.d).Select(x => (IOrbiter?)x.c).FirstOrDefault();
     }
 
+    /// <summary>Where the system's station is on the orbit chart, if it has one.</summary>
+    Vector2? StationPoint()
+    {
+        var v = Game.V!;
+        if (v.LocalStation is not { } st) return null;
+        var t = v.AbsoluteTime;
+        var host = (st.Host ?? Game.G!.System(v.SystemStar)).StarPosition(t) - v.Primary.StarPosition(t);
+        return OrbitPoint(host + st.Position(t));
+    }
+
+    public Vector2? StationPointForTest => StationPoint();
+
     void DrawLocalStation()
     {
         var v = Game.V!;
@@ -433,7 +445,7 @@ public partial class Hud
         var host = (st.Host ?? Game.G!.System(v.SystemStar)).StarPosition(t) - v.Primary.StarPosition(t);
         var (u, w, rad) = (st.U, st.W, st.Radius);
         Polyline3(a => host + (u * Math.Cos(a) + w * Math.Sin(a)) * rad, new Color(Good, 0.35f), 1);
-        var sp = OrbitPoint(host + st.Position(t));
+        var sp = StationPoint()!.Value;
         DrawRect(new Rect2(sp - new Vector2(4, 4), 8, 8), Good);
         Text(sp + new Vector2(8, -6), v.SystemStar == v.TargetStar ? "目的港" : Game.G!.Ports.Contains(v.SystemStar) ? "港" : "補給港", Good, 13);
         if (st.Host?.Key != v.Primary.Key) return;

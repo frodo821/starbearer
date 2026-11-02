@@ -106,9 +106,19 @@ public sealed class Voyage
     }
 
     /// <summary>A body or station picked as the target. Not saved: it is a setting of the ship's computer.</summary>
-    public IOrbiter? ChosenTarget { get; set; }
-    /// <summary>What the plans are for: the chosen target in this system, else the station.</summary>
-    public IOrbiter? Goal => ChosenTarget is { } c && c.Star == SystemStar ? c : LocalStation;
+    public IOrbiter? ChosenTarget { get; private set; }
+    /// <summary>The system where the pilot cleared the target, so nothing is steered for there; -1 if none.</summary>
+    int _clearedIn = -1;
+
+    /// <summary>What the plans are for: the chosen target in this system, else the station, unless cleared.</summary>
+    public IOrbiter? Goal => _clearedIn == SystemStar ? null : ChosenTarget is { } c && c.Star == SystemStar ? c : LocalStation;
+
+    /// <summary>Sets the target; null clears it, so the plans are for nothing in particular until another is picked.</summary>
+    public void SetGoal(IOrbiter? target)
+    {
+        ChosenTarget = target is Station ? null : target;
+        _clearedIn = target == null ? SystemStar : -1;
+    }
 
     /// <summary>What to steer for from here to reach the goal. See <see cref="Sublight.Waypoint"/>.</summary>
     public IOrbiter? Waypoint => Sublight.Waypoint(Primary, Goal);

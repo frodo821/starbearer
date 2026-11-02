@@ -32,14 +32,21 @@ public partial class Main
         return G.Ports.Concat(G.Depots).Where(i => i != V.SystemStar).MinBy(i => (G.Stars[i].Position - here).Length);
     }
 
-    /// <summary>Holds the chosen course while cargo is bound there, else the first job in the hold.</summary>
+    /// <summary>
+    /// Holds the chosen course, cargo bound there or not, until the ship docks there. With none, the
+    /// first job in the hold sets it, and with no job either the instruments steer for the nearest station.
+    /// </summary>
     void SteerForCourse()
     {
         var s = Save!;
-        if (s.Hold.All(c => c.Mission.Target != s.Course))
-            s.Course = s.Hold.Count > 0 ? s.Hold[0].Mission.Target : -1;
-        V!.TargetStar = s.Course >= 0 ? s.Course : NearestStation();
+        var v = V!;
+        if (s.Course == v.SystemStar && v.Docked) s.Course = -1;   // arrived
+        if (s.Course < 0 && s.Hold.FirstOrDefault(c => c.Mission.Target != v.SystemStar) is { } job) s.Course = job.Mission.Target;
+        v.TargetStar = s.Course >= 0 ? s.Course : NearestStation();
     }
+
+    /// <summary>The course was picked by the pilot, not set by a job in the hold.</summary>
+    public bool FreeCourse => Save!.Course >= 0 && Save.Hold.All(c => c.Mission.Target != Save.Course);
 
     void PortChanged()
     {
@@ -63,10 +70,23 @@ public partial class Main
         PortChanged();
     }
 
+    /// <summary>Sets where the ship is bound, from a job at the port or any star on the chart.</summary>
     public void SetCourse(int star)
     {
         Save!.Course = star;
         SteerForCourse();
+        Message = "目的地: " + G!.Stars[V!.TargetStar].Name;
+        _forecastDirty = true;
+        PortChanged();
+    }
+
+    /// <summary>Lets go of a course the pilot picked; the hold, or the nearest station, sets it again.</summary>
+    public void ClearCourse()
+    {
+        Save!.Course = -1;
+        SteerForCourse();
+        Message = "目的地を解除。目的地: " + G!.Stars[V!.TargetStar].Name;
+        _forecastDirty = true;
         PortChanged();
     }
 

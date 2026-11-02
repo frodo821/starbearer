@@ -121,7 +121,8 @@ public partial class Main
                 ? (ToNode ? null : Key.N, $"次の点火まで {hold:F1} 日。その前に出港する")
                 : (Key.U, "港に停泊中。時機を選んで出港する");
         var st = v.LocalStation;
-        if (v.Goal == null) return (Key.J, "この星系に港はない。発進して次へ");
+        if (v.Goal == null)
+            return v.LocalStation == null ? (Key.J, "この星系に港はない。発進して次へ") : (Key.C, "目標なし。「目標」か天体のタップで選ぶ");
         if (Helm.EngineOn && NextNode != null)
             return v.AutoBurn ? (null, "自動噴射中。終わると自動で止まる")
                 : NodeOvershot ? (Key.E, "ノードを過ぎた。E で止める")

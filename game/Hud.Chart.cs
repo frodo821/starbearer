@@ -22,7 +22,7 @@ public partial class Hud
             for (int i = 4; i >= 1; i--)
                 DrawCircle(c, (float)n.Radius * Game.Chart.Zoom * i * 0.45f, new Color(0.35f, 0.5f, 0.8f, 0.018f * (float)n.Density));
         }
-        var current = v.Phase == Phase.Sublight ? v.SystemStar : v.NearestWell(out var well) < double.MaxValue && well != null ? well.Id : -1;
+        var current = CurrentStar();
         for (int i = 0; i < g.Stars.Length; i++)
         {
             var s = g.Stars[i];
@@ -53,6 +53,13 @@ public partial class Hud
                 last = p;
             }
         }
+    }
+
+    /// <summary>The system the ship is in: in normal space its star, in flight the well it is passing through; -1 between stars.</summary>
+    int CurrentStar()
+    {
+        var v = Game.V!;
+        return v.Phase == Phase.Sublight ? v.SystemStar : v.NearestWell(out var well) < double.MaxValue && well != null ? well.Id : -1;
     }
 
     /// <summary>The system the ship is in: its name in full on a dark backing, and a ring when it is only a point on the chart.</summary>
@@ -131,6 +138,13 @@ public partial class Hud
     public void MapMouse(InputEventMouseButton mb)
     {
         if (mb.ButtonIndex is MouseButton.Right or MouseButton.Left) _mapDragging = mb.Pressed;
+        if (mb.ButtonIndex == MouseButton.Right)
+        {
+            // A right drag turns the chart; a right click without moving opens the menu.
+            if (mb.Pressed) { _mapPress = mb.Position; _mapMoved = false; }
+            else if (!_mapMoved) MapMenu(mb.Position);
+            return;
+        }
         if (mb.ButtonIndex == MouseButton.WheelUp && mb.Pressed) Game.Chart.ZoomBy(1.1f);
         if (mb.ButtonIndex == MouseButton.WheelDown && mb.Pressed) Game.Chart.ZoomBy(1 / 1.1f);
         if (mb.ButtonIndex != MouseButton.Left) return;

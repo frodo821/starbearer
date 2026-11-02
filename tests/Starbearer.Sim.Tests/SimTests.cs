@@ -1080,11 +1080,16 @@ public class SimTests
         var v = new Voyage(g, g.Ports[0], g.Ports[1], new Cargo("t", 0.5, 0.8, 100), new double[g.Stars.Length], 1);
         Assert.Same(v.LocalStation, v.Goal);
         var other = g.System(g.Ports[1]).Children[0];
-        v.ChosenTarget = other;
+        v.SetGoal(other);
         Assert.Same(v.LocalStation, v.Goal);   // a body of another system can't be steered for from here
         var here = g.System(g.Ports[0]).Children.First(c => c.Key != v.Primary.Key);
-        v.ChosenTarget = here;
+        v.SetGoal(here);
         Assert.Same(here, v.Goal);
+        v.SetGoal(null);
+        Assert.Null(v.Goal);                   // cleared: nothing is steered for
+        v.SetGoal(v.LocalStation);
+        Assert.Same(v.LocalStation, v.Goal);
+        v.SetGoal(here);
         var (at, _) = v.RelativeNow(here);
         Assert.True((at - (here.StarPosition(v.AbsoluteTime) - v.Primary.StarPosition(v.AbsoluteTime))).Length < 1e-12);
     }

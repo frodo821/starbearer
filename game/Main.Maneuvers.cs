@@ -61,7 +61,7 @@ public partial class Main
     /// <summary>Why there is nothing to steer for from here.</summary>
     string NoWaypoint => V!.Goal switch
     {
-        null => "この星系に港はない。「目標」で目標を選ぶ",
+        null => (V.LocalStation == null ? "この星系に港はない。" : "目標なし。") + "「目標」で目標を選ぶ",
         Center c when c.Key == V.Primary.Key => $"{c.Name} を周回中。目標に着いている",
         var goal => $"{NameOf(goal)}はこの天体の外にある。まずここを離れる",
     };
@@ -70,8 +70,8 @@ public partial class Main
     public void SetTarget(IOrbiter? target)
     {
         var v = V!;
-        v.ChosenTarget = target is Station ? null : target;
-        Message = $"目標: {NameOf(v.Goal)}" + (v.Goal == null ? "なし" : "");
+        v.SetGoal(target);
+        Message = "目標: " + (v.Goal == null ? "なし" : NameOf(v.Goal));
         Replan();
     }
 
@@ -85,11 +85,20 @@ public partial class Main
         return list;
     }
 
+    /// <summary>Plans for a target picked on the chart: targets it first, then runs the planner of that console key.</summary>
+    public void PlanFor(IOrbiter target, Key planner)
+    {
+        if (V!.Goal != target) SetTarget(target);
+        if (planner == Key.H) SuggestTransfer();
+        else if (planner == Key.M) AddMatchBurn();
+        else if (planner == Key.T) RunTransferComputer();
+    }
+
+    /// <summary>Through the choices and then none, round again.</summary>
     void CycleTarget()
     {
-        var choices = TargetChoices();
-        if (choices.Count == 0) return;
-        var at = V!.Goal is { } g ? choices.IndexOf(g) : -1;
+        var choices = TargetChoices().Cast<IOrbiter?>().Append(null).ToList();
+        var at = choices.IndexOf(V!.Goal);
         SetTarget(choices[(at + 1) % choices.Count]);
     }
 

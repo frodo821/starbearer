@@ -54,6 +54,7 @@ public partial class Hud : Control
             case Screen.Port: DrawRect(new Rect2(Vector2.Zero, Size), new Color(0.01f, 0.015f, 0.035f)); break;
             case Screen.Dead: DrawDead(); break;
         }
+        DrawMenu();
     }
 
     void DrawHudLayers()
