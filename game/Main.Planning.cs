@@ -31,6 +31,7 @@ public partial class Main
         if (jumping) ShowCue(new StateCue("FTL 発進", $"速度 {v.Velocity.Length:F2}   失速線 {Tuning.StallSpeed:F2}", new Color(0.45f, 0.75f, 1f), Major: true, Outward: true));
         Nose = PlanDir.Normalized();
         Screen = Screen.Flight;
+        Paused = false;
         MapOpen = false;
         Message = "";
         _forecastDirty = true;

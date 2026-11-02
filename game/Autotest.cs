@@ -98,18 +98,22 @@ public partial class Autotest : Node
             Shot("01_orbit_departure");
             Check("voyage starts in orbit", _g.Screen == Screen.Orbit && _g.V!.Phase == Phase.Sublight);
             _paused = _g.Paused;
-            Click(MouseButton.Left, _g.HudForTest.ButtonForTest(Key.P));
+            Click(MouseButton.Left, _g.HudForTest.ButtonForTest(Key.Space));
         });
         Do(() =>
         {
             Check("a console button does what its key does", _g.Paused != _paused && _g.V!.Nodes.Count == 0);
-            Press(Key.P);
+            Press(Key.Space);
+        });
+        Do(() =>
+        {
+            Check("space stops and starts time", _g.Paused == _paused);
             Check("a voyage starts docked", _g.V!.Docked);
             Shot("01a_docked");
             _fuel = _g.V.Fuel;
             Press(Key.O);
-            Press(Key.Space);
-            Press(Key.V);
+            Press(Key.E);
+            Click(MouseButton.Left, _g.HoldButtonForTest(ViewHold.Prograde));
             Key_(Key.Left, true);
         });
         Do(() =>
@@ -155,12 +159,12 @@ public partial class Autotest : Node
         Do(() =>
         {
             Check("the port is closed once undocked", _g.Screen == Screen.Orbit);
-            Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Position = _g.HudForTest.ButtonForTest(Key.I), Pressed = true });
+            Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Position = _g.HudForTest.ButtonForTest(Key.W), Pressed = true });
         });
         Do(() =>
         {
-            Check("a hold button stays held while pressed", _g.HeldButton == Key.I);
-            Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Position = _g.HudForTest.ButtonForTest(Key.I), Pressed = false });
+            Check("a hold button stays held while pressed", _g.HeldButton == Key.W);
+            Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Position = _g.HudForTest.ButtonForTest(Key.W), Pressed = false });
         });
         Do(() =>
         {
@@ -172,12 +176,13 @@ public partial class Autotest : Node
         {
             Check("tap on the orbit adds a node", _g.V!.Nodes.Count == 1);
             _pro = _g.Selected!.Prograde;
+            _throttle = _g.Throttle;
             Key_(Key.W, true);
         }, 15);
         Do(() =>
         {
             Key_(Key.W, false);
-            Check("W raises node prograde", _g.Selected!.Prograde > _pro);
+            Check("W raises the throttle and leaves the node alone", _g.Throttle > _throttle && _g.Selected!.Prograde == _pro);
             Shot("02_orbit_node");
             Check("time stops while planning", _g.CurrentRate == 0);
             _pro = _g.Selected!.Prograde;
@@ -208,13 +213,6 @@ public partial class Autotest : Node
         {
             Check("a second stage can follow the first", _g.V!.Nodes.Count == 2 && _g.SubForecast!.Stages.Count == 2);
             Shot("02c_two_stages");
-            var before = _g.Selected;
-            Press(Key.Bracketright);
-            _time = before!.Time;
-        });
-        Do(() =>
-        {
-            Check("] switches stage", _g.Selected!.Time != _time);
             Press(Key.Backspace);
         });
         Do(() =>
@@ -243,8 +241,13 @@ public partial class Autotest : Node
         });
         Do(() =>
         {
+            Check("planning has no keys of its own", _g.V!.Goal == _g.V.LocalStation);
+            _g.CommandForTest(Key.C);
+        });
+        Do(() =>
+        {
             var v = _g.V!;
-            Check("C moves the target on to a body", v.Goal is Center);
+            Check("the target button moves the target on to a body", v.Goal is Center);
             // A body circling the ship's primary, so its nodes and closest approach are worked out from here.
             _picked = _g.TargetChoices().OfType<Center>().FirstOrDefault(c => Sublight.Waypoint(v.Primary, c) == c);
             _g.SetTarget(null);   // C may have landed on it already, and a tap on the target lets it go
@@ -333,14 +336,14 @@ public partial class Autotest : Node
             Check("attitude display carries the core markers", _g.MarkerCountForTest >= 8);
             _clockText = _g.ClockTextForTest;
             _view = _g.CameraForward();
-            Press(Key.V);
+            Click(MouseButton.Left, _g.HoldButtonForTest(ViewHold.Star));
             _clock = Time.GetTicksMsec();
         });
         Until(() => Off(_g.NearestStarDirection()!.Value) < 0.05 || Time.GetTicksMsec() - _clock > 5000);
         Do(() =>
         {
             Check("the clock runs during flight", _g.ClockTextForTest != _clockText);
-            Check("V holds the nose on the star", _g.Hold == ViewHold.Star && Off(_g.NearestStarDirection()!.Value) < 0.05);
+            Check("the star button holds the nose on the star", _g.Hold == ViewHold.Star && Off(_g.NearestStarDirection()!.Value) < 0.05);
             Check("the camera stays put while the nose turns", (_g.CameraForward() - _view).Length < 1e-6);
             Click(MouseButton.Left, _g.CompassMarkerForTest(ViewHold.Normal));
             _clock = Time.GetTicksMsec();
@@ -351,12 +354,12 @@ public partial class Autotest : Node
             Check("tapping a compass marker holds it", _g.Hold == ViewHold.Normal && Off(_g.DirectionOf(ViewHold.Normal)!.Value) < 0.05);
             Shot("04b_normal_hold");
             _vel = _g.V!.Velocity;
-            Press(Key.Space);
+            Press(Key.E);
         }, 20);
         Do(() =>
         {
-            Check("space lights the engine and it keeps running", _g.EngineOn && _g.Firing);
-            Press(Key.Space);
+            Check("E lights the engine and it keeps running", _g.EngineOn && _g.Firing);
+            Press(Key.E);
             var change = (_g.V!.Velocity - _vel).Normalized();
             Check("the engine fires along the nose, not prograde", change.Dot(_g.Nose) > 0.9);
             Key_(Key.Left, true);
@@ -378,31 +381,42 @@ public partial class Autotest : Node
         Do(() =>
         {
             Check("esc resumes flight", _g.Screen == Screen.Flight);
+            Press(Key.Space);
+            _time = _g.V!.Time;
+        }, 10);
+        Do(() =>
+        {
+            Check("space stops time in flight", _g.Paused && _g.CurrentRate == 0 && _g.V!.Time == _time);
+            Press(Key.Space);
+        }, 10);
+        Do(() =>
+        {
+            Check("space starts it again", !_g.Paused && _g.V!.Time > _time);
             _fuel = _g.V!.Fuel;
             _throttle = _g.Throttle;
-            Key_(Key.I, true);
+            Key_(Key.W, true);
         }, 15);
         Do(() =>
         {
-            Key_(Key.I, false);
-            Check("I raises the throttle", _g.Throttle > _throttle);
+            Key_(Key.W, false);
+            Check("W raises the throttle", _g.Throttle > _throttle);
             Press(Key.O);
         });
         Do(() => { Check("O is full throttle", _g.Throttle == 1); Press(Key.L); });
         Do(() =>
         {
             Check("L is zero throttle", _g.Throttle == 0);
-            Press(Key.Space);
+            Press(Key.E);
         }, 30);
         Do(() =>
         {
             Check("a lit engine at zero throttle burns nothing", _g.EngineOn && _g.V!.Fuel >= _fuel);
-            Press(Key.Space); Press(Key.O); Press(Key.Space);
+            Press(Key.E); Press(Key.O); Press(Key.E);
         }, 30);
         Do(() =>
         {
-            Press(Key.Space);
-            Check("space burns fuel", _g.V!.Fuel < _fuel);
+            Press(Key.E);
+            Check("E burns fuel", _g.V!.Fuel < _fuel);
             _g.CrashForTest();
         });
         Do(() => { Shot("05_dead"); Check("death reached", _g.Screen == Screen.Dead); Press(Key.R); });
@@ -428,12 +442,12 @@ public partial class Autotest : Node
             Check("D descends at the target", _g.Screen == Screen.Orbit && _g.V!.SystemStar == _g.V.TargetStar);
             Shot("06_orbit_arrival");
             _port = _g.Save!.PortStar;
-            Press(Key.H);
+            _g.CommandForTest(Key.H);
         });
-        Do(() => { _count = _g.V!.Nodes.Count; Check("H places a transfer draft", _count >= 1); Press(Key.M); });
+        Do(() => { _count = _g.V!.Nodes.Count; Check("the transfer button places a draft", _count >= 1); _g.CommandForTest(Key.M); });
         Do(() =>
         {
-            Check("M adds a matching burn", _g.V!.Nodes.Count == _count + 1);
+            Check("the match button adds a matching burn", _g.V!.Nodes.Count == _count + 1);
             Shot("06b_free_plan");
             _view = _g.Nose;
             _g.SetHold(ViewHold.Node);
@@ -443,7 +457,7 @@ public partial class Autotest : Node
         {
             Key_(Key.Left, false);
             Check("the nose stays put while time is stopped", _g.Paused && _g.Nose == _view);
-            Press(Key.P);
+            Press(Key.Space);
             _g.SetHold(ViewHold.Node);
             _clock = Time.GetTicksMsec();
         });
@@ -454,7 +468,7 @@ public partial class Autotest : Node
             _dv = _g.NextNode!.DeltaV;
             _plan = _g.SubForecast;
             _before = _g.SubCurrent!.Track[_g.SubCurrent.DrawnCount - 1].Position;
-            Press(Key.Space);
+            Press(Key.E);
         }, 15);
         Do(() =>
         {
@@ -462,22 +476,22 @@ public partial class Autotest : Node
             Check("the plan freezes at ignition", _g.PlanFrozen && ReferenceEquals(_g.SubForecast, _plan));
             Check("the stop-now path moves with the burn", (_g.SubCurrent!.Track[_g.SubCurrent.DrawnCount - 1].Position - _before).Length > 1e-4);
             Shot("06d_burning");
-            if (_g.EngineOn) Press(Key.Space);
+            if (_g.EngineOn) Press(Key.E);
         });
         Do(() =>
         {
             Check("a stopped engine keeps the plan frozen", _g.PlanFrozen && ReferenceEquals(_g.SubForecast, _plan));
-            Press(Key.Y);
+            _g.CommandForTest(Key.Y);
         });
-        Do(() => Check("Y rebuilds the plan from here", !_g.PlanFrozen && !ReferenceEquals(_g.SubForecast, _plan)));
+        Do(() => Check("replan rebuilds the plan from here", !_g.PlanFrozen && !ReferenceEquals(_g.SubForecast, _plan)));
         Do(() =>
         {
-            if (_g.Paused) Press(Key.P);
+            if (_g.Paused) Press(Key.Space);
             _g.SetHold(ViewHold.Node);
             _clock = Time.GetTicksMsec();
         });
         Until(() => _g.NodeDirection() is not { } d || Off(d) < 0.03 || Time.GetTicksMsec() - _clock > 5000);
-        Do(() => { Press(Key.O); Press(Key.Space); _clock = Time.GetTicksMsec(); }, 1);
+        Do(() => { Press(Key.O); Press(Key.E); _clock = Time.GetTicksMsec(); }, 1);
         Until(() => !_g.EngineOn || Time.GetTicksMsec() - _clock > 25000);
         Do(() =>
         {
@@ -497,7 +511,7 @@ public partial class Autotest : Node
         Do(() =>
         {
             Check("shift+backspace clears every stage", _g.V!.Nodes.Count == 0);
-            Press(Key.T);
+            _g.CommandForTest(Key.T);
         });
         Do(() =>
         {
@@ -619,7 +633,7 @@ public partial class Autotest : Node
             var aim = _meets.Position + way.AnyPerpendicular() * (_meets.Soi * 0.4);
             v.PlaceSublightForTest(start, (aim - (here.Position + start * Sublight.Scale)).Normalized() * 0.6);
             _g.MapZoom = 60;
-            Press(Key.Y);
+            _g.CommandForTest(Key.Y);
         }, 30);
         Do(() =>
         {
@@ -652,8 +666,8 @@ public partial class Autotest : Node
             var system = _g.G!.System(v.SystemStar);
             var gap = Bodies.WidestGap(system);
             v.PlaceSublightForTest(st.U * gap, st.W * Math.Sqrt(system.Mu / gap));
-            Press(Key.Y);
-            if (_g.Paused) Press(Key.P);
+            _g.CommandForTest(Key.Y);
+            if (_g.Paused) Press(Key.Space);
         }, 10);
         Do(() =>
         {

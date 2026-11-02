@@ -14,8 +14,10 @@ public partial class Main
 
     public void PressButton(Command c)
     {
-        if (c.Hold) HeldButton = c.Key;
-        else _UnhandledInput(new InputEventKey { Keycode = c.Key, Pressed = true });
+        if (c.Hold) { HeldButton = c.Key; return; }
+        _fromButton = true;
+        try { _UnhandledInput(new InputEventKey { Keycode = c.Key, Pressed = true }); }
+        finally { _fromButton = false; }
     }
 
     /// <summary>Days until the burn for the next node should start at the current throttle.</summary>
@@ -30,12 +32,11 @@ public partial class Main
 
     static Command[] ShipCommands(bool engineOn, Main g) => new[]
     {
-        new Command(Key.Space, "Space", engineOn ? "停止" : "点火"),
-        new Command(Key.I, "I", "推力+", Hold: true),
-        new Command(Key.K, "K", "推力-", Hold: true),
+        new Command(Key.E, "E", engineOn ? "停止" : "点火"),
+        new Command(Key.W, "W", "推力+", Hold: true),
+        new Command(Key.S, "S", "推力-", Hold: true),
         new Command(Key.O, "O", "全開"),
         new Command(Key.L, "L", "ゼロ"),
-        new Command(Key.V, "V", "姿勢:" + g.HoldName),
         new Command(Key.B, "B", "機首視点"),
     };
 
@@ -64,16 +65,16 @@ public partial class Main
             var nodes = v.Nodes.Count > 0;
             list.Add(("計画", new Command[]
             {
-                new(Key.C, "C", "目標:" + (v.Goal == null ? "なし" : NameOf(v.Goal))),
-                new(Key.H, "H", way == null && v.Primary.Parent != null ? "脱出案" : "遷移案", way != null || v.Primary.Parent != null),
-                new(Key.M, "M", "合流案", way is Station),
-                new(Key.T, "T", "計算機", way != null && Owns(Modules.Transfer)),
+                new(Key.C, "", "目標:" + (v.Goal == null ? "なし" : NameOf(v.Goal))),
+                new(Key.H, "", way == null && v.Primary.Parent != null ? "脱出案" : "遷移案", way != null || v.Primary.Parent != null),
+                new(Key.M, "", "合流案", way is Station),
+                new(Key.T, "", "計算機", way != null && Owns(Modules.Transfer)),
                 new(Key.G, "G", v.AutoBurn ? "自動噴射 ON" : "自動噴射", Owns(Modules.AutoBurn) && !v.Docked),
-                new(Key.Y, "Y", "再計画", nodes),
+                new(Key.Y, "", "再計画", nodes),
                 new(Key.Backspace, "BS", "ノード削除", nodes),
             }));
             list.AddRange(RateGroup(Rates, Aligning ? 0 : SubRateIndex));
-            list.Add(("待機", new Command[] { new(Key.P, "P", Paused ? "再開" : "停止"), new(Key.N, "N", ToNode ? "加速中" : "ノードへ", nodes) }));
+            list.Add(("待機", new Command[] { new(Key.Space, "Space", Paused ? "再開" : "停止"), new(Key.N, "N", ToNode ? "加速中" : "ノードへ", nodes) }));
             if (v.Docked)
             {
                 list.Add(("港", new Command[] { new(Key.U, "U", "出港"), new(Key.Enter, "Enter", "港の施設") }));
@@ -89,6 +90,7 @@ public partial class Main
         list.Add(("操船", ShipCommands(EngineOn, this)));
         list.Add(("機首", NoseCommands));
         list.AddRange(RateGroup(Rates, RateIndex));
+        list.Add(("待機", new Command[] { new(Key.Space, "Space", Paused ? "再開" : "停止") }));
         list.Add(("航行", new Command[]
         {
             new(Key.D, "D", "降下", v.Phase == Phase.Flight && v.NearestWell(out _) < double.MaxValue),
@@ -123,7 +125,7 @@ public partial class Main
                 : (Key.U, "港に停泊中。時機を選んで出港する");
         var st = v.LocalStation;
         if (v.Goal == null) return (Key.J, "この星系に港はない。発進して次へ");
-        if (EngineOn && NextNode != null) return (Key.Space, "ノード噴射中。完了すると自動で止まる");
+        if (EngineOn && NextNode != null) return (Key.E, "ノード噴射中。完了すると自動で止まる");
         if (st != null)
         {
             var (stationAt, stationSpeed) = v.StationNow();
@@ -134,7 +136,7 @@ public partial class Main
                 return relative > 0.1 ? (Key.Z, $"港の近く。相対速度 {relative:F2} を押し続けて落とす") : (Key.X, $"港まで {distance:F3} AU。押し続けて寄せる");
         }
         if (IgnitionIn is { } wait)
-            return wait > 0.05 ? (ToNode ? null : Key.N, $"次の点火まで {wait:F1} 日" + (v.AutoBurn ? "。自動噴射が点火する" : "。ノードまで時間を進める")) : (Key.Space, "点火の時機。機首をノードに向けて点火");
+            return wait > 0.05 ? (ToNode ? null : Key.N, $"次の点火まで {wait:F1} 日" + (v.AutoBurn ? "。自動噴射が点火する" : "。ノードまで時間を進める")) : (Key.E, "点火の時機。機首をノードに向けて点火");
         if (SubForecast is { Watched: Station, Closest.Distance: < 0.03 }) return (Key.M, "港に接近する軌道。最接近で速度を合わせる");
         var goal = NameOf(v.Goal);
         return v.Waypoint switch
@@ -142,7 +144,7 @@ public partial class Main
             Station => (Key.H, "港へ向かう軌道を作る"),
             Center body when body == v.Goal => (Key.H, $"{body.Name} へ向かう軌道を作る"),
             Center body => (Key.H, $"{goal}は {body.Name} の周りにある。{body.Name} へ向かう軌道を作る"),
-            _ when v.Goal is Center c && c.Key == v.Primary.Key => (Key.C, $"{c.Name} を周回中。C で次の目標を選ぶ"),
+            _ when v.Goal is Center c && c.Key == v.Primary.Key => (Key.C, $"{c.Name} を周回中。「目標」で次の目標を選ぶ"),
             _ => (Key.H, $"{goal}はこの天体の外にある。ここを離れる軌道を作る"),
         };
     }

@@ -213,9 +213,56 @@ public partial class Hud : Control
 
     public Vector2 CompassMarkerForTest(ViewHold hold) => CompassPt(Game.DirectionOf(hold)!.Value);
 
-    /// <summary>Tap a marker to hold it; tap the middle of the dial to hand attitude back to the pilot.</summary>
+    static readonly (ViewHold Hold, string Label, Color Colour)[] HoldChoices =
+    {
+        (ViewHold.Free, "なし", new(0.75f, 0.9f, 1f)), (ViewHold.Star, "恒星", new(1f, 0.85f, 0.4f)),
+        (ViewHold.Prograde, "順行", new(0.45f, 1f, 0.6f)), (ViewHold.Retrograde, "逆行", new(0.45f, 1f, 0.6f)),
+        (ViewHold.RadialOut, "外", new(0.45f, 0.8f, 1f)), (ViewHold.RadialIn, "内", new(0.45f, 0.8f, 1f)),
+        (ViewHold.Normal, "法線", new(1f, 0.5f, 0.9f)), (ViewHold.AntiNormal, "反法線", new(1f, 0.5f, 0.9f)),
+        (ViewHold.Node, "ノード", new(1f, 0.7f, 0.25f)), (ViewHold.Target, "目的地", new(0.5f, 1f, 0.7f)),
+    };
+
+    /// <summary>The attitude holds as buttons in two columns beside the dial, left of the throttle.</summary>
+    IEnumerable<(Rect2 Box, ViewHold Hold, string Label, Color Colour, bool Enabled)> HoldButtons()
+    {
+        if (Game.Screen is not (Screen.Flight or Screen.Orbit)) yield break;
+        const float w = 58, h = 26, gap = 4;
+        var c = CompassCentre;
+        var right = c.X - CompassRadius - 66;
+        var top = c.Y - (5 * (h + gap) - gap) / 2;
+        for (int i = 0; i < HoldChoices.Length; i++)
+        {
+            var (hold, label, col) = HoldChoices[i];
+            var box = new Rect2(right - (2 - i % 2) * (w + gap), top + i / 2 * (h + gap), w, h);
+            yield return (box, hold, label, col, hold == ViewHold.Free || Game.DirectionOf(hold) != null);
+        }
+    }
+
+    public Vector2 HoldButtonForTest(ViewHold hold) => HoldButtons().First(b => b.Hold == hold).Box.GetCenter();
+
+    void DrawHoldButtons()
+    {
+        foreach (var (box, hold, label, col, enabled) in HoldButtons())
+        {
+            var on = hold == Game.Hold;
+            DrawRect(box.Grow(2), new Color(0.01f, 0.02f, 0.05f, 0.82f));
+            if (on) DrawRect(box, new Color(col, 0.3f));
+            var ink = enabled ? col : new Color(Dim, 0.25f);
+            DrawRect(box, ink, false, on ? 2 : 1);
+            var tw = F.GetStringSize(label, HorizontalAlignment.Left, -1, 13).X;
+            Text(new Vector2(box.GetCenter().X - tw / 2, box.Position.Y + 18), label, ink, 13);
+        }
+    }
+
+    /// <summary>Tap a hold button or a marker to hold it; tap the middle of the dial to hand attitude back to the pilot.</summary>
     public bool CompassTap(Vector2 at)
     {
+        foreach (var b in HoldButtons())
+            if (b.Box.HasPoint(at))
+            {
+                if (b.Enabled) Game.SetHold(b.Hold);
+                return true;
+            }
         if (at.DistanceTo(CompassCentre) > CompassRadius + 8) return false;
         var hit = Markers().Where(m => m.Hold != ViewHold.Free && CompassPt(m.Dir).DistanceTo(at) < 13)
             .OrderBy(m => CompassPt(m.Dir).DistanceTo(at)).ToList();
@@ -261,6 +308,7 @@ public partial class Hud : Control
         Text(c + new Vector2(-radius, -radius - 12), "姿勢儀  中心=機首  タップで姿勢保持", Dim, 12);
         Text(c + new Vector2(-radius, radius + 22), $"姿勢保持 {Game.HoldName}", Game.Hold == ViewHold.Free ? Dim : Good, 13);
         DrawThrottle(c);
+        DrawHoldButtons();
         Text(c + new Vector2(-radius, radius + 40), $"カメラ {(Game.CameraFollow ? "機首固定" : "自由")} (B)", Dim, 12);
     }
 
@@ -318,7 +366,7 @@ public partial class Hud : Control
         DrawRect(new Rect2(x, top + height - fill, width, fill), col);
         Text(new Vector2(x - 4, top - 10), $"{Game.Throttle * 100:F0}%", col, 14);
         Text(new Vector2(x - 6, top + height + 18), Game.EngineOn ? "点火" : "停止", Game.EngineOn ? Warn : Dim, 13);
-        Text(new Vector2(x - 6, top + height + 34), "Space", Dim, 11);
+        Text(new Vector2(x - 6, top + height + 34), "E", Dim, 11);
     }
 
     /// <summary>Who is around you, and whether you are heading for them.</summary>
@@ -519,8 +567,10 @@ public partial class Hud : Control
     void DrawRangeGauge()
     {
         var v = Game.V!; var g = Game.G!; var fc = Game.Forecast;
-        var width = Mathf.Min(Size.X - 120, 900f);
-        var x0 = (Size.X - width) / 2;
+        // Clear of the attitude buttons, throttle and dial on the right.
+        var room = Size.X - 460 - 40;
+        var width = Mathf.Min(room, 900f);
+        var x0 = 40 + (room - width) / 2;
         var top = Size.Y - ConsoleHeight - 112;
         var direct = (v.ChartPositions[v.TargetStar] - v.EstimatedPosition).Length;
 

@@ -519,7 +519,7 @@ public partial class Hud
         string When(Apsis? a) => a is { } x ? $"  {a.Value.Time - v.AbsoluteTime:F1}日後" : "";
         Line($"Pe {el.Periapsis:F3} AU" + When(pe), Ink);
         Line(el.Bound ? $"Ap {el.Apoapsis:F3} AU" + When(ap) : "Ap なし  脱出軌道", el.Bound ? Ink : Warn);
-        Line($"{(el.Bound ? $"周期 {el.Period:F1} 日   " : "")}{(Game.CurrentRate == 0 ? "一時停止 (P)" : $"時間 {Instruments.Rate(Game.CurrentRate)}")}", Dim);
+        Line($"{(el.Bound ? $"周期 {el.Period:F1} 日   " : "")}{(Game.CurrentRate == 0 ? "一時停止 (Space)" : $"時間 {Instruments.Rate(Game.CurrentRate)}")}", Dim);
         Line($"亜光速 Δv 残 {v.SublightDeltaV:F2}", Ink);
         var st = v.LocalStation;
         var goal = v.Goal;
@@ -560,7 +560,7 @@ public partial class Hud
             Line($"今止めると {stop}" + (now.Closest is { } ca ? $"  {Main.NameOf(now.Watched)}まで {ca.Distance:F3}" : ""), Color.Color8(255, 255, 255));
         }
         if (Game.PlanDeviation() is { } dev)
-            Line($"計画固定中  ずれ {dev:F3} AU   Y で再計画", dev > 0.05 ? Warn : Good);
+            Line($"計画固定中  ずれ {dev:F3} AU   「再計画」で作り直す", dev > 0.05 ? Warn : Good);
         if (live.Count > 0)
         {
             var total = live.Sum(s => s.Node.DeltaV);
@@ -584,7 +584,7 @@ public partial class Hud
                 var start = burn.Time - days / 2 - v.AbsoluteTime;
                 Line(start > 0 ? $"点火推奨 {start:F2} 日後" : "点火推奨 今", start < 0.3 ? Warn : Ink);
             }
-            else Line("スロットル0%: 噴射できない (I で上げる)", Warn);
+            else Line("スロットル0%: 噴射できない (W で上げる)", Warn);
             if (Game.NoseOffNode is { } off)
                 Line($"機首と噴射方向のずれ {off:F1}°" + (off > 5 ? "  「噴」をタップ" : ""), off > 5 ? Warn : Good);
         }

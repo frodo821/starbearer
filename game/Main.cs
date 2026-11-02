@@ -214,6 +214,7 @@ public partial class Main : Node3D
             if (star != null)
                 rate = Math.Clamp(0.5 * r / Math.Max(v.Velocity.Length, 0.01), 0.04, rate);
             if (EngineOn) rate = Math.Min(rate, BurnRate);
+            else if (Paused) rate = 0;   // a lit engine runs the clock, as in orbit
             CurrentRate = rate;
 
             var toStar = star != null ? (v.TruePositions[star.Id] - v.TruePosition).Normalized() : Vec3d.Zero;

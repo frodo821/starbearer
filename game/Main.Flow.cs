@@ -151,7 +151,7 @@ public partial class Main
     const string DockedNotice = "停泊中は操船できない。U で出港する";
 
     /// <summary>What a docked ship can't touch. The chart, the plan and the clock stay usable.</summary>
-    static bool ShipControl(Key key) => key is Key.Space or Key.O or Key.L or Key.V or Key.B or Key.G or Key.X or Key.Z or Key.I or Key.K;
+    static bool ShipControl(Key key) => key is Key.E or Key.O or Key.L or Key.B or Key.G or Key.X or Key.Z or Key.W or Key.S;
 
     /// <summary>Casts off, or ties back up at a port the ship hasn't left yet.</summary>
     public void ToggleDock()

@@ -92,20 +92,18 @@ public partial class Main
                 if (k.Keycode == Key.N) StartNewGalaxy();
                 break;
             case Screen.Orbit:
+                if (ButtonOnly(k.Keycode) && !_fromButton) break;
                 if (V!.Docked && ShipControl(k.Keycode)) { Message = DockedNotice; break; }
                 if (k.Keycode == Key.U) ToggleDock();
                 if (k.Keycode == Key.Enter) OpenPort();
                 if (k.Keycode == Key.J) BeginJump();
                 if (k.Keycode == Key.Tab) OrbitSky = !OrbitSky;
                 if (k.Keycode == Key.N) WarpToNode();
-                if (k.Keycode == Key.P) { Paused = !Paused; ToNode = false; Aligning = false; }
+                if (k.Keycode == Key.Space) TogglePause();
                 if (k.Keycode == Key.Y) { Replan(); Message = "現在の軌道から計画を作り直した"; }
                 ThrottleKeys(k.Keycode);
-                if (k.Keycode == Key.V) CycleHold();
                 if (k.Keycode == Key.B) ToggleCameraFollow();
                 if (k.Keycode == Key.H) SuggestTransfer();
-                if (k.Keycode == Key.Bracketright) CycleNode(1);
-                if (k.Keycode == Key.Bracketleft) CycleNode(-1);
                 if (k.Keycode == Key.M) AddMatchBurn();
                 if (k.Keycode is Key.Backspace or Key.Delete) { if (k.ShiftPressed) ClearNodes(); else DeleteNode(); }
                 if (k.Keycode == Key.T) RunTransferComputer();
@@ -123,12 +121,12 @@ public partial class Main
             case Screen.Flight:
                 if (k.Keycode == Key.C) BeginCorrection();
                 if (k.Keycode == Key.D) TryDescend();
+                if (k.Keycode == Key.Space) TogglePause();
                 ThrottleKeys(k.Keycode);
-                if (k.Keycode == Key.V) CycleHold();
                 if (k.Keycode == Key.B) ToggleCameraFollow();
                 if (k.Keycode == Key.F) { V!.TakeSight(); Message = $"天測完了。位置誤差 ±{V.NavSigma:F3} ly"; _forecastDirty = true; }
                 if (k.Keycode == Key.Tab) ToggleMap();
-                if (k.Keycode >= Key.Key1 && k.Keycode < Key.Key1 + Rates.Length) RateIndex = (int)(k.Keycode - Key.Key1);
+                if (k.Keycode >= Key.Key1 && k.Keycode < Key.Key1 + Rates.Length) { RateIndex = (int)(k.Keycode - Key.Key1); Paused = false; }
                 break;
             case Screen.Port:
                 if (k.Keycode == Key.Enter) LeavePort();
@@ -143,6 +141,20 @@ public partial class Main
                 if (k.Keycode == Key.X) EndVoyageForGood();
                 break;
         }
+    }
+
+    /// <summary>Planning is done on the chart and its buttons; these have no key of their own.</summary>
+    static bool ButtonOnly(Key key) => key is Key.H or Key.M or Key.T or Key.Y or Key.C;
+
+    /// <summary>Set while a console button stands in for its key, so button-only commands go through.</summary>
+    bool _fromButton;
+
+    void TogglePause()
+    {
+        Paused = !Paused;
+        ToNode = false;
+        Aligning = false;
+        Message = Paused ? "時間停止" : "時間再開";
     }
 
     void Look(Vector2 d)

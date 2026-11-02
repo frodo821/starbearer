@@ -55,6 +55,9 @@ public partial class Main
     public int MarkerCountForTest => _hud.MarkerCount;
     public string ClockTextForTest => _hud.ClockTextForTest;
     public Vector2 CompassMarkerForTest(ViewHold h) => _hud.CompassMarkerForTest(h);
+    public Vector2 HoldButtonForTest(ViewHold h) => _hud.HoldButtonForTest(h);
+    /// <summary>Presses a console button by its command, as a tap on it would.</summary>
+    public void CommandForTest(Key k) => PressButton(new Command(k, "", ""));
     public Vector2 DeleteButtonForTest => _hud.DeleteButton(Selected!)!.Value;
     public void ReloadForTest() => Continue();
     public Hud HudForTest => _hud;

@@ -29,15 +29,6 @@ public partial class Main
 
     public void SelectNodeQuietly(Maneuver m) => Selected = m;
 
-    void CycleNode(int step)
-    {
-        var nodes = V!.Nodes.OrderBy(n => n.Time).ToList();
-        if (nodes.Count == 0) return;
-        var i = Selected != null ? nodes.IndexOf(Selected) : -1;
-        Selected = nodes[(i + step + nodes.Count) % nodes.Count];
-        HandlesOpen = true;
-        Paused = true;
-    }
     public void NodeEdited() => Replan();
 
     /// <summary>Rebuilds the plan from where the ship actually is.</summary>
@@ -69,7 +60,7 @@ public partial class Main
     /// <summary>Why there is nothing to steer for from here.</summary>
     string NoWaypoint => V!.Goal switch
     {
-        null => "この星系に港はない。C で目標を選ぶ",
+        null => "この星系に港はない。「目標」で目標を選ぶ",
         Center c when c.Key == V.Primary.Key => $"{c.Name} を周回中。目標に着いている",
         var goal => $"{NameOf(goal)}はこの天体の外にある。まずここを離れる",
     };
@@ -135,7 +126,7 @@ public partial class Main
         V.Nodes.Add(Selected);
         added++;
         Paused = true; HandlesOpen = false;
-        Message = added == 2 ? "面合わせと遷移の2段を置いた。各段を調整し、M で合流噴射を足す" : "遷移の叩き台を置いた。ノードをタップして調整し、M で合流噴射を足す";
+        Message = added == 2 ? "面合わせと遷移の2段を置いた。各段を調整し、「合流案」で合流噴射を足す" : "遷移の叩き台を置いた。ノードをタップして調整し、「合流案」で合流噴射を足す";
         Replan();
     }
 
@@ -222,20 +213,6 @@ public partial class Main
     void UpdateOrbit(double delta)
     {
         var v = V!;
-        if (Selected != null)
-        {
-            var step = (Input.IsKeyPressed(Key.Shift) ? 0.006 : 0.06) * delta;
-            var pro = (IsDown(Key.W) ? 1 : 0) - (IsDown(Key.S) ? 1 : 0);
-            var rad = (Input.IsKeyPressed(Key.D) ? 1 : 0) - (Input.IsKeyPressed(Key.A) ? 1 : 0);
-            var nor = (Input.IsKeyPressed(Key.E) ? 1 : 0) - (Input.IsKeyPressed(Key.Q) ? 1 : 0);
-            if (pro != 0 || rad != 0 || nor != 0)
-            {
-                Selected.Prograde += pro * step;
-                Selected.Radial += rad * step;
-                Selected.Normal += nor * step;
-                Replan();
-            }
-        }
         FlyNodeAutomatically();
         var acting = !v.Docked && (EngineOn || IsDown(Key.X) || IsDown(Key.Z));
         if (acting) Aligning = false;

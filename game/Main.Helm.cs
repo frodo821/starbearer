@@ -100,7 +100,7 @@ public partial class Main
     }
 
     /// <summary>The ship doesn't move while time is stopped. Commands given now take effect on resuming.</summary>
-    bool ClockStopped => Screen == Screen.Orbit && Paused && !EngineOn && !IsDown(Key.X) && !IsDown(Key.Z);
+    bool ClockStopped => Screen is Screen.Orbit or Screen.Flight && Paused && !EngineOn && !IsDown(Key.X) && !IsDown(Key.Z);
 
     void UpdateAttitude(double delta)
     {
@@ -119,8 +119,6 @@ public partial class Main
         Message = "姿勢保持: " + HoldName;
     }
 
-    void CycleHold() => SetHold(Hold == ViewHold.Target ? ViewHold.Free : Hold + 1);
-
     void ToggleCameraFollow()
     {
         CameraFollow = !CameraFollow;
@@ -129,7 +127,7 @@ public partial class Main
 
     void UpdateThrottle(double delta)
     {
-        var dir = (IsDown(Key.I) ? 1 : 0) - (IsDown(Key.K) ? 1 : 0);
+        var dir = (IsDown(Key.W) ? 1 : 0) - (IsDown(Key.S) ? 1 : 0);
         if (dir != 0) Throttle = Math.Clamp(Throttle + dir * (Input.IsKeyPressed(Key.Shift) ? 0.06 : 0.6) * delta, 0, 1);
     }
 
@@ -148,7 +146,7 @@ public partial class Main
 
     void ThrottleKeys(Key key)
     {
-        if (key == Key.Space) ToggleEngine();
+        if (key == Key.E) ToggleEngine();
         if (key == Key.O) Throttle = 1;
         if (key == Key.L) Throttle = 0;
     }
