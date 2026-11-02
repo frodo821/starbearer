@@ -82,7 +82,7 @@ public partial class Main
         LookAt(PlanDir);
         Screen = Screen.Orbit;
         MapOpen = false;
-        Nose = PlanDir.Normalized(); Hold = ViewHold.Free; CameraFollow = false; EngineOn = false; Throttle = 0.5;
+        Helm.Reset(PlanDir); CameraFollow = false;
         Message = s.Hold.Count == 0 ? "空荷で停泊中。Enter で港を開いてミッションを請ける" : "港に停泊中。星図と計画で発進の時機を選び、U で出港する";
         _forecastDirty = true;
     }
@@ -197,7 +197,7 @@ public partial class Main
     {
         if (Screen != Screen.Flight) return;
         if (!V!.Descend()) { Message = "恒星の井戸の中でしか降下できない"; return; }
-        EngineOn = false;
+        Helm.CutEngine();
         Screen = Screen.Orbit;
         MapOpen = false; Selected = null; Paused = true; PlanFrozen = false;
         OrbitSky = false;
@@ -224,7 +224,7 @@ public partial class Main
     Vec3d SublightThrust(double delta)
     {
         var v = V!;
-        if (v.Docked) { Firing = false; return Vec3d.Zero; }
+        if (v.Docked) { Helm.Firing = false; return Vec3d.Zero; }
         var here = v.LocalStation != null;
         Vec3d? assist = null;
         if (here && IsDown(Key.X))
@@ -233,20 +233,20 @@ public partial class Main
             var toward = sp - v.SubPosition;
             var rel = sv - v.SubVelocity;
             var want = rel + toward.Normalized() * Math.Min(0.02, toward.Length);
-            if (want.Length < 0.005) { Firing = false; return Vec3d.Zero; }
+            if (want.Length < 0.005) { Helm.Firing = false; return Vec3d.Zero; }
             assist = want.Normalized();
         }
         else if (here && IsDown(Key.Z))
         {
             var rel = v.StationNow().Velocity - v.SubVelocity;
-            if (rel.Length < 0.002) { Firing = false; return Vec3d.Zero; }
+            if (rel.Length < 0.002) { Helm.Firing = false; return Vec3d.Zero; }
             assist = rel.Normalized();
         }
         if (assist is not { } dir) return EngineCommand();
-        Hold = ViewHold.Free;
-        SlewNose(dir, delta);
-        Firing = Nose.Dot(dir) > 0.99;
-        return Firing ? Nose : Vec3d.Zero;
+        Helm.Hold = ViewHold.Free;
+        Helm.Slew(dir, delta);
+        Helm.Firing = Helm.Nose.Dot(dir) > 0.99;
+        return Helm.Firing ? Helm.Nose : Vec3d.Zero;
     }
 
     void WriteSave()

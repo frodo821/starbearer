@@ -14,7 +14,6 @@ public sealed record StateCue(string Title, string Detail, Color Colour, bool Ma
 }
 
 public enum Screen { Title, Loading, Orbit, Plan, Flight, Port, Dead }
-public enum ViewHold { Free, Star, Prograde, Retrograde, RadialOut, RadialIn, Normal, AntiNormal, Node, Target }
 
 /// <summary>Owns game flow: one checkpoint on disk, one Voyage in memory.</summary>
 public partial class Main : Node3D
@@ -64,17 +63,9 @@ public partial class Main : Node3D
     public Maneuver? Selected;
     public bool OrbitSky;
     public bool Paused = true;
-    public ViewHold Hold { get; private set; } = ViewHold.Free;
-    const double SlewRadPerSecond = 1.4, TurnRadPerSecond = 0.9, BurnRate = 0.25;
-
-    /// <summary>Engine setting, 0..1. Space only starts and stops the engine at this setting.</summary>
-    public double Throttle { get; private set; } = 0.5;
-    public bool EngineOn { get; private set; }
-
-    /// <summary>The ship's nose. Separate from the camera: engine and shield both follow it.</summary>
-    public Vec3d Nose = new(0, 0, -1);
+    public Helm Helm { get; } = new();
+    const double BurnRate = 0.25;
     public bool CameraFollow;
-    public bool Firing { get; private set; }
     public bool HandlesOpen;
     void ToggleMap()
     {
@@ -170,12 +161,12 @@ public partial class Main : Node3D
             var rate = Rates[RateIndex];
             if (star != null)
                 rate = Math.Clamp(0.5 * r / Math.Max(v.Velocity.Length, 0.01), 0.04, rate);
-            if (EngineOn) rate = Math.Min(rate, BurnRate);
+            if (Helm.EngineOn) rate = Math.Min(rate, BurnRate);
             else if (Paused) rate = 0;   // a lit engine runs the clock, as in orbit
             CurrentRate = rate;
 
             var toStar = star != null ? (v.TruePositions[star.Id] - v.TruePosition).Normalized() : Vec3d.Zero;
-            Shielded = star != null && Nose.Dot(toStar) > 0.8;
+            Shielded = star != null && Helm.Nose.Dot(toStar) > 0.8;
             var engine = EngineCommand();
             if (engine.LengthSq > 0) _forecastDirty = true;   // the coasting forecast is "if I stop now"
             v.Advance(rate * delta, engine, Shielded);

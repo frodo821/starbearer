@@ -181,17 +181,17 @@ public partial class Main
         Replan();
     }
 
-    public double? NoseOffNode => NodeDirection() is { } d ? Math.Acos(Math.Clamp(Nose.Dot(d), -1, 1)) * 180 / Math.PI : null;
+    public double? NoseOffNode => NodeDirection() is { } d ? Math.Acos(Math.Clamp(Helm.Nose.Dot(d), -1, 1)) * 180 / Math.PI : null;
 
     /// <summary>The autopilot module: points the nose at the node and lights the engine on time.</summary>
     void FlyNodeAutomatically()
     {
         var v = V!;
         if (!v.AutoBurn || IgnitionIn is not { } wait) return;
-        if (wait < 1) Hold = ViewHold.Node;
-        if (EngineOn || wait > 0 || NodeDirection() is not { } dir || Nose.Dot(dir) < 0.98) return;
-        if (Throttle <= 0) Throttle = 1;
-        EngineOn = true;
+        if (wait < 1) Helm.Hold = ViewHold.Node;
+        if (Helm.EngineOn || wait > 0 || NodeDirection() is not { } dir || Helm.Nose.Dot(dir) < 0.98) return;
+        if (Helm.Throttle <= 0) Helm.SetThrottle(1);
+        Helm.LightEngine();
         Paused = false;
         Message = "自動噴射 点火";
     }
@@ -215,7 +215,7 @@ public partial class Main
     {
         var v = V!;
         FlyNodeAutomatically();
-        var acting = !v.Docked && (EngineOn || IsDown(Key.X) || IsDown(Key.Z));
+        var acting = !v.Docked && (Helm.EngineOn || IsDown(Key.X) || IsDown(Key.Z));
         if (acting) Aligning = false;
         if (Paused && !acting) { CurrentRate = 0; ToNode = false; Aligning = false; return; }
         var rate = ToNode ? Rates[^1] : Rates[SubRateIndex];
@@ -244,7 +244,7 @@ public partial class Main
             if (v.Nodes.Count > 0) PlanFrozen = true;   // from here on the plan is the reference
             _forecastDirty = true;                      // keep "if I stop now" live
             // The auto burn throttles its last moment down to exactly what is left.
-            if (v.AutoBurn && NextNode is { } aim && EngineOn && !IsDown(Key.X) && !IsDown(Key.Z))
+            if (v.AutoBurn && NextNode is { } aim && Helm.EngineOn && !IsDown(Key.X) && !IsDown(Key.Z))
             {
                 var step = engine.Length * Tuning.SublightThrust * rate * delta;
                 if (step > aim.DeltaV) engine *= aim.DeltaV / step;
@@ -261,7 +261,7 @@ public partial class Main
             _forecastDirty = true;
             if (v.AutoBurn && (Burn.Overshot || Burn.Stalled || firedOn.DeltaV < Burn.Planned * 1e-4)) CutEngine("自動噴射 完了");
         }
-        if (Burn.Live && !EngineOn) EndBurn();
+        if (Burn.Live && !Helm.EngineOn) EndBurn();
         if (v.Phase == Phase.Arrived) Dock();
         else if (v.Phase == Phase.Dead) Screen = Screen.Dead;
     }

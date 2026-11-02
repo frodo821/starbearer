@@ -150,14 +150,14 @@ public partial class Hud : Control
 
         if (Game.Screen != Screen.Plan)
         {
-            if (Project(Sky.ToV(Game.Nose), out var nose))
+            if (Project(Sky.ToV(Game.Helm.Nose), out var nose))
             {
                 DrawLine(nose + new Vector2(-20, 0), nose + new Vector2(-7, 0), Warn, 2);
                 DrawLine(nose + new Vector2(20, 0), nose + new Vector2(7, 0), Warn, 2);
                 DrawLine(nose + new Vector2(0, -7), nose + new Vector2(0, -16), Warn, 2);
                 DrawArc(nose, 3, 0, Mathf.Tau, 10, Warn, 1.5f, true);
             }
-            DrawEdgeArrow(Game.Nose, "機首", Warn);
+            DrawEdgeArrow(Game.Helm.Nose, "機首", Warn);
         }
         DrawEdgeArrow((v.ChartPositions[v.TargetStar] - ship).Normalized(), "目的地", Good);
         if (v.Velocity.Length > 1e-6) DrawEdgeArrow(v.Velocity.Normalized(), "順行", new Color(0.45f, 1f, 0.6f));
@@ -206,20 +206,20 @@ public partial class Hud : Control
 
     Vector2 CompassPt(Vec3d d)
     {
-        var (right, up) = Game.NoseFrame();
-        var (x, y) = Instruments.CompassPoint(d, right, up, Game.Nose);
+        var (right, up) = Game.Helm.NoseFrame();
+        var (x, y) = Instruments.CompassPoint(d, right, up, Game.Helm.Nose);
         return CompassCentre + new Vector2((float)x, -(float)y) * CompassRadius;
     }
 
     public Vector2 CompassMarkerForTest(ViewHold hold) => CompassPt(Game.DirectionOf(hold)!.Value);
 
-    static readonly (ViewHold Hold, string Label, Color Colour)[] HoldChoices =
+    static readonly (ViewHold Hold, Color Colour)[] HoldChoices =
     {
-        (ViewHold.Free, "なし", new(0.75f, 0.9f, 1f)), (ViewHold.Star, "恒星", new(1f, 0.85f, 0.4f)),
-        (ViewHold.Prograde, "順行", new(0.45f, 1f, 0.6f)), (ViewHold.Retrograde, "逆行", new(0.45f, 1f, 0.6f)),
-        (ViewHold.RadialOut, "外", new(0.45f, 0.8f, 1f)), (ViewHold.RadialIn, "内", new(0.45f, 0.8f, 1f)),
-        (ViewHold.Normal, "法線", new(1f, 0.5f, 0.9f)), (ViewHold.AntiNormal, "反法線", new(1f, 0.5f, 0.9f)),
-        (ViewHold.Node, "ノード", new(1f, 0.7f, 0.25f)), (ViewHold.Target, "目的地", new(0.5f, 1f, 0.7f)),
+        (ViewHold.Free, new(0.75f, 0.9f, 1f)), (ViewHold.Star, new(1f, 0.85f, 0.4f)),
+        (ViewHold.Prograde, new(0.45f, 1f, 0.6f)), (ViewHold.Retrograde, new(0.45f, 1f, 0.6f)),
+        (ViewHold.RadialOut, new(0.45f, 0.8f, 1f)), (ViewHold.RadialIn, new(0.45f, 0.8f, 1f)),
+        (ViewHold.Normal, new(1f, 0.5f, 0.9f)), (ViewHold.AntiNormal, new(1f, 0.5f, 0.9f)),
+        (ViewHold.Node, new(1f, 0.7f, 0.25f)), (ViewHold.Target, new(0.5f, 1f, 0.7f)),
     };
 
     /// <summary>The attitude holds as buttons in two columns beside the dial, left of the throttle.</summary>
@@ -232,9 +232,9 @@ public partial class Hud : Control
         var top = c.Y - (5 * (h + gap) - gap) / 2;
         for (int i = 0; i < HoldChoices.Length; i++)
         {
-            var (hold, label, col) = HoldChoices[i];
+            var (hold, col) = HoldChoices[i];
             var box = new Rect2(right - (2 - i % 2) * (w + gap), top + i / 2 * (h + gap), w, h);
-            yield return (box, hold, label, col, hold == ViewHold.Free || Game.DirectionOf(hold) != null);
+            yield return (box, hold, Helm.NameOf(hold), col, hold == ViewHold.Free || Game.DirectionOf(hold) != null);
         }
     }
 
@@ -244,7 +244,7 @@ public partial class Hud : Control
     {
         foreach (var (box, hold, label, col, enabled) in HoldButtons())
         {
-            var on = hold == Game.Hold;
+            var on = hold == Game.Helm.Hold;
             DrawRect(box.Grow(2), new Color(0.01f, 0.02f, 0.05f, 0.82f));
             if (on) DrawRect(box, new Color(col, 0.3f));
             var ink = enabled ? col : new Color(Dim, 0.25f);
@@ -302,11 +302,11 @@ public partial class Hud : Control
         {
             var p = CompassPt(dir);
             if (primary) DrawCircle(p, 8, new Color(0, 0, 0, 0.6f));
-            DrawArc(p, primary ? 8 : 6, 0, Mathf.Tau, 14, col, hold != ViewHold.Free && hold == Game.Hold ? 3f : primary ? 1.6f : 1f, true);
+            DrawArc(p, primary ? 8 : 6, 0, Mathf.Tau, 14, col, hold != ViewHold.Free && hold == Game.Helm.Hold ? 3f : primary ? 1.6f : 1f, true);
             Text(p + new Vector2(-6, 5), label, col, primary ? 12 : 11);
         }
         Text(c + new Vector2(-radius, -radius - 12), "姿勢儀  中心=機首  タップで姿勢保持", Dim, 12);
-        Text(c + new Vector2(-radius, radius + 22), $"姿勢保持 {Game.HoldName}", Game.Hold == ViewHold.Free ? Dim : Good, 13);
+        Text(c + new Vector2(-radius, radius + 22), $"姿勢保持 {Helm.NameOf(Game.Helm.Hold)}", Game.Helm.Hold == ViewHold.Free ? Dim : Good, 13);
         DrawThrottle(c);
         DrawHoldButtons();
         Text(c + new Vector2(-radius, radius + 40), $"カメラ {(Game.CameraFollow ? "機首固定" : "自由")} (B)", Dim, 12);
@@ -360,12 +360,12 @@ public partial class Hud : Control
         var x = compass.X - CompassRadius - 44;
         var top = compass.Y - height / 2;
         DrawRect(new Rect2(x - 8, top - 30, width + 24, height + 70), new Color(0.01f, 0.02f, 0.05f, 0.72f));
-        var col = Game.EngineOn ? Warn : Ink;
+        var col = Game.Helm.EngineOn ? Warn : Ink;
         DrawRect(new Rect2(x, top, width, height), new Color(1, 1, 1, 0.12f));
-        var fill = height * (float)Game.Throttle;
+        var fill = height * (float)Game.Helm.Throttle;
         DrawRect(new Rect2(x, top + height - fill, width, fill), col);
-        Text(new Vector2(x - 4, top - 10), $"{Game.Throttle * 100:F0}%", col, 14);
-        Text(new Vector2(x - 6, top + height + 18), Game.EngineOn ? "点火" : "停止", Game.EngineOn ? Warn : Dim, 13);
+        Text(new Vector2(x - 4, top - 10), $"{Game.Helm.Throttle * 100:F0}%", col, 14);
+        Text(new Vector2(x - 6, top + height + 18), Game.Helm.EngineOn ? "点火" : "停止", Game.Helm.EngineOn ? Warn : Dim, 13);
         Text(new Vector2(x - 6, top + height + 34), "E", Dim, 11);
     }
 

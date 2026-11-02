@@ -72,7 +72,7 @@ public partial class Autotest : Node
         Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Position = from + by, Pressed = false });
     }
 
-    double Off(Vec3d dir) => Math.Acos(Math.Clamp(_g.Nose.Dot(dir), -1, 1));
+    double Off(Vec3d dir) => Math.Acos(Math.Clamp(_g.Helm.Nose.Dot(dir), -1, 1));
 
     int _heldTarget;
     double _credits, _heldFuel;
@@ -119,7 +119,7 @@ public partial class Autotest : Node
         Do(() =>
         {
             Key_(Key.Left, false);
-            Check("a docked ship's controls are locked", !_g.EngineOn && _g.Throttle != 1 && _g.Hold == ViewHold.Free && _g.V!.Fuel == _fuel && _g.V.Docked);
+            Check("a docked ship's controls are locked", !_g.Helm.EngineOn && _g.Helm.Throttle != 1 && _g.Helm.Hold == ViewHold.Free && _g.V!.Fuel == _fuel && _g.V.Docked);
             Press(Key.J);
         });
         Do(() => { Check("a departure can be planned while docked", _g.Screen == Screen.Plan); Press(Key.Enter); });
@@ -176,13 +176,13 @@ public partial class Autotest : Node
         {
             Check("tap on the orbit adds a node", _g.V!.Nodes.Count == 1);
             _pro = _g.Selected!.Prograde;
-            _throttle = _g.Throttle;
+            _throttle = _g.Helm.Throttle;
             Key_(Key.W, true);
         }, 15);
         Do(() =>
         {
             Key_(Key.W, false);
-            Check("W raises the throttle and leaves the node alone", _g.Throttle > _throttle && _g.Selected!.Prograde == _pro);
+            Check("W raises the throttle and leaves the node alone", _g.Helm.Throttle > _throttle && _g.Selected!.Prograde == _pro);
             Shot("02_orbit_node");
             Check("time stops while planning", _g.CurrentRate == 0);
             _pro = _g.Selected!.Prograde;
@@ -343,7 +343,7 @@ public partial class Autotest : Node
         Do(() =>
         {
             Check("the clock runs during flight", _g.ClockTextForTest != _clockText);
-            Check("the star button holds the nose on the star", _g.Hold == ViewHold.Star && Off(_g.NearestStarDirection()!.Value) < 0.05);
+            Check("the star button holds the nose on the star", _g.Helm.Hold == ViewHold.Star && Off(_g.NearestStarDirection()!.Value) < 0.05);
             Check("the camera stays put while the nose turns", (_g.CameraForward() - _view).Length < 1e-6);
             Click(MouseButton.Left, _g.CompassMarkerForTest(ViewHold.Normal));
             _clock = Time.GetTicksMsec();
@@ -351,27 +351,27 @@ public partial class Autotest : Node
         Until(() => Off(_g.DirectionOf(ViewHold.Normal)!.Value) < 0.05 || Time.GetTicksMsec() - _clock > 5000);
         Do(() =>
         {
-            Check("tapping a compass marker holds it", _g.Hold == ViewHold.Normal && Off(_g.DirectionOf(ViewHold.Normal)!.Value) < 0.05);
+            Check("tapping a compass marker holds it", _g.Helm.Hold == ViewHold.Normal && Off(_g.DirectionOf(ViewHold.Normal)!.Value) < 0.05);
             Shot("04b_normal_hold");
             _vel = _g.V!.Velocity;
             Press(Key.E);
         }, 20);
         Do(() =>
         {
-            Check("E lights the engine and it keeps running", _g.EngineOn && _g.Firing);
+            Check("E lights the engine and it keeps running", _g.Helm.EngineOn && _g.Helm.Firing);
             Press(Key.E);
             var change = (_g.V!.Velocity - _vel).Normalized();
-            Check("the engine fires along the nose, not prograde", change.Dot(_g.Nose) > 0.9);
+            Check("the engine fires along the nose, not prograde", change.Dot(_g.Helm.Nose) > 0.9);
             Key_(Key.Left, true);
-            _view = _g.Nose;
+            _view = _g.Helm.Nose;
         }, 20);
         Do(() =>
         {
             Key_(Key.Left, false);
-            Check("arrow keys turn the nose", (_g.Nose - _view).Length > 0.01 && _g.Hold == ViewHold.Free);
+            Check("arrow keys turn the nose", (_g.Helm.Nose - _view).Length > 0.01 && _g.Helm.Hold == ViewHold.Free);
             Press(Key.B);
         });
-        Do(() => { Check("B locks the camera to the nose", (_g.CameraForward() - _g.Nose).Length < 1e-3); Pan(8, 0); });
+        Do(() => { Check("B locks the camera to the nose", (_g.CameraForward() - _g.Helm.Nose).Length < 1e-3); Pan(8, 0); });
         Do(() =>
         {
             Check("moving the camera releases the camera lock", !_g.CameraFollow);
@@ -393,24 +393,24 @@ public partial class Autotest : Node
         {
             Check("space starts it again", !_g.Paused && _g.V!.Time > _time);
             _fuel = _g.V!.Fuel;
-            _throttle = _g.Throttle;
+            _throttle = _g.Helm.Throttle;
             Key_(Key.W, true);
         }, 15);
         Do(() =>
         {
             Key_(Key.W, false);
-            Check("W raises the throttle", _g.Throttle > _throttle);
+            Check("W raises the throttle", _g.Helm.Throttle > _throttle);
             Press(Key.O);
         });
-        Do(() => { Check("O is full throttle", _g.Throttle == 1); Press(Key.L); });
+        Do(() => { Check("O is full throttle", _g.Helm.Throttle == 1); Press(Key.L); });
         Do(() =>
         {
-            Check("L is zero throttle", _g.Throttle == 0);
+            Check("L is zero throttle", _g.Helm.Throttle == 0);
             Press(Key.E);
         }, 30);
         Do(() =>
         {
-            Check("a lit engine at zero throttle burns nothing", _g.EngineOn && _g.V!.Fuel >= _fuel);
+            Check("a lit engine at zero throttle burns nothing", _g.Helm.EngineOn && _g.V!.Fuel >= _fuel);
             Press(Key.E); Press(Key.O); Press(Key.E);
         }, 30);
         Do(() =>
@@ -449,14 +449,14 @@ public partial class Autotest : Node
         {
             Check("the match button adds a matching burn", _g.V!.Nodes.Count == _count + 1);
             Shot("06b_free_plan");
-            _view = _g.Nose;
+            _view = _g.Helm.Nose;
             _g.SetHold(ViewHold.Node);
             Key_(Key.Left, true);
         }, 20);
         Do(() =>
         {
             Key_(Key.Left, false);
-            Check("the nose stays put while time is stopped", _g.Paused && _g.Nose == _view);
+            Check("the nose stays put while time is stopped", _g.Paused && _g.Helm.Nose == _view);
             Press(Key.Space);
             _g.SetHold(ViewHold.Node);
             _clock = Time.GetTicksMsec();
@@ -476,7 +476,7 @@ public partial class Autotest : Node
             Check("the plan freezes at ignition", _g.PlanFrozen && ReferenceEquals(_g.SubForecast, _plan));
             Check("the stop-now path moves with the burn", (_g.SubCurrent!.Track[_g.SubCurrent.DrawnCount - 1].Position - _before).Length > 1e-4);
             Shot("06d_burning");
-            if (_g.EngineOn) Press(Key.E);
+            if (_g.Helm.EngineOn) Press(Key.E);
         });
         Do(() =>
         {
@@ -493,15 +493,15 @@ public partial class Autotest : Node
         });
         Until(() => _g.NodeDirection() is not { } d || Off(d) < 0.03 || Time.GetTicksMsec() - _clock > 5000);
         Do(() => { Press(Key.O); Press(Key.E); _clock = Time.GetTicksMsec(); }, 1);
-        Until(() => _g.NodeOvershot || !_g.EngineOn || Time.GetTicksMsec() - _clock > 25000);
+        Until(() => _g.NodeOvershot || !_g.Helm.EngineOn || Time.GetTicksMsec() - _clock > 25000);
         Do(() =>
         {
-            Check("the engine keeps running past the node until stopped", _g.EngineOn && _g.NodeOvershot && _g.V!.Nodes.Count == _count + 1);
+            Check("the engine keeps running past the node until stopped", _g.Helm.EngineOn && _g.NodeOvershot && _g.V!.Nodes.Count == _count + 1);
             Press(Key.E);
         });
         Do(() =>
         {
-            Check("stopping at the node finishes it", !_g.EngineOn && _g.V!.Nodes.Count == _count);
+            Check("stopping at the node finishes it", !_g.Helm.EngineOn && _g.V!.Nodes.Count == _count);
             Check("a finished stage releases the plan", !_g.PlanFrozen);
         });
         Do(() =>
@@ -547,7 +547,7 @@ public partial class Autotest : Node
         Do(() => Shot("07_orbit_transfer"), 1);
         Until(() =>
         {
-            _sawEngine |= _g.EngineOn;
+            _sawEngine |= _g.Helm.EngineOn;
             return _g.V!.Nodes.Count == 0 || _g.Screen == Screen.Port || ++_frames > 6000;
         });
         Do(() =>

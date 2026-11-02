@@ -550,7 +550,7 @@ public partial class Hud
         y += 4;
         var fc = Game.SubForecast;
         var live = fc?.AllStages.Where(s => v.Nodes.Contains(s.Node)).ToList() ?? new List<Stage>();
-        if (Game.SubCurrent is { } now && (live.Count > 0 || Game.EngineOn))
+        if (Game.SubCurrent is { } now && (live.Count > 0 || Game.Helm.EngineOn))
         {
             var e3 = now.After;
             var stop = e3.Bound ? $"近 {e3.Periapsis:F2} 遠 {e3.Apoapsis:F2}" : "脱出軌道";
@@ -573,7 +573,7 @@ public partial class Hud
         }
         if (Game.NextNode is { } burn)
         {
-            Line($"ノード残 Δv {burn.DeltaV:F4}   スロットル {Game.Throttle * 100:F0}%" + (Game.NodeOvershot ? "  過ぎた" : ""), Game.NodeOvershot ? Warn : Ink);
+            Line($"ノード残 Δv {burn.DeltaV:F4}   スロットル {Game.Helm.Throttle * 100:F0}%" + (Game.NodeOvershot ? "  過ぎた" : ""), Game.NodeOvershot ? Warn : Ink);
             if (Game.EngineAcceleration > 0)
             {
                 var days = burn.DeltaV / Game.EngineAcceleration;

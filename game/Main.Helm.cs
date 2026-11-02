@@ -70,53 +70,31 @@ public partial class Main
         };
     }
 
-    void SlewNose(Vec3d want, double delta)
-    {
-        var angle = Math.Acos(Math.Clamp(Nose.Dot(want), -1, 1));
-        var step = SlewRadPerSecond * delta;
-        if (angle <= step) { Nose = want; return; }
-        if (angle > 3.1) want = (want + Nose.AnyPerpendicular() * 0.05).Normalized();  // no axis dead astern
-        var k = Math.Sin(step) / Math.Sin(Math.Min(angle, 3.1));
-        Nose = (Nose * (Math.Cos(step) - Math.Cos(Math.Min(angle, 3.1)) * k) + want * k).Normalized();
-    }
-
-    /// <summary>Compass frame for the nose: x right, y up, with no roll.</summary>
-    public (Vec3d Right, Vec3d Up) NoseFrame()
-    {
-        var right = Nose.Cross(new Vec3d(0, 1, 0));
-        right = right.Length > 1e-3 ? right.Normalized() : Nose.AnyPerpendicular();
-        return (right, right.Cross(Nose).Normalized());
-    }
-
     void TurnManually(double delta)
     {
         var yaw = (IsDown(Key.Right) ? 1 : 0) - (IsDown(Key.Left) ? 1 : 0);
         var pitch = (IsDown(Key.Up) ? 1 : 0) - (IsDown(Key.Down) ? 1 : 0);
-        if (yaw == 0 && pitch == 0) return;
-        Hold = ViewHold.Free;
-        var (right, up) = NoseFrame();
-        var rate = TurnRadPerSecond * (Input.IsKeyPressed(Key.Shift) ? 0.15 : 1) * delta;
-        Nose = (Nose + right * (yaw * rate) + up * (pitch * rate)).Normalized();
+        Helm.Turn(yaw, pitch, Input.IsKeyPressed(Key.Shift), delta);
     }
 
     /// <summary>The ship doesn't move while time is stopped. Commands given now take effect on resuming.</summary>
-    bool ClockStopped => Screen is Screen.Orbit or Screen.Flight && Paused && !EngineOn && !IsDown(Key.X) && !IsDown(Key.Z);
+    bool ClockStopped => Screen is Screen.Orbit or Screen.Flight && Paused && !Helm.EngineOn && !IsDown(Key.X) && !IsDown(Key.Z);
 
     void UpdateAttitude(double delta)
     {
         if (V == null || V.Docked) return;
-        UpdateThrottle(delta);
+        Helm.MoveThrottle((IsDown(Key.W) ? 1 : 0) - (IsDown(Key.S) ? 1 : 0), Input.IsKeyPressed(Key.Shift), delta);
         if (ClockStopped) return;
         TurnManually(delta);
-        if (DirectionOf(Hold) is { } want) SlewNose(want, delta);
-        if (CameraFollow) LookAt(Nose);
+        if (DirectionOf(Helm.Hold) is { } want) Helm.Slew(want, delta);
+        if (CameraFollow) LookAt(Helm.Nose);
     }
 
     public void SetHold(ViewHold hold)
     {
         if (V?.Docked == true) { Message = DockedNotice; return; }
-        Hold = hold;
-        Message = "姿勢保持: " + HoldName;
+        Helm.Hold = hold;
+        Message = "姿勢保持: " + Helm.NameOf(hold);
     }
 
     void ToggleCameraFollow()
@@ -125,44 +103,34 @@ public partial class Main
         Message = CameraFollow ? "カメラを機首に固定" : "カメラ自由";
     }
 
-    void UpdateThrottle(double delta)
-    {
-        var dir = (IsDown(Key.W) ? 1 : 0) - (IsDown(Key.S) ? 1 : 0);
-        if (dir != 0) Throttle = Math.Clamp(Throttle + dir * (Input.IsKeyPressed(Key.Shift) ? 0.06 : 0.6) * delta, 0, 1);
-    }
-
     void ToggleEngine()
     {
-        EngineOn = !EngineOn;
-        Message = EngineOn ? (Throttle > 0 ? "エンジン点火" : "スロットルが0%") : "エンジン停止";
+        Helm.ToggleEngine();
+        Message = Helm.EngineOn ? (Helm.Throttle > 0 ? "エンジン点火" : "スロットルが0%") : "エンジン停止";
     }
 
     void CutEngine(string message)
     {
-        if (!EngineOn) return;
-        EngineOn = false;
-        Message = message;
+        if (Helm.CutEngine()) Message = message;
     }
 
     void ThrottleKeys(Key key)
     {
         if (key == Key.E) ToggleEngine();
-        if (key == Key.O) Throttle = 1;
-        if (key == Key.L) Throttle = 0;
+        if (key == Key.O) Helm.SetThrottle(1);
+        if (key == Key.L) Helm.SetThrottle(0);
     }
 
     Vec3d EngineCommand()
     {
-        if (EngineOn && V!.Fuel <= 0) CutEngine("燃料切れ");
-        Firing = EngineOn && Throttle > 0;
-        return Firing ? Nose * Throttle : Vec3d.Zero;
+        if (Helm.EngineOn && V!.Fuel <= 0) CutEngine("燃料切れ");
+        return Helm.Thrust();
     }
 
     /// <summary>Engine acceleration at the current throttle, in the units of the current layer.</summary>
     public double EngineAcceleration =>
-        Throttle * (V!.Phase == Phase.Sublight ? Tuning.SublightThrust : Tuning.MaxThrust);
+        Helm.Throttle * (V!.Phase == Phase.Sublight ? Tuning.SublightThrust : Tuning.MaxThrust);
 
-    /// <summary>Time rate a burn runs at, so the real-time estimate matches what will happen.</summary>
     /// <summary>Days per second under power. A tight orbit gets a minute a lap, or the nose can't keep up with it.</summary>
     public double BurnTimeRate
     {
@@ -175,18 +143,4 @@ public partial class Main
             return Math.Min(Math.Min(BurnRate, Rates[SubRateIndex]), lap / 60);
         }
     }
-
-    public string HoldName => Hold switch
-    {
-        ViewHold.Star => "恒星",
-        ViewHold.Prograde => "順行",
-        ViewHold.Retrograde => "逆行",
-        ViewHold.RadialOut => "外",
-        ViewHold.RadialIn => "内",
-        ViewHold.Normal => "法線",
-        ViewHold.AntiNormal => "反法線",
-        ViewHold.Node => "ノード",
-        ViewHold.Target => "目的地",
-        _ => "なし",
-    };
 }

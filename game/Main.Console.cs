@@ -81,13 +81,13 @@ public partial class Main
                 list.Add(("航行", new Command[] { new(Key.J, "J", "発進計画"), new(Key.Tab, "Tab", OrbitSky ? "軌道図" : "空") }));
                 return list;
             }
-            list.Add(("操船", ShipCommands(EngineOn, this)));
+            list.Add(("操船", ShipCommands(Helm.EngineOn, this)));
             list.Add(("機首", NoseCommands));
             list.Add(("港", new Command[] { new(Key.X, "X", "接近", st != null, Hold: true), new(Key.Z, "Z", "相対0", st != null, Hold: true), new(Key.U, "U", "入港", v.CanDock) }));
             list.Add(("航行", new Command[] { new(Key.J, "J", "FTL発進"), new(Key.Tab, "Tab", OrbitSky ? "軌道図" : "空") }));
             return list;
         }
-        list.Add(("操船", ShipCommands(EngineOn, this)));
+        list.Add(("操船", ShipCommands(Helm.EngineOn, this)));
         list.Add(("機首", NoseCommands));
         list.AddRange(RateGroup(Rates, RateIndex));
         list.Add(("待機", new Command[] { new(Key.Space, "Space", Paused ? "再開" : "停止") }));
@@ -125,7 +125,7 @@ public partial class Main
                 : (Key.U, "港に停泊中。時機を選んで出港する");
         var st = v.LocalStation;
         if (v.Goal == null) return (Key.J, "この星系に港はない。発進して次へ");
-        if (EngineOn && NextNode != null)
+        if (Helm.EngineOn && NextNode != null)
             return v.AutoBurn ? (null, "自動噴射中。終わると自動で止まる")
                 : NodeOvershot ? (Key.E, "ノードを過ぎた。E で止める")
                 : (Key.E, "ノード噴射中。残り Δv が 0 に近づいたら E で止める");
