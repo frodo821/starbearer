@@ -301,6 +301,29 @@ public class SimTests
     }
 
     [Fact]
+    public void ANodeIsDoneWhenThePilotStopsCloseToIt()
+    {
+        var (v, node, _, along, _) = NodeHere(0.01);
+        var plan = Sublight.Predict(v.Primary, null, v.SubPosition, v.SubVelocity, v.AbsoluteTime, v.Nodes, 1);
+        var burn = new NodeBurn();
+        void Fly(double dv)
+        {
+            burn.Prepare(v, node, plan);
+            v.AdvanceSublight(dv / Tuning.SublightThrust, along);
+            burn.Measure(v, node, along * dv);
+        }
+        Fly(0.004);
+        Assert.Equal(NodeBurn.Ending.Short, burn.Stop(v));   // stopped short: the node stays
+        Assert.Single(v.Nodes);
+        Fly(0.0055);
+        Assert.False(burn.Overshot);
+        Fly(0.001);
+        Assert.True(burn.Overshot);
+        Assert.Equal(NodeBurn.Ending.Done, burn.Stop(v));
+        Assert.Empty(v.Nodes);
+    }
+
+    [Fact]
     public void CoastingDoesNotChangeWhatIsLeftOfANode()
     {
         // The node sits half an orbit ahead, so its axes differ from the ship's current ones.
