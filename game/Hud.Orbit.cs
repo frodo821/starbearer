@@ -7,9 +7,9 @@ using static Starbearer.Palette;
 
 namespace Starbearer;
 
+/// <summary>The orbit chart: paths, stages, nodes, bodies and the station, drawn around the ship's primary.</summary>
 public partial class Hud
 {
-
     static readonly Color[] StageColors =
     {
         new(0.5f, 0.8f, 1f, 0.9f),      // coasting before any burn
@@ -67,109 +67,6 @@ public partial class Hud
         for (int i = 1; i < leg.DrawnCount; i++) if (leg.Track[i].Time >= now) return i;
         return leg.DrawnCount;
     }
-
-    public void OrbitTap(Vector2 at)
-    {
-        var v = Game.V!;
-        if (Game.HandlesOpen && Game.Selected is { } open && DeleteButton(open) is { } del && del.DistanceTo(at) < 14)
-        {
-            Game.SelectNodeQuietly(open);
-            Game.DeleteNode();
-            return;
-        }
-        foreach (var n in v.Nodes)
-            if (NodePoint(n) is { } np && np.DistanceTo(at) < 14) { Game.SelectNode(n); return; }
-        // An apsis marker puts a node right on it.
-        if (ApsisAt(at) is { } apsis) { Game.AddNode(apsis); return; }
-        // A tap on a body targets it; on the target again, lets it go.
-        if (OrbiterAt(at) is { } picked) { Game.SetTarget(picked == v.Goal ? null : picked); return; }
-        if (Game.SubForecast is { } fc && EarliestNear(fc, at, 14) is { } time) { Game.AddNode(time); return; }
-        Game.HandlesOpen = false;
-    }
-
-    /// <summary>The time on the path nearest a screen point, on the first pass that comes within reach:
-    /// where the path overlaps itself, a tap means the soonest one.</summary>
-    double? EarliestNear(OrbitForecast fc, Vector2 at, float reach)
-    {
-        double? time = null;
-        var closest = reach;
-        foreach (var (point, when) in PathAhead(fc))
-        {
-            var d = point.DistanceTo(at);
-            if (d < closest) { closest = d; time = when; }
-            else if (time != null && d >= reach) break;
-        }
-        return time;
-    }
-
-    /// <summary>Screen position of the node's delete button, placed clear of the handles.</summary>
-    public Vector2? DeleteButton(Maneuver n) => NodePoint(n) is { } np ? np + new Vector2(0, -HandleReach - 26) : null;
-
-    const float HandleReach = 56f, DvPerPixel = 0.0005f;
-    Maneuver? _heldNode;
-    Vector2 _heldAxis;
-    int _heldKind;   // 0 prograde, 1 radial, 2 normal, 3 slides along the path
-
-    public bool OrbitHolding => _heldNode != null;
-
-    (Vector2 Dir, Color Color, string Label, int Kind, float Sign, float Reach)[] Handles(Maneuver n)
-    {
-        if (StageOf(n) is not { } s) return Array.Empty<(Vector2, Color, string, int, float, float)>();
-        var (t, r, nor) = Sublight.Frame(s.Position, s.Velocity);
-        var map = LegMap(Game.SubForecast!.LegOf(n)!);
-        var o = map(s.Position);
-        var unit = 1.0 / Game.Chart.PixelsPerAu;
-        var list = new List<(Vector2, Color, string, int, float, float)>();
-        void Add(Vec3d axis, Color c, string label, int kind, float sign)
-        {
-            var screen = map(s.Position + axis * unit) - o;
-            if (screen.Length() < 0.2f) return;                  // pointing at the camera: unusable
-            list.Add((screen.Normalized(), c, label, kind, sign, HandleReach * Mathf.Clamp(screen.Length(), 0.45f, 1f)));
-        }
-        var green = new Color(0.45f, 1f, 0.6f);
-        var blue = new Color(0.45f, 0.8f, 1f);
-        var magenta = new Color(1f, 0.5f, 0.9f);
-        Add(t, green, "順行", 0, 1); Add(-t, green, "逆行", 0, -1);
-        Add(r, blue, "外", 1, 1); Add(-r, blue, "内", 1, -1);
-        Add(nor, magenta, "法線", 2, 1); Add(-nor, magenta, "反法線", 2, -1);
-        return list.ToArray();
-    }
-
-    public void OrbitPress(Vector2 at)
-    {
-        if (!Game.HandlesOpen || Game.Selected is not { } n || NodePoint(n) is not { } np) return;
-        foreach (var h in Handles(n))
-            if ((np + h.Dir * h.Reach).DistanceTo(at) < 14)
-            {
-                _heldNode = n; _heldAxis = h.Dir * h.Sign; _heldKind = h.Kind;
-                return;
-            }
-        if (np.DistanceTo(at) < 14) { _heldNode = n; _heldKind = 3; }
-    }
-
-    public void OrbitHoldMove(InputEventMouseMotion mm)
-    {
-        var n = _heldNode!;
-        if (_heldKind == 3)
-        {
-            var fc = Game.SubForecast;
-            if (fc == null) return;
-            n.Time = PathAhead(fc).OrderBy(t => t.At.DistanceSquaredTo(mm.Position)).First().Time;
-        }
-        else
-        {
-            var scale = DvPerPixel * (Input.IsKeyPressed(Key.Shift) ? 0.1f : 1f);
-            var change = mm.Relative.Dot(_heldAxis) * scale;
-            if (_heldKind == 0) n.Prograde += change;
-            else if (_heldKind == 1) n.Radial += change;
-            else n.Normal += change;
-        }
-        Game.NodeEdited();
-    }
-
-    public void OrbitRelease() => _heldNode = null;
-    public Vector2 HandleTip(int i) { var h = Handles(Game.Selected!)[i]; return NodePoint(Game.Selected!)!.Value + h.Dir * h.Reach; }
-    public int HandleCount => Game.Selected != null ? Handles(Game.Selected).Length : 0;
 
     void Chevron(Vector2 tip, Vector2 way, Color c, float size)
     {
@@ -519,89 +416,5 @@ public partial class Hud
         var way = (heading - me).Normalized();
         DrawLine(me, me + way * 24, Ink, 2f, true);
         Chevron(me + way * 24, way, Ink, 8);
-    }
-
-    void DrawOrbitPanel(float x, float y)
-    {
-        var v = Game.V!;
-        var el = Sublight.OrbitOf(v.Primary.Mu, v.SubPosition, v.SubVelocity);
-        var (pe, ap) = Sublight.NextApsides(v.Primary.Mu, v.SubPosition, v.SubVelocity, v.AbsoluteTime);
-        void Line(string s, Color c) { Text(new Vector2(x, y), s, c, 15); y += 20; }
-        string When(Apsis? a) => a is { } x ? $"  {a.Value.Time - v.AbsoluteTime:F1}日後" : "";
-        Line($"Pe {el.Periapsis:F3} AU" + When(pe), Ink);
-        Line(el.Bound ? $"Ap {el.Apoapsis:F3} AU" + When(ap) : "Ap なし  脱出軌道", el.Bound ? Ink : Warn);
-        Line($"{(el.Bound ? $"周期 {el.Period:F1} 日   " : "")}{(Game.CurrentRate == 0 ? "一時停止 (Space)" : $"時間 {Instruments.Rate(Game.CurrentRate)}")}", Dim);
-        Line($"亜光速 Δv 残 {v.SublightDeltaV:F2}", Ink);
-        var st = v.LocalStation;
-        var goal = v.Goal;
-        var watched = Game.SubForecast?.Watched;
-        Line($"主天体 {v.Primary.Name}", Dim);
-        if (goal != null)
-        {
-            var (goalAt, goalSpeed) = v.RelativeNow(goal);
-            var d = (goalAt - v.SubPosition).Length;
-            var rel = (goalSpeed - v.SubVelocity).Length;
-            var dockable = goal is Station && v.CanDock;
-            Line($"目標 {Main.NameOf(goal)}  {d:F4} AU   相対 {rel:F4}" + (dockable ? "   入港可 U" : ""), dockable ? Good : goal is Station && d < Tuning.DockRange * 10 ? Warn : Ink);
-        }
-        if (watched != null)
-        {
-            var name = Main.NameOf(watched);
-            if (watched != goal) Line($"基準 {name} ({Main.NameOf(goal)} への経由)", Dim);
-            var incl = Sublight.RelativeInclination(watched, v.SubPosition, v.SubVelocity);
-            var last = Game.SubForecast?.Stages.LastOrDefault();   // the plan within this star's reach
-            var planned = last is { Node: not null } ls ? Sublight.RelativeInclination(watched, ls.Position, ls.Velocity + Sublight.Impulse(ls.Position, ls.Velocity, ls.Node)) : incl;
-            Line($"相対傾斜 {incl:F1}°" + (last is { Node: not null } ? $" → {planned:F1}°" : ""), planned < 1.5 ? Good : Warn);
-            if (Game.SubForecast?.Closest is { } a)
-                Line($"最接近 {a.Distance:F3} AU  {a.Time - v.AbsoluteTime:F1}日後  相対 {a.RelativeSpeed:F2}", a.Distance < 0.05 ? Good : Warn);
-            if (Game.SubForecast?.Crossing is { } x2)
-                Line($"交差時の{name} {Math.Abs(x2.LeadDegrees):F0}° {(x2.LeadDegrees >= 0 ? "先" : "後ろ")}  {x2.Time - v.AbsoluteTime:F1}日後", Math.Abs(x2.LeadDegrees) < 8 ? Good : Warn);
-            else Line($"{name}の軌道半径に届いていない", Warn);
-        }
-        else if (goal != null && v.Waypoint == null) Line(goal is Center c && c.Key == v.Primary.Key ? "目標を周回中" : "目標はこの天体の外", Dim);
-        if (st != null && goal is Station)
-            Line($"港 半径 {st.Radius:F2} AU   入港 {Tuning.DockRange:F3} AU / 相対 {Tuning.DockRelativeSpeed:F3}", Dim);
-        if (Game.SubForecast?.Impact == true) Line("天体に衝突する軌道", Bad);
-        y += 4;
-        var fc = Game.SubForecast;
-        var live = fc?.AllStages.Where(s => v.Nodes.Contains(s.Node)).ToList() ?? new List<Stage>();
-        if (Game.SubCurrent is { } now && (live.Count > 0 || Game.Helm.EngineOn))
-        {
-            var e3 = now.After;
-            var stop = e3.Bound ? $"近 {e3.Periapsis:F2} 遠 {e3.Apoapsis:F2}" : "脱出軌道";
-            Line($"今止めると {stop}" + (now.Closest is { } ca ? $"  {Main.NameOf(now.Watched)}まで {ca.Distance:F3}" : ""), Color.Color8(255, 255, 255));
-        }
-        if (Game.PlanDeviation() is { } dev)
-            Line($"計画固定中  ずれ {dev:F3} AU   「再計画」で作り直す", dev > 0.05 ? Warn : Good);
-        if (live.Count > 0)
-        {
-            var total = live.Sum(s => s.Node.DeltaV);
-            Line($"計画 {live.Count} 段  Δv {total:F3} / 残 {v.SublightDeltaV:F2}", total > v.SublightDeltaV ? Bad : Ink);
-            for (int i = 0; i < Math.Min(live.Count, 5); i++)
-            {
-                var s = live[i];
-                var left = s.Node.Time - v.AbsoluteTime;
-                var when = left > 0 ? $"{left:F1}日後" : "点火!";
-                var orbit = s.After.Bound ? $"{s.After.Periapsis:F2}-{s.After.Apoapsis:F2}" : "脱出";
-                Line($"{i + 1}. {when}  Δv {s.Node.DeltaV:F3}  → {orbit}", s.Node == Game.Selected ? Warn : left <= 0.3 ? Warn : Ink);
-            }
-        }
-        if (Game.NextNode is { } burn)
-        {
-            Line($"ノード残 Δv {burn.DeltaV:F4}   スロットル {Game.Helm.Throttle * 100:F0}%" + (Game.NodeOvershot ? "  過ぎた" : ""), Game.NodeOvershot ? Warn : Ink);
-            if (Game.EngineAcceleration > 0)
-            {
-                var days = burn.DeltaV / Game.EngineAcceleration;
-                Line($"噴射 {days:F2} 日 (実時間 {days / Game.BurnTimeRate:F1} 秒)", days > 3 ? Warn : Good);
-                var start = burn.Time - days / 2 - v.AbsoluteTime;
-                Line(start > 0 ? $"点火推奨 {start:F2} 日後" : "点火推奨 今", start < 0.3 ? Warn : Ink);
-            }
-            else Line("スロットル0%: 噴射できない (W で上げる)", Warn);
-            if (Game.NoseOffNode is { } off)
-                Line($"機首と噴射方向のずれ {off:F1}°" + (off > 5 ? "  「噴」をタップ" : ""), off > 5 ? Warn : Good);
-        }
-        if (Game.Selected is { } n && v.Nodes.Contains(n)) Line($"順 {n.Prograde:+0.000;-0.000} 径 {n.Radial:+0.000;-0.000} 法 {n.Normal:+0.000;-0.000}", Warn);
-        y += 4;
-        Line($"計算機 {(Game.Owns(Modules.Transfer) ? "搭載" : "なし")}   自動噴射 {(Game.Owns(Modules.AutoBurn) ? (v.AutoBurn ? "ON" : "OFF") : "なし")}", Dim);
     }
 }

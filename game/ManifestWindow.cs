@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using Godot;
 using Starbearer.Sim;
+using static Starbearer.Ui;
 
 namespace Starbearer;
 
@@ -14,7 +15,7 @@ public partial class ManifestWindow : PanelContainer
     readonly Main _game;
     readonly VBoxContainer _root = new();
     static readonly Color Good = Palette.Good, Warn = Palette.Warn;
-    static readonly Color Dim = new(0.6f, 0.68f, 0.8f);
+    static readonly Color Dim = Ui.PanelDim;
     double _sinceBuilt;
 
     /// <summary>Set at each Rebuild: the buttons that steer for each job's destination, in hold order.</summary>
@@ -30,40 +31,9 @@ public partial class ManifestWindow : PanelContainer
         OffsetRight = -16; OffsetTop = 262;
         GrowHorizontal = GrowDirection.Begin;
         GrowVertical = GrowDirection.End;
-        AddThemeStyleboxOverride("panel", new StyleBoxFlat
-        {
-            BgColor = new Color(0.02f, 0.035f, 0.07f, 0.93f), BorderColor = new Color(Good, 0.6f),
-            BorderWidthLeft = 2, BorderWidthRight = 2, BorderWidthTop = 2, BorderWidthBottom = 2,
-            ContentMarginLeft = 16, ContentMarginRight = 16, ContentMarginTop = 12, ContentMarginBottom = 12,
-        });
+        AddThemeStyleboxOverride("panel", Ui.Frame(0.93f, 16, 12));
         _root.AddThemeConstantOverride("separation", 6);
         AddChild(_root);
-    }
-
-    static Label Text(string s, int size = 14, Color? c = null)
-    {
-        var l = new Label { Text = s };
-        l.AddThemeFontSizeOverride("font_size", size);
-        if (c is { } col) l.AddThemeColorOverride("font_color", col);
-        return l;
-    }
-
-    static Button Press(string s, Action act)
-    {
-        var b = new Button { Text = s, FocusMode = FocusModeEnum.None };
-        b.AddThemeFontSizeOverride("font_size", 13);
-        b.Pressed += act;
-        return b;
-    }
-
-    static HBoxContainer Row(Control text, params Control[] tail)
-    {
-        var row = new HBoxContainer();
-        row.AddThemeConstantOverride("separation", 8);
-        text.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-        row.AddChild(text);
-        foreach (var c in tail) { c.SizeFlagsVertical = SizeFlags.ShrinkCenter; row.AddChild(c); }
-        return row;
     }
 
     public override void _Process(double delta)
@@ -77,11 +47,11 @@ public partial class ManifestWindow : PanelContainer
     public void Rebuild()
     {
         _sinceBuilt = 0;
-        foreach (var child in _root.GetChildren()) { _root.RemoveChild(child); child.QueueFree(); }
+        Ui.Clear(_root);
         var g = _game.G!; var v = _game.V!; var s = _game.Save!;
         var ship = s.Ship;
         var bays = new CargoBays(v.Class, ship.Pressurized);
-        _root.AddChild(Row(Text("積荷と仕事", 18, Good), Press("閉じる  I", _game.ToggleManifest)));
+        _root.AddChild(Row(Text("積荷と仕事", 18, Good), Press("閉じる  I", _game.ToggleManifest, size: 13)));
         _root.AddChild(Text($"{v.Class.Name}   容積 {Missions.Cubic(Missions.VolumeUsed(v.Hold))} / {Missions.Cubic(v.Class.Capacity)}   積荷質量 {v.CargoMass:F1}   資金 {s.Credits:F0}", 14));
         // Room by kind of bay, as the board's refusals count it.
         var kinds = new[] { CargoKind.Container, CargoKind.Bulk, CargoKind.Fluid, CargoKind.PressurizedFluid }
@@ -111,8 +81,7 @@ public partial class ManifestWindow : PanelContainer
             info.AddChild(Text($"{Cargos.Name(m.Cargo.Kind)}  {Missions.Cubic(m.Cargo.Volume)}  質量 {m.Cargo.Mass:F1}   あと {far:F1} ly", 13, Dim));
             var hot = v.Heat > m.Cargo.HeatTolerance;
             info.AddChild(Text($"報酬 {c.Payout:F0} / {m.Pay:F0}   健全度 {c.Integrity:P0}   耐熱 {m.Cargo.HeatTolerance:F2}" + (hot ? "  熱で傷んでいる" : ""), 13, hot || c.Integrity < 0.999 ? Warn : Dim));
-            var course = Press(target == v.TargetStar ? "針路" : "針路に", () => _game.SetCourse(target));
-            course.Disabled = target == v.TargetStar;
+            var course = Press(target == v.TargetStar ? "針路" : "針路に", () => _game.SetCourse(target), target != v.TargetStar, size: 13);
             jobs.AddChild(Row(info, course));
             return course;
         }).ToArray();

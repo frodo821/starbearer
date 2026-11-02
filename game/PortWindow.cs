@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Godot;
 using Starbearer.Sim;
+using static Starbearer.Ui;
 
 namespace Starbearer;
 
@@ -12,8 +13,7 @@ public partial class PortWindow : PanelContainer
     readonly Main _game;
     readonly VBoxContainer _root = new();
     static readonly Color Good = Palette.Good, Warn = Palette.Warn;
-    /// <summary>Lighter than the HUD's, for small text on the opaque panel.</summary>
-    static readonly Color Dim = new(0.6f, 0.68f, 0.8f);
+    static readonly Color Dim = Ui.PanelDim;
 
     /// <summary>Set at each Rebuild: the buttons taking the offers, in board order.</summary>
     public Button[] TakeButtons { get; private set; } = Array.Empty<Button>();
@@ -26,30 +26,9 @@ public partial class PortWindow : PanelContainer
         SetAnchorsAndOffsetsPreset(LayoutPreset.Center, LayoutPresetMode.Minsize);
         GrowHorizontal = GrowDirection.Both;
         GrowVertical = GrowDirection.Both;
-        AddThemeStyleboxOverride("panel", new StyleBoxFlat
-        {
-            BgColor = new Color(0.02f, 0.035f, 0.07f, 0.97f), BorderColor = new Color(Good, 0.6f),
-            BorderWidthLeft = 2, BorderWidthRight = 2, BorderWidthTop = 2, BorderWidthBottom = 2,
-            ContentMarginLeft = 22, ContentMarginRight = 22, ContentMarginTop = 16, ContentMarginBottom = 16,
-        });
+        AddThemeStyleboxOverride("panel", Ui.Frame(0.97f, 22, 16));
         _root.AddThemeConstantOverride("separation", 10);
         AddChild(_root);
-    }
-
-    static Label Text(string s, int size = 15, Color? c = null)
-    {
-        var l = new Label { Text = s };
-        l.AddThemeFontSizeOverride("font_size", size);
-        if (c is { } col) l.AddThemeColorOverride("font_color", col);
-        return l;
-    }
-
-    /// <summary>The keyboard stays with the game, so Enter and the number keys work with the window open.</summary>
-    static Button Press(string s, Action act, bool enabled = true, string key = "")
-    {
-        var b = new Button { Text = key == "" ? s : $"{s}  [{key}]", FocusMode = FocusModeEnum.None, Disabled = !enabled };
-        b.Pressed += act;
-        return b;
     }
 
     static VBoxContainer Column(float width)
@@ -72,19 +51,9 @@ public partial class PortWindow : PanelContainer
         return scroll;
     }
 
-    static HBoxContainer Row(Control text, params Control[] tail)
-    {
-        var row = new HBoxContainer();
-        row.AddThemeConstantOverride("separation", 8);
-        text.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-        row.AddChild(text);
-        foreach (var c in tail) { c.SizeFlagsVertical = SizeFlags.ShrinkCenter; row.AddChild(c); }
-        return row;
-    }
-
     public void Rebuild()
     {
-        foreach (var child in _root.GetChildren()) { _root.RemoveChild(child); child.QueueFree(); }
+        Ui.Clear(_root);
         var s = _game.Save!;
         var g = _game.G!;
         var star = _game.V!.SystemStar;
