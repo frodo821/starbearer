@@ -9,26 +9,17 @@ namespace Starbearer;
 public partial class Hud
 {
 
-    Vector2 MapPoint(Vec3d p)
-    {
-        p -= Game.MapCenter;   // everything turns and zooms around this point
-        var cy = Mathf.Cos(Game.MapYaw); var sy = Mathf.Sin(Game.MapYaw);
-        var cp = Mathf.Cos(Game.MapPitch); var sp = Mathf.Sin(Game.MapPitch);
-        var x = (float)p.X * cy - (float)p.Z * sy;
-        var z = (float)p.X * sy + (float)p.Z * cy;
-        var y = (float)p.Y * cp - z * sp;
-        return Size / 2 + new Vector2(x, -y) * Game.MapZoom;
-    }
+    Vector2 MapPoint(Vec3d p) => Game.Chart.Project(p, Size);
 
     /// <summary>Stars, wells and the FTL path. Shared by the galaxy map and the zoomed-out orbit view.</summary>
     void DrawGalaxyLayer(int here = -1)
     {
         var g = Game.G!; var v = Game.V!;
-        foreach (var n in Game.MapZoom < 200 ? g.Nebulae : Array.Empty<Nebula>())
+        foreach (var n in Game.Chart.Zoom < 200 ? g.Nebulae : Array.Empty<Nebula>())
         {
             var c = MapPoint(n.Center);
             for (int i = 4; i >= 1; i--)
-                DrawCircle(c, (float)n.Radius * Game.MapZoom * i * 0.45f, new Color(0.35f, 0.5f, 0.8f, 0.018f * (float)n.Density));
+                DrawCircle(c, (float)n.Radius * Game.Chart.Zoom * i * 0.45f, new Color(0.35f, 0.5f, 0.8f, 0.018f * (float)n.Density));
         }
         for (int i = 0; i < g.Stars.Length; i++)
         {
@@ -38,7 +29,7 @@ public partial class Hud
             if (i == here) continue;   // the orbit view draws its own star, at its true place
             DrawCircle(p, 2.5f + (float)s.Mass, col);
             // Chart ring: how far this star may be from where it is drawn.
-            var err = (float)(Tuning.ChartErrorLy * Voyage.ChartFactor(v.ClosestApproach[i]) * Game.MapZoom);
+            var err = (float)(Tuning.ChartErrorLy * Voyage.ChartFactor(v.ClosestApproach[i]) * Game.Chart.Zoom);
             if (err > 2) DrawArc(p, err * 2, 0, Mathf.Tau, 20, new Color(1f, 0.6f, 0.3f, 0.45f), 1f, true);
             var port = g.Ports.Contains(i);
             var depot = g.Depots.Contains(i);
@@ -47,7 +38,7 @@ public partial class Hud
         }
         var fc = Game.Forecast;
         // Up close, in orbit, the FTL line would only cross the orbit it starts from.
-        var fade = here < 0 ? 1 : Mathf.Clamp(1.5f - Game.MapZoom / 120, 0, 1);
+        var fade = here < 0 ? 1 : Mathf.Clamp(1.5f - Game.Chart.Zoom / 120, 0, 1);
         if (fc != null && fade > 0)
         {
             Vector2? last = null;
@@ -66,7 +57,7 @@ public partial class Hud
     /// <summary>Close enough to a system, its station's orbit comes into view.</summary>
     void DrawStations()
     {
-        if (Game.MapZoom < 40) return;
+        if (Game.Chart.Zoom < 40) return;
         var g = Game.G!; var v = Game.V!;
         foreach (var star in g.Ports.Concat(g.Depots))
         {
@@ -105,7 +96,7 @@ public partial class Hud
         DrawStations();
         DrawDescent();
         var me = MapPoint(v.EstimatedPosition);
-        DrawArc(me, Mathf.Max(4f, (float)v.NavSigma * Game.MapZoom * 2), 0, Mathf.Tau, 20, Ink, 1.5f, true);
+        DrawArc(me, Mathf.Max(4f, (float)v.NavSigma * Game.Chart.Zoom * 2), 0, Mathf.Tau, 20, Ink, 1.5f, true);
         DrawCircle(me, 2.5f, Ink);
         var c0 = Size / 2;
         DrawLine(c0 + new Vector2(-7, 0), c0 + new Vector2(7, 0), Dim, 1);
@@ -120,15 +111,15 @@ public partial class Hud
     public void MapMouse(InputEventMouseButton mb)
     {
         if (mb.ButtonIndex is MouseButton.Right or MouseButton.Left) _mapDragging = mb.Pressed;
-        if (mb.ButtonIndex == MouseButton.WheelUp && mb.Pressed) ZoomMap(1.1f);
-        if (mb.ButtonIndex == MouseButton.WheelDown && mb.Pressed) ZoomMap(1 / 1.1f);
+        if (mb.ButtonIndex == MouseButton.WheelUp && mb.Pressed) Game.Chart.ZoomBy(1.1f);
+        if (mb.ButtonIndex == MouseButton.WheelDown && mb.Pressed) Game.Chart.ZoomBy(1 / 1.1f);
         if (mb.ButtonIndex != MouseButton.Left) return;
         if (mb.Pressed)
         {
             _mapPress = mb.Position; _mapMoved = false;
             if (mb.DoubleClick && PickStar(mb.Position) is int star)
             {
-                Game.MapCenter = Game.V!.ChartPositions[star];
+                Game.Chart.Center = Game.V!.ChartPositions[star];
                 if (_aimBeforeTap is { } aim) Game.SetPlanDir(aim);   // the first tap only meant to select
                 _mapMoved = true;
             }
@@ -152,34 +143,11 @@ public partial class Hud
         return MapPoint(v.ChartPositions[pick]).DistanceTo(at) < 24 ? pick : null;
     }
 
-    /// <summary>Slides the pivot in the plane of the screen, so the chart follows the fingers.</summary>
-    public void PanMap(Vector2 d)
-    {
-        Game.StopGlide();
-        var cy = Mathf.Cos(Game.MapYaw); var sy = Mathf.Sin(Game.MapYaw);
-        var cp = Mathf.Cos(Game.MapPitch); var sp = Mathf.Sin(Game.MapPitch);
-        var right = new Vec3d(cy, 0, -sy);
-        var up = new Vec3d(-sy * sp, cp, -cy * sp);
-        Game.MapCenter += (right * d.X - up * d.Y) * (1.0 / Game.MapZoom);
-    }
-
-    public void ZoomMap(float factor)
-    {
-        Game.StopGlide();
-        Game.MapZoom = Mathf.Clamp(Game.MapZoom * factor, 4, 40000);
-    }
-
-    public void RotateMap(Vector2 d)
-    {
-        Game.MapYaw += d.X * 0.005f;
-        Game.MapPitch = Mathf.Clamp(Game.MapPitch + d.Y * 0.005f, -1.55f, 1.55f);
-    }
-
     public void MapDrag(InputEventMouseMotion mm)
     {
-        if (Input.IsMouseButtonPressed(MouseButton.Middle)) { PanMap(-mm.Relative); return; }
+        if (Input.IsMouseButtonPressed(MouseButton.Middle)) { Game.Chart.Pan(-mm.Relative); return; }
         if (!_mapDragging) return;
         if (mm.Position.DistanceTo(_mapPress) > 5) _mapMoved = true;
-        RotateMap(mm.Relative);
+        Game.Chart.Rotate(mm.Relative);
     }
 }

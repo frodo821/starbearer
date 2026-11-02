@@ -285,12 +285,12 @@ public partial class Autotest : Node
         Do(() =>
         {
             Check("the Ap node can be deleted", _g.V!.Nodes.Count == 0);
-            _zoom = _g.MapYaw;
+            _zoom = _g.Chart.Yaw;
             Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Position = new Vector2(1300, 100), Pressed = true });
             Input.ParseInputEvent(new InputEventMouseMotion { Position = new Vector2(1360, 120), Relative = new Vector2(60, 20) });
             Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Position = new Vector2(1360, 120), Pressed = false });
         });
-        Do(() => { Check("dragging empty space rotates the orbit view", _g.MapYaw != _zoom); Shot("02d_rotated"); Press(Key.J); });
+        Do(() => { Check("dragging empty space rotates the orbit view", _g.Chart.Yaw != _zoom); Shot("02d_rotated"); Press(Key.J); });
         Do(() =>
         {
             Check("J opens the jump plan", _g.Screen == Screen.Plan);
@@ -319,14 +319,14 @@ public partial class Autotest : Node
         Do(() =>
         {
             Check("tab opens chart", _g.MapOpen);
-            _zoom = _g.MapZoom; _center = _g.MapCenter;
+            _zoom = _g.Chart.Zoom; _center = _g.Chart.Center;
             Input.ParseInputEvent(new InputEventMagnifyGesture { Factor = 1.3f, Position = new Vector2(800, 450) });
             Pan(20, 10);
         });
         Do(() =>
         {
-            Check("pinch zooms the chart", _g.MapZoom > _zoom);
-            Check("pan moves the chart pivot", (_g.MapCenter - _center).Length > 0.1);
+            Check("pinch zooms the chart", _g.Chart.Zoom > _zoom);
+            Check("pan moves the chart pivot", (_g.Chart.Center - _center).Length > 0.1);
             Press(Key.Tab); Press(Key.Enter);
         });
         Do(() =>
@@ -523,12 +523,12 @@ public partial class Autotest : Node
         {
             Check("transfer computer plans a multi-stage burn", _g.V!.Nodes.Count >= 2);
             Check("no jump path shows until one is planned", _g.Forecast == null);
-            _g.MapZoom = 30;
+            _g.Chart.Zoom = 30;
         });
         Do(() =>
         {
             Shot("06e_orbit_zoomed_out");
-            _g.MapZoom = 425;
+            _g.Chart.Zoom = 425;
             Shot("06c_computer_plan");
             _count = _g.V!.Nodes.Count;
             _clock = Time.GetTicksMsec();
@@ -638,7 +638,7 @@ public partial class Autotest : Node
             var start = way * (Sublight.SystemRadius(here) * 0.9);
             var aim = _meets.Position + way.AnyPerpendicular() * (_meets.Soi * 0.4);
             v.PlaceSublightForTest(start, (aim - (here.Position + start * Sublight.Scale)).Normalized() * 0.6);
-            _g.MapZoom = 60;
+            _g.Chart.Zoom = 60;
             _g.CommandForTest(Key.Y);
         }, 30);
         Do(() =>
@@ -647,8 +647,8 @@ public partial class Autotest : Node
             Check("an escaping orbit ends where the star lets go", f.Exit != null);
             Check("the path carries on around the star it meets", f.Next?.Star == _meets!.Id && f.Beyond?.DrawnCount > 10);
             Shot("10c_disengage");
-            _g.MapCenter = _g.V!.ChartPositions[_meets!.Id];
-            _g.MapZoom = (float)(Math.Min(Size().X, Size().Y) * 0.3 / _meets.Soi);
+            _g.Chart.Center = _g.V!.ChartPositions[_meets!.Id];
+            _g.Chart.Zoom = (float)(Math.Min(Size().X, Size().Y) * 0.3 / _meets.Soi);
         }, 10);
         Do(() =>
         {

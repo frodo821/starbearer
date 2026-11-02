@@ -161,7 +161,7 @@ public partial class Main
             var primary = v.Adrift ? -2 : v.Primary.Key;
             if (_lastPrimary != -1 && primary != _lastPrimary)
             {
-                if (primary >= 0) GlideChart(PrimaryOnChart, ZoomFor(v.Primary));
+                if (primary >= 0) Chart.Glide(PrimaryOnChart, ChartView.ZoomFor(v.Primary));
                 Replan();
             }
             _lastPrimary = primary;

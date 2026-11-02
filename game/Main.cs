@@ -37,8 +37,7 @@ public partial class Main : Node3D
     public static readonly double[] Rates = Instruments.TimeScales.Select(x => x / Instruments.SecondsPerDay).ToArray();
     public double CurrentRate { get; private set; }
     public double Earned { get; private set; }
-    public float MapYaw = 0.6f, MapPitch = 1.1f, MapZoom = 11f;
-    public Vec3d MapCenter;
+    public ChartView Chart { get; } = new();
 
     // Normal space
     public int SubRateIndex = 3;
@@ -46,11 +45,8 @@ public partial class Main : Node3D
     public OrbitForecast? SubForecast { get; private set; }
     /// <summary>The ship's primary on the galaxy chart, in ly.</summary>
     public Vec3d PrimaryOnChart => V!.System.Position + V.Primary.StarPosition(V.AbsoluteTime) * Sublight.Scale;
-    Vec3d _chartBody;
 
-    float ZoomFor(Center c) => c.Parent == null ? SystemZoom : Mathf.Min(10000f, 220f / (float)(c.Edge * Sublight.Scale));
-
-    /// <summary>A planet moves under the view; the chart goes with it so the ship's orbit holds still.</summary>
+    /// <summary>Autotest only: shows the worlds of a system from a given place.</summary>
     (int Star, Vec3d At)? _viewForTest;
     public void ViewFromForTest(int star, Vec3d at) => _viewForTest = (star, at);
 
@@ -60,13 +56,6 @@ public partial class Main : Node3D
         if (_viewForTest is { Star: >= 0 } view) { _worlds.Show(G!, view.Star, view.At, v.AbsoluteTime); return; }
         var star = v.Phase == Phase.Flight ? (v.NearestWell(out var s) < double.MaxValue && s != null ? s.Id : -1) : v.SystemStar;
         _worlds.Show(G!, star, star < 0 ? Vec3d.Zero : (v.TruePosition - v.TruePositions[star]) / Sublight.Scale, v.AbsoluteTime);
-    }
-
-    void FollowPrimary()
-    {
-        var now = PrimaryOnChart;
-        if (V!.Primary.Parent != null) { MapCenter += now - _chartBody; if (_glide is { } g) _glide = g with { Center = g.Center + (now - _chartBody) }; }
-        _chartBody = now;
     }
 
     /// <summary>Where the ship goes if the engine stops now and nothing more is flown.</summary>
@@ -87,38 +76,12 @@ public partial class Main : Node3D
     public bool CameraFollow;
     public bool Firing { get; private set; }
     public bool HandlesOpen;
-    // There is one chart. The orbit view is the galaxy map looked at closely, in AU around this system.
-    /// <summary>Pixels per AU on the chart.</summary>
-    public float OrbitZoom => MapZoom * (float)Sublight.Scale;
-    const float SystemZoom = 425f, GalaxyZoom = 11f;
-    /// <summary>Where the chart is gliding to after a change of layer.</summary>
-    (Vec3d Center, float Zoom)? _glide;
-    public bool InstantChart;
-
-    /// <summary>Moves the chart to a view over a moment, so the two scales read as one map.</summary>
-    public void GlideChart(Vec3d center, float zoom)
-    {
-        if (InstantChart) { MapCenter = center; MapZoom = zoom; return; }
-        _glide = (center, zoom);
-    }
-
-    public void StopGlide() => _glide = null;
-
-    void UpdateGlide(double delta)
-    {
-        if (_glide is not { } to) return;
-        var k = 1 - Math.Exp(-5 * delta);
-        MapCenter += (to.Center - MapCenter) * k;
-        MapZoom *= Mathf.Pow(to.Zoom / MapZoom, (float)k);
-        if (Mathf.Abs(MapZoom / to.Zoom - 1) < 0.01f && (MapCenter - to.Center).Length * MapZoom < 1) { MapCenter = to.Center; MapZoom = to.Zoom; _glide = null; }
-    }
-
     void ToggleMap()
     {
         MapOpen = !MapOpen;
         if (!MapOpen) return;
         var close = V!.Phase == Phase.Flight && V.NearestWell(out _) < double.MaxValue;
-        GlideChart(V.EstimatedPosition, close ? SystemZoom / 3 : GalaxyZoom);
+        Chart.Glide(V.EstimatedPosition, close ? ChartView.SystemZoom / 3 : ChartView.GalaxyZoom);
     }
 
     /// <summary>What a descent right now would leave the ship on, in AU around the star. Null outside a well.</summary>
@@ -173,7 +136,7 @@ public partial class Main : Node3D
         _hud.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         layer.AddChild(_hud);
         var script = new Autotest(this);
-        if (script.Enabled) { InstantChart = true; AddChild(script); }
+        if (script.Enabled) { Chart.Instant = true; AddChild(script); }
     }
 
     public override void _Process(double delta)
@@ -185,7 +148,7 @@ public partial class Main : Node3D
             if (CueAge > cue.Seconds) Cue = null;
         }
         WatchState();
-        UpdateGlide(delta);
+        Chart.Update(delta);
         if (Screen is Screen.Flight or Screen.Orbit) UpdateAttitude(delta);
         Camera.Rotation = new Vector3(_pitch, _yaw, 0);
         if (V == null) { _hud.QueueRedraw(); return; }
@@ -222,7 +185,7 @@ public partial class Main : Node3D
             else if (v.Phase == Phase.Stalled) Message = "失速。FTLから脱落した。Cで再キック";
         }
 
-        if (Screen == Screen.Orbit) FollowPrimary();
+        if (Screen == Screen.Orbit) Chart.Follow(PrimaryOnChart, v.Primary.Parent != null);
         _forecastTimer -= delta;
         CollectForecast();
         if (_forecastJob == null && Screen is Screen.Plan or Screen.Flight or Screen.Orbit && (_forecastDirty || _forecastTimer <= 0))

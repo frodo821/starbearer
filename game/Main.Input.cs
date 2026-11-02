@@ -14,8 +14,8 @@ public partial class Main
         if (e is InputEventMouseButton mb)
         {
             if (mb.ButtonIndex == MouseButton.Left && mb.Pressed && _hud.CompassTap(mb.Position)) return;
-            if (mb.ButtonIndex == MouseButton.WheelUp && mb.Pressed) _hud.ZoomOrbit(1.1f);
-            if (mb.ButtonIndex == MouseButton.WheelDown && mb.Pressed) _hud.ZoomOrbit(1 / 1.1f);
+            if (mb.ButtonIndex == MouseButton.WheelUp && mb.Pressed) Chart.ZoomBy(1.1f);
+            if (mb.ButtonIndex == MouseButton.WheelDown && mb.Pressed) Chart.ZoomBy(1 / 1.1f);
             if (mb.ButtonIndex == MouseButton.Left)
             {
                 _looking = mb.Pressed;
@@ -27,10 +27,10 @@ public partial class Main
         {
             if (mm.Position.DistanceTo(_pressAt) > 5) _dragged = true;
             if (_hud.OrbitHolding) _hud.OrbitHoldMove(mm);
-            else _hud.RotateOrbit(mm.Relative);
+            else Chart.Rotate(mm.Relative);
         }
-        if (e is InputEventPanGesture pan) _hud.PanOrbit(pan.Delta * 6f);
-        if (e is InputEventMagnifyGesture pinch) _hud.ZoomOrbit(pinch.Factor);
+        if (e is InputEventPanGesture pan) Chart.Pan(pan.Delta * 6f);
+        if (e is InputEventMagnifyGesture pinch) Chart.ZoomBy(pinch.Factor);
     }
 
     public override void _UnhandledInput(InputEvent e)
@@ -73,18 +73,18 @@ public partial class Main
         // macOS trackpads report two-finger scrolling and pinching as gestures, not as a wheel.
         if (e is InputEventPanGesture pan && V != null && Screen != Screen.Orbit)
         {
-            if (MapOpen) _hud.PanMap(pan.Delta * 6f);
+            if (MapOpen) Chart.Pan(pan.Delta * 6f);
             else Look(pan.Delta * 0.03f);
         }
-        if (e is InputEventMagnifyGesture pinch && MapOpen) _hud.ZoomMap(pinch.Factor);
+        if (e is InputEventMagnifyGesture pinch && MapOpen) Chart.ZoomBy(pinch.Factor);
         if (Screen == Screen.Orbit && OrbitSky && e is InputEventPanGesture skyPan) Look(skyPan.Delta * 0.03f);
         if (e is not InputEventKey { Pressed: true, Echo: false } k)
         {
             if (e is InputEventKey { Pressed: true, Echo: true } ek && Screen == Screen.Plan) Nudge(ek.Keycode, ek.ShiftPressed);
             return;
         }
-        if (MapOpen && k.Keycode == Key.R) MapCenter = V!.EstimatedPosition;
-        if (MapOpen && k.Keycode == Key.T) MapCenter = V!.ChartPositions[V.TargetStar];
+        if (MapOpen && k.Keycode == Key.R) Chart.Center = V!.EstimatedPosition;
+        if (MapOpen && k.Keycode == Key.T) Chart.Center = V!.ChartPositions[V.TargetStar];
         switch (Screen)
         {
             case Screen.Title:
@@ -109,7 +109,7 @@ public partial class Main
                 if (k.Keycode == Key.T) RunTransferComputer();
                 if (k.Keycode == Key.G) ToggleAutoBurn();
                 if (k.Keycode == Key.C) CycleTarget();
-                if (k.Keycode == Key.R) GlideChart(PrimaryOnChart, ZoomFor(V!.Primary));
+                if (k.Keycode == Key.R) Chart.Glide(PrimaryOnChart, ChartView.ZoomFor(V!.Primary));
                 if (k.Keycode >= Key.Key1 && k.Keycode < Key.Key1 + Rates.Length) { SubRateIndex = (int)(k.Keycode - Key.Key1); Paused = false; ToNode = false; Aligning = false; }
                 break;
             case Screen.Plan:

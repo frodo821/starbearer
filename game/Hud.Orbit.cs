@@ -26,9 +26,6 @@ public partial class Hud
     /// <summary>A point relative to this system's star.</summary>
     Vector2 StarPoint(Vec3d p) => MapPoint(Game.V!.System.Position + p * Sublight.Scale);
 
-    public void ZoomOrbit(float f) => ZoomMap(f);
-    public void RotateOrbit(Vector2 d) => RotateMap(d);
-    public void PanOrbit(Vector2 d) => PanMap(d);
 
     Stage? StageOf(Maneuver n) => Game.SubForecast?.StageOf(n);
 
@@ -120,7 +117,7 @@ public partial class Hud
         var (t, r, nor) = Sublight.Frame(s.Position, s.Velocity);
         var map = LegMap(Game.SubForecast!.LegOf(n)!);
         var o = map(s.Position);
-        var unit = 1.0 / Game.OrbitZoom;
+        var unit = 1.0 / Game.Chart.PixelsPerAu;
         var list = new List<(Vector2, Color, string, int, float, float)>();
         void Add(Vec3d axis, Color c, string label, int kind, float sign)
         {
@@ -297,7 +294,7 @@ public partial class Hud
         for (int i = 4; i >= 1; i--) DrawCircle(c, 5f * i * i * 0.5f, new Color(col, 0.13f));
         DrawCircle(c, 5, col);
         Text(c + new Vector2(10, -8), star.Name, Dim, 14);
-        if (Game.OrbitZoom < 35)
+        if (Game.Chart.PixelsPerAu < 35)
         {
             // Zoomed out to the galaxy the system is one point, but where the ship is bound still reads.
             if (Game.SubForecast is { } leaving) DrawHandover(leaving, Warn);
@@ -341,14 +338,14 @@ public partial class Hud
         {
             var around = body.Parent!.StarPosition(t);
             var (u, w, rad) = (body.U, body.W, body.OrbitRadius);
-            if (rad * Game.OrbitZoom > 12)
+            if (rad * Game.Chart.PixelsPerAu > 12)
                 for (int i = 0; i < 96; i++)
                     DrawLine(StarPoint(around + (u * Math.Cos(i * Math.Tau / 96) + w * Math.Sin(i * Math.Tau / 96)) * rad),
                         StarPoint(around + (u * Math.Cos((i + 1) * Math.Tau / 96) + w * Math.Sin((i + 1) * Math.Tau / 96)) * rad), new Color(Dim, 0.3f), 1, true);
             var at = StarPoint(body.StarPosition(t));
             var col = body.Kind switch { BodyKind.Giant => new Color(0.95f, 0.8f, 0.55f), BodyKind.Moon => new Color(0.75f, 0.75f, 0.8f), _ => new Color(0.55f, 0.75f, 0.9f) };
-            DrawCircle(at, Mathf.Max(body.Kind == BodyKind.Moon ? 2f : 3.5f, (float)body.BodyRadius * Game.OrbitZoom), col);
-            if (body.Edge * Game.OrbitZoom > 10 || body.Kind != BodyKind.Moon) Text(at + new Vector2(7, 12), body.Name, new Color(col, 0.8f), 12);
+            DrawCircle(at, Mathf.Max(body.Kind == BodyKind.Moon ? 2f : 3.5f, (float)body.BodyRadius * Game.Chart.PixelsPerAu), col);
+            if (body.Edge * Game.Chart.PixelsPerAu > 10 || body.Kind != BodyKind.Moon) Text(at + new Vector2(7, 12), body.Name, new Color(col, 0.8f), 12);
         }
     }
 
@@ -398,12 +395,12 @@ public partial class Hud
         {
             var around = body.Parent!.StarPosition(t);
             var (u, w, rad) = (body.U, body.W, body.OrbitRadius);
-            if (rad * Game.OrbitZoom > 12)
+            if (rad * Game.Chart.PixelsPerAu > 12)
                 for (int i = 0; i < 96; i++)
                     DrawLine(StarPoint(around + (u * Math.Cos(i * Math.Tau / 96) + w * Math.Sin(i * Math.Tau / 96)) * rad),
                         StarPoint(around + (u * Math.Cos((i + 1) * Math.Tau / 96) + w * Math.Sin((i + 1) * Math.Tau / 96)) * rad), new Color(c, 0.45f), 1.4f, true);
             var at = BodyPoint(body);
-            var r = Mathf.Max(9f, (float)body.BodyRadius * Game.OrbitZoom + 5);
+            var r = Mathf.Max(9f, (float)body.BodyRadius * Game.Chart.PixelsPerAu + 5);
             foreach (var (sx, sy) in new[] { (-1, -1), (1, -1), (-1, 1), (1, 1) })
             {
                 var corner = at + new Vector2(sx * r, sy * r);
@@ -419,10 +416,10 @@ public partial class Hud
     /// <summary>The planet or moon under a tap, if any. The station is left to the path it sits on.</summary>
     IOrbiter? OrbiterAt(Vector2 at)
     {
-        if (Game.OrbitZoom < 35) return null;
+        if (Game.Chart.PixelsPerAu < 35) return null;
         return Game.TargetChoices().OfType<Center>()
             .Select(c => (c, d: BodyPoint(c).DistanceTo(at)))
-            .Where(x => x.d < Mathf.Max(12f, (float)x.c.BodyRadius * Game.OrbitZoom + 4))
+            .Where(x => x.d < Mathf.Max(12f, (float)x.c.BodyRadius * Game.Chart.PixelsPerAu + 4))
             .OrderBy(x => x.d).Select(x => (IOrbiter?)x.c).FirstOrDefault();
     }
 
@@ -503,7 +500,7 @@ public partial class Hud
         var v = Game.V!;
         var me = OrbitPoint(v.SubPosition);
         DrawCircle(me, 4, Ink);
-        var heading = OrbitPoint(v.SubPosition + v.SubVelocity.Normalized() * (1.0 / Game.OrbitZoom));
+        var heading = OrbitPoint(v.SubPosition + v.SubVelocity.Normalized() * (1.0 / Game.Chart.PixelsPerAu));
         if (heading.DistanceTo(me) <= 0.01f) return;
         var way = (heading - me).Normalized();
         DrawLine(me, me + way * 24, Ink, 2f, true);

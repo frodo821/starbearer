@@ -78,8 +78,7 @@ public partial class Main
         PlanDv = 0.35;
         Forecast = null; SubForecast = null; SubCurrent = null; PlanFrozen = false; Selected = null;
         OrbitSky = false; Paused = true;
-        MapCenter = PrimaryOnChart; MapZoom = ZoomFor(V.Primary); _glide = null;
-        _chartBody = PrimaryOnChart;
+        Chart.Show(PrimaryOnChart, ChartView.ZoomFor(V.Primary));
         LookAt(PlanDir);
         Screen = Screen.Orbit;
         MapOpen = false;
@@ -202,7 +201,7 @@ public partial class Main
         Screen = Screen.Orbit;
         MapOpen = false; Selected = null; Paused = true; PlanFrozen = false;
         OrbitSky = false;
-        GlideChart(PrimaryOnChart, ZoomFor(V.Primary));
+        Chart.Glide(PrimaryOnChart, ChartView.ZoomFor(V.Primary));
         ShowCue(new StateCue("亜光速へ降下", V.System.Name + " 星系", new Color(0.5f, 1f, 0.7f), Major: true, Outward: false));
         Message = V.LocalStation == null ? "この星系に港はない。J で再発進できる"
             : V.Hold.Any(c => c.Mission.Target == V.SystemStar) ? "亜光速へ降下。軌道をタップしてマニューバを置き、港へ軌道を合わせる"
