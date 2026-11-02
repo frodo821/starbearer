@@ -262,6 +262,26 @@ public partial class Autotest : Node
         Do(() =>
         {
             Check("tapping the target again goes back to the station", _g.V!.Goal == _g.V.LocalStation && _g.V.Nodes.Count == 0);
+            Check("a circular orbit has no apsides to mark", _g.ApsisPointForTest(true) == null && _g.ApsisPointForTest(false) == null);
+            Click(MouseButton.Left, _g.OrbitPointForTest(_g.SubForecast!.Track[60].Position));
+        });
+        Do(() => { _g.Selected!.Prograde = 0.03; _g.NodeEdited(); });
+        Do(() =>
+        {
+            var ap = _g.SubForecast!.Legs.SelectMany(l => l.Apsides).Where(x => x.Apo && x.Time >= _g.V!.AbsoluteTime).ToList();
+            _time = ap.Count > 0 ? ap[0].Time : double.NaN;
+            Check("a burn's orbit shows its apoapsis and periapsis", ap.Count > 0 && _g.ApsisPointForTest(true) != null && _g.ApsisPointForTest(false) != null);
+            Shot("02f_apsides");
+            if (_g.ApsisPointForTest(true) is { } at) Click(MouseButton.Left, at);
+        });
+        Do(() =>
+        {
+            Check("tapping Ap puts a node on it", _g.V!.Nodes.Count == 2 && _g.V.Nodes.Any(n => Math.Abs(n.Time - _time) < 1e-9));
+            Input.ParseInputEvent(new InputEventKey { Keycode = Key.Backspace, PhysicalKeycode = Key.Backspace, ShiftPressed = true, Pressed = true });   // shift clears them all
+        });
+        Do(() =>
+        {
+            Check("the Ap node can be deleted", _g.V!.Nodes.Count == 0);
             _zoom = _g.OrbitYaw;
             Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Position = new Vector2(1300, 100), Pressed = true });
             Input.ParseInputEvent(new InputEventMouseMotion { Position = new Vector2(1360, 120), Relative = new Vector2(60, 20) });

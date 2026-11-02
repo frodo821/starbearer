@@ -81,6 +81,8 @@ public partial class Hud
         }
         foreach (var n in v.Nodes)
             if (NodePoint(n) is { } np && np.DistanceTo(at) < 14) { Game.SelectNode(n); return; }
+        // An apsis marker puts a node right on it.
+        if (ApsisAt(at) is { } apsis) { Game.AddNode(apsis); return; }
         // A tap on a body targets it; on the target again, the station comes back.
         if (OrbiterAt(at) is { } picked) { Game.SetTarget(picked == v.Goal ? null : picked); return; }
         if (Game.SubForecast is { } fc && EarliestNear(fc, at, 14) is { } time) { Game.AddNode(time); return; }
@@ -307,6 +309,7 @@ public partial class Hud
         if (Game.SubForecast is { } fc)
         {
             DrawPaths(fc);
+            DrawApsides(fc);
             foreach (var (pos, asc) in fc.PlaneCrossings)
             {
                 var p = OrbitPoint(pos);
@@ -348,6 +351,38 @@ public partial class Hud
             if (body.Edge * Game.OrbitZoom > 10 || body.Kind != BodyKind.Moon) Text(at + new Vector2(7, 12), body.Name, new Color(col, 0.8f), 12);
         }
     }
+
+    static readonly Color ApsisColor = new(0.55f, 0.85f, 1f);
+
+    /// <summary>The periapses and apoapses still ahead on the plan, each on its own leg.</summary>
+    IEnumerable<(Vector2 At, Apsis Apsis)> ApsidesAhead(OrbitForecast fc)
+    {
+        var now = Game.V!.AbsoluteTime;
+        foreach (var leg in fc.Legs)
+        {
+            var map = LegMap(leg);
+            foreach (var a in leg.Apsides.Where(a => a.Time >= now)) yield return (map(a.Position), a);
+        }
+    }
+
+    void DrawApsides(OrbitForecast fc)
+    {
+        var now = Game.V!.AbsoluteTime;
+        foreach (var (at, a) in ApsidesAhead(fc))
+        {
+            DrawCircle(at, 4.5f, ApsisColor);
+            DrawArc(at, 7, 0, Mathf.Tau, 16, new Color(ApsisColor, 0.6f), 1.2f, true);
+            Text(at + new Vector2(9, a.Apo ? -8 : 16), $"{(a.Apo ? "Ap" : "Pe")} {a.Radius:F3} AU", ApsisColor, 12);
+            Text(at + new Vector2(9, a.Apo ? 6 : 30), Instruments.Countdown(a.Time - now), new Color(ApsisColor, 0.6f), 11);
+        }
+    }
+
+    /// <summary>The time of the apsis marker under a tap, if any.</summary>
+    double? ApsisAt(Vector2 at) => Game.SubForecast is { } fc
+        ? ApsidesAhead(fc).Where(x => x.At.DistanceTo(at) < 12).OrderBy(x => x.At.DistanceTo(at)).Select(x => (double?)x.Apsis.Time).FirstOrDefault()
+        : null;
+
+    public Vector2? ApsisPointForTest(bool apo) => Game.SubForecast is { } fc ? ApsidesAhead(fc).Where(x => x.Apsis.Apo == apo).Select(x => (Vector2?)x.At).FirstOrDefault() : null;
 
     /// <summary>Screen point of a body of this system now.</summary>
     public Vector2 BodyPointForTest(Center body) => BodyPoint(body);
@@ -479,8 +514,11 @@ public partial class Hud
     {
         var v = Game.V!;
         var el = Sublight.OrbitOf(v.Primary.Mu, v.SubPosition, v.SubVelocity);
+        var (pe, ap) = Sublight.NextApsides(v.Primary.Mu, v.SubPosition, v.SubVelocity, v.AbsoluteTime);
         void Line(string s, Color c) { Text(new Vector2(x, y), s, c, 15); y += 20; }
-        Line(el.Bound ? $"近点 {el.Periapsis:F2}  遠点 {el.Apoapsis:F2} AU" : "脱出軌道", el.Bound ? Ink : Warn);
+        string When(Apsis? a) => a is { } x ? $"  {a.Value.Time - v.AbsoluteTime:F1}日後" : "";
+        Line($"Pe {el.Periapsis:F3} AU" + When(pe), Ink);
+        Line(el.Bound ? $"Ap {el.Apoapsis:F3} AU" + When(ap) : "Ap なし  脱出軌道", el.Bound ? Ink : Warn);
         Line($"{(el.Bound ? $"周期 {el.Period:F1} 日   " : "")}{(Game.CurrentRate == 0 ? "一時停止 (P)" : $"時間 {Instruments.Rate(Game.CurrentRate)}")}", Dim);
         Line($"亜光速 Δv 残 {v.SublightDeltaV:F2}", Ink);
         var st = v.LocalStation;

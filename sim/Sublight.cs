@@ -164,6 +164,42 @@ public static partial class Sublight
         return null;
     }
 
+    /// <summary>The next periapsis and apoapsis after t0 on the coast from a state. Neither on a circle, where
+    /// they are nowhere in particular; no apoapsis on an open orbit, nor a periapsis already passed.</summary>
+    public static (Apsis? Pe, Apsis? Ap) NextApsides(double mu, Vec3d p, Vec3d v, double t0)
+    {
+        var r = p.Length;
+        var h = p.Cross(v);
+        var ev = v.Cross(h) / mu - p / r;
+        var e = ev.Length;
+        if (e < 1e-6 || h.Length < 1e-12) return (null, null);
+        var a = -mu / (2 * (v.LengthSq / 2 - mu / r));
+        var nu = Math.Acos(Math.Clamp(ev.Dot(p) / (e * r), -1, 1));
+        if (p.Dot(v) < 0) nu = -nu;   // falling in: before periapsis
+        Apsis At(double dt, bool apo)
+        {
+            var (q, w) = (p, v);
+            Kepler(mu, ref q, ref w, dt);
+            return new Apsis(t0 + dt, q, apo ? a * (1 + e) : a * (1 - e), apo);
+        }
+        if (e < 1)
+        {
+            var n = Math.Sqrt(mu / (a * a * a));
+            var big = 2 * Math.Atan2(Math.Sqrt(1 - e) * Math.Sin(nu / 2), Math.Sqrt(1 + e) * Math.Cos(nu / 2));
+            var mean = big - e * Math.Sin(big);
+            double Ahead(double target)
+            {
+                var d = (target - mean) % (2 * Math.PI);
+                return (d <= 1e-12 ? d + 2 * Math.PI : d) / n;
+            }
+            return (At(Ahead(0), false), At(Ahead(Math.PI), true));
+        }
+        var hn = Math.Sqrt(mu / (-a * -a * -a));
+        var f = 2 * Math.Atanh(Math.Sqrt((e - 1) / (e + 1)) * Math.Tan(nu / 2));
+        var m = e * Math.Sinh(f) - f;
+        return (m < 0 ? At(-m / hn, false) : null, null);
+    }
+
     public static Elements OrbitOf(double mu, Vec3d p, Vec3d v)
     {
         var r = p.Length;

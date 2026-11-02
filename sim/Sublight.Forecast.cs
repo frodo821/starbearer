@@ -207,6 +207,7 @@ public static partial class Sublight
         if (pending.Count == 0) OpenLap(p, v, t);
         var watch = target != null ? new StationWatch(mu, target, res) : null;
         var (afterP, afterV) = (p, v);
+        var start = (p, v);
         res.Track.Add((t, p));
         if (p.Length >= edge)
         {
@@ -266,10 +267,27 @@ public static partial class Sublight
             if (next == pending.Count) watch?.Observe(hop, p, v);
         }
         if (res.DrawnCount == 0) res.DrawnCount = res.Track.Count;
+        if (!coarse) MarkApsides(res, mu, t0, start.p, start.v);
         watch?.Finish();
         res.After = OrbitOf(mu, afterP, afterV);
         (res.AfterPosition, res.AfterVelocity) = (afterP, afterV);
         return res;
+    }
+
+    /// <summary>The apsides each coast reaches before the next burn, or before the drawn path ends.</summary>
+    static void MarkApsides(OrbitForecast res, double mu, double t0, Vec3d p0, Vec3d v0)
+    {
+        var coasts = new List<(double T, Vec3d P, Vec3d V)> { (t0, p0, v0) };
+        foreach (var s in res.Stages)
+            coasts.Add((res.Track[s.TrackIndex].Time, s.Position, s.Velocity + Impulse(s.Position, s.Velocity, s.Node)));
+        var drawnEnd = res.Track[res.DrawnCount - 1].Time;
+        for (int i = 0; i < coasts.Count; i++)
+        {
+            var end = i + 1 < coasts.Count ? coasts[i + 1].T : drawnEnd;
+            var (pe, ap) = NextApsides(mu, coasts[i].P, coasts[i].V, coasts[i].T);
+            foreach (var x in new[] { pe, ap })
+                if (x is { } a && a.Time <= end + 1e-9) res.Apsides.Add(a);
+        }
     }
 
     /// <summary>Golden-section search for the true closest approach inside a sample bracket.</summary>

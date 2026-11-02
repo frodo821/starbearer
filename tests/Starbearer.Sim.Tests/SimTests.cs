@@ -1006,6 +1006,40 @@ public class SimTests
     }
 
     [Fact]
+    public void ApsidesFallWhereTheOrbitTurns()
+    {
+        const double mu = 0.3, r = 0.5;
+        var (p, v) = (new Vec3d(r, 0, 0), new Vec3d(0, 0.2, Math.Sqrt(mu / r) * 1.2));
+        var el = Sublight.OrbitOf(mu, p, v);
+        // A quarter of the way round, the apoapsis comes first and the periapsis back where it started.
+        var (q, w) = (p, v);
+        Sublight.Kepler(mu, ref q, ref w, el.Period / 4);
+        var (pe, ap) = Sublight.NextApsides(mu, q, w, 10);
+        Assert.Equal(10 + el.Period / 4, ap!.Value.Time, 6);
+        Assert.Equal(10 + el.Period * 3 / 4, pe!.Value.Time, 6);
+        Assert.Equal(el.Apoapsis, ap.Value.Radius, 6);
+        Assert.Equal(el.Apoapsis, ap.Value.Position.Length, 6);
+        Assert.True((pe.Value.Position - p).Length < 1e-6);
+        Assert.True(ap.Value.Apo && !pe.Value.Apo);
+
+        // An open orbit has a periapsis only while still falling in.
+        var fast = new Vec3d(0, 0, Math.Sqrt(2 * mu / r) * 1.3);
+        var (out1, out2) = (p, fast);
+        Sublight.Kepler(mu, ref out1, ref out2, 1);
+        Assert.Equal((null, null), Sublight.NextApsides(mu, out1, out2, 0));
+        var (inbound, _) = Sublight.NextApsides(mu, out1, -out2, 0);
+        Assert.Equal(1, inbound!.Value.Time, 6);
+        Assert.Equal(r, inbound.Value.Radius, 6);
+
+        // A circle has none, and a forecast marks one of each on an ellipse's lap.
+        Assert.Equal((null, null), Sublight.NextApsides(mu, p, new Vec3d(0, 0, Math.Sqrt(mu / r)), 0));
+        var star = new Center { Star = 0, Name = "s", Mu = mu, BodyRadius = 0.01, Edge = 50 };
+        var f = Sublight.Predict(star, null, q, w, 0, Array.Empty<Maneuver>(), 1);
+        Assert.Equal(1, f.Apsides.Count(a => a.Apo));
+        Assert.Equal(1, f.Apsides.Count(a => !a.Apo));
+    }
+
+    [Fact]
     public void TheTargetStaysWithItsSystem()
     {
         var g = Galaxy.Generate(5);

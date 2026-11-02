@@ -35,6 +35,9 @@ public readonly record struct Crossing(double Time, Vec3d Ship, Vec3d Station, d
 /// <summary>One planned burn as the forecast sees it: the state it starts from and the orbit it leaves.</summary>
 public readonly record struct Stage(Maneuver Node, Vec3d Position, Vec3d Velocity, Elements After, int TrackIndex);
 
+/// <summary>A periapsis or apoapsis on a path. Radius is from the centre of the leg's body.</summary>
+public readonly record struct Apsis(double Time, Vec3d Position, double Radius, bool Apo);
+
 public readonly record struct Elements(double Periapsis, double Apoapsis, double Period, bool Bound);
 
 /// <summary>Where the path leaves the star's sphere of influence.</summary>
@@ -84,6 +87,8 @@ public sealed class OrbitForecast
     /// <summary>What Closest, Crossing and PlaneCrossings are measured against: a station or a body circling Center.</summary>
     public IOrbiter? Watched { get; init; }
     public Approach? Closest { get; set; }
+    /// <summary>Periapses and apoapses on the drawn path, one of each per coast between burns.</summary>
+    public List<Apsis> Apsides { get; } = new();
     public Crossing? Crossing { get; set; }
     /// <summary>Orbit after the last planned burn.</summary>
     public Elements After { get; set; }
