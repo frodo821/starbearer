@@ -12,6 +12,31 @@ public class SimTests
     };
 
     [Fact]
+    public void EveryRegionHasItsOwnPortsAndDepots()
+    {
+        var g = Galaxy.Generate(7);
+        Assert.Equal(Tuning.RegionCount, g.Regions.Length);
+        Assert.Equal(g.Regions.Length, g.Regions.Select(r => r.Name).Distinct().Count());
+        foreach (var region in g.Regions)
+        {
+            var stars = g.Stars.Count(s => s.Region == region.Id);
+            Assert.InRange(stars, Tuning.StarsPerRegion / 3, Tuning.StarsPerRegion * 3);
+            Assert.Equal(Tuning.PortsPerRegion, g.Ports.Count(p => g.Stars[p].Region == region.Id));
+            Assert.Equal(Tuning.DepotsPerRegion, g.Depots.Count(p => g.Stars[p].Region == region.Id));
+        }
+        // A region is one stretch of the disc: each star is nearer its own region's centre than any other's.
+        Assert.All(g.Stars, s => Assert.Equal(s.Region, g.Regions.MinBy(r => (r.Center - s.Position).Length)!.Id));
+    }
+
+    [Fact]
+    public void JobsStayInTheirRegion()
+    {
+        var g = Galaxy.Generate(7);
+        foreach (var port in g.Ports)
+            Assert.All(Missions.Board(g, port, 0, Array.Empty<Consignment>()), m => Assert.Equal(g.Stars[port].Region, g.Stars[m.Target].Region));
+    }
+
+    [Fact]
     public void SameSeedGivesSameGalaxy()
     {
         var a = Galaxy.Generate(42); var b = Galaxy.Generate(42);
@@ -668,7 +693,8 @@ public class SimTests
     public void ForecastTracksEveryStageOfAMultiBurnPlan()
     {
         var g = Galaxy.Generate(5);
-        var st = g.StationAt(g.Ports[1]);
+        // A station well inside its host's sphere, so three burns raise the orbit without leaving it.
+        var st = g.Ports.Select(g.StationAt).MinBy(s => s.Radius / s.Host!.Edge)!;
         var star = st.Host!;
         var p = new Vec3d(st.Radius, 0, 0);
         var v = new Vec3d(0, 0, Math.Sqrt(star.Mu / p.Length));
@@ -903,7 +929,9 @@ public class SimTests
     static (Voyage V, OrbitForecast F, Star To) Flyby(double speed)
     {
         var g = Galaxy.Generate(5);
-        var (from, to) = (g.Stars[g.Ports[0]], g.Stars[g.Ports[1]]);
+        // The nearest star, so nothing else lies on the way.
+        var from = g.Stars[g.Ports[0]];
+        var to = g.Stars.Where(s => s != from).MinBy(s => (s.Position - from.Position).Length)!;
         var v = new Voyage(g, from.Id, to.Id, Box, Unseen(g), 1);
         v.Undock();
         var way = (to.Position - from.Position).Normalized();

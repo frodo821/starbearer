@@ -61,7 +61,9 @@ public static class Missions
         var r = new Rng(g.Seed * 7919 + (ulong)star * 104729 + (ulong)deliveries * 31);
         var kind = KindOf(g, star);
         var goods = Catalog[kind];
-        var places = g.Ports.Concat(g.Depots).Where(s => s != star).OrderBy(_ => r.Next()).ToArray();
+        // Within the region for now: crossing to another takes gates, which aren't built yet.
+        var region = g.Stars[star].Region;
+        var places = g.Ports.Concat(g.Depots).Where(s => s != star && g.Stars[s].Region == region).OrderBy(_ => r.Next()).ToArray();
         var count = Math.Min(kind == StationKind.Depot ? DepotOffers : PortOffers, places.Length);
         var offers = new List<Mission>();
         for (int i = 0; i < count; i++)

@@ -23,22 +23,28 @@ public partial class Hud
                 DrawCircle(c, (float)n.Radius * Game.Chart.Zoom * i * 0.45f, new Color(0.35f, 0.5f, 0.8f, 0.018f * (float)n.Density));
         }
         var current = CurrentStar();
+        var zoom = Game.Chart.Zoom;
+        var view = new Rect2(Vector2.Zero, Size).Grow(60);
+        var bound = v.Hold.Select(c => c.Mission.Target).ToHashSet();
         for (int i = 0; i < g.Stars.Length; i++)
         {
             var s = g.Stars[i];
             var p = MapPoint(v.ChartPositions[i]);
-            var col = Sky.StarColor(s.Temperature);
-            if (i == here) continue;   // the orbit view draws its own star, at its true place
-            DrawCircle(p, 2.5f + (float)s.Mass, col);
+            if (i == here || !view.HasPoint(p)) continue;   // the orbit view draws its own star, at its true place
+            DrawCircle(p, 2.5f + (float)s.Mass, Sky.StarColor(s.Temperature));
             // Chart ring: how far this star may be from where it is drawn.
-            var err = (float)(Tuning.ChartErrorLy * Voyage.ChartFactor(v.ClosestApproach[i]) * Game.Chart.Zoom);
+            var err = (float)(Tuning.ChartErrorLy * Voyage.ChartFactor(v.ClosestApproach[i]) * zoom);
             if (err > 2) DrawArc(p, err * 2, 0, Mathf.Tau, 20, new Color(1f, 0.6f, 0.3f, 0.45f), 1f, true);
-            var port = g.Ports.Contains(i);
-            var depot = g.Depots.Contains(i);
-            var lc = i == v.TargetStar ? Good : v.Hold.Any(c => c.Mission.Target == i) ? Warn : port || depot ? Ink : Dim;
-            if (i == current) DrawHere(p, s.Name + (port ? " ◆" : depot ? " ◇" : ""), ring: true);
-            else Text(p + new Vector2(8, 4), s.Name + (port ? " ◆" : depot ? " ◇" : ""), lc, 13);
+            var port = g.IsPort(i);
+            var depot = g.IsDepot(i);
+            var name = s.Name + (port ? " ◆" : depot ? " ◇" : "");
+            if (i == current) { DrawHere(p, name, ring: true); continue; }
+            var key = i == v.TargetStar || bound.Contains(i);
+            // Zoomed out, names thin to the stations, then to where the ship is bound.
+            if (!key && (zoom < 4 || zoom < 8 && !port && !depot)) continue;
+            Text(p + new Vector2(8, 4), name, i == v.TargetStar ? Good : bound.Contains(i) ? Warn : port || depot ? Ink : Dim, 13);
         }
+        DrawRegionNames();
         var fc = Game.Forecast;
         // Up close, in orbit, the FTL line would only cross the orbit it starts from.
         var fade = here < 0 ? 1 : Mathf.Clamp(1.5f - Game.Chart.Zoom / 120, 0, 1);
@@ -52,6 +58,23 @@ public partial class Hud
                 if (last is { } l) DrawLine(l, p, new Color(1f, 0.45f + 0.45f * t, 0.3f, 0.9f * fade), 1.8f, true);
                 last = p;
             }
+        }
+    }
+
+    /// <summary>Zoomed out to where regions read, each one's name over its middle.</summary>
+    void DrawRegionNames()
+    {
+        var fade = Mathf.Clamp((16 - Game.Chart.Zoom) / 8, 0, 1);
+        if (fade <= 0) return;
+        var g = Game.G!;
+        var mine = CurrentStar() is var here and >= 0 ? g.Stars[here].Region : -1;
+        foreach (var region in g.Regions)
+        {
+            var label = region.Name + " 宙域";
+            var size = 24;
+            var width = F.GetStringSize(label, HorizontalAlignment.Left, -1, size).X;
+            var at = MapPoint(region.Center) + new Vector2(-width / 2, 0);
+            Text(at, label, new Color(region.Id == mine ? Good : Ink, 0.4f * fade), size);
         }
     }
 
@@ -71,7 +94,8 @@ public partial class Hud
             DrawArc(at, 12, 0, Mathf.Tau, 32, Colors.White, 2f, true);
             DrawArc(at, 17 + 4 * pulse, 0, Mathf.Tau, 32, new Color(Colors.White, 0.15f + 0.3f * pulse), 1.5f, true);
         }
-        var label = "現在地  " + name;
+        var region = CurrentStar() is var star and >= 0 ? $"   {Game.G!.Regions[Game.G.Stars[star].Region].Name} 宙域" : "";
+        var label = "現在地  " + name + region;
         var width = F.GetStringSize(label, HorizontalAlignment.Left, -1, 15).X;
         var p = at + new Vector2(ring ? 24 : 12, -10);
         DrawRect(new Rect2(p + new Vector2(-5, -16), width + 10, 22), new Color(0.01f, 0.02f, 0.05f, 0.8f));

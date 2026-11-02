@@ -11,6 +11,7 @@ for (ulong seed = 1; seed <= 60; seed++)
     for (int a = 0; a + 1 < g.Ports.Length; a++)
     {
         int o = g.Ports[a], t = g.Ports[a + 1];
+        if (g.Stars[o].Region != g.Stars[t].Region) continue;   // jobs stay in their region
         n++;
         var r = Autopilot.Fly(g, o, t, cargo);
         var key = r.Delivered ? "delivered" : $"{r.Death}/{(r.Note.StartsWith("overshot") ? "overshot" : r.Note)}";

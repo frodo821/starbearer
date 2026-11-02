@@ -270,7 +270,7 @@ public partial class Autotest : Node
             Check("a circular orbit has no apsides to mark", _g.ApsisPointForTest(true) == null && _g.ApsisPointForTest(false) == null);
             Click(MouseButton.Left, _g.OrbitPointForTest(_g.SubForecast!.Track[60].Position));
         });
-        Do(() => { _g.Selected!.Prograde = 0.03; _g.NodeEdited(); });
+        Do(() => { _g.Selected!.Prograde = _g.V!.SubVelocity.Length * 0.05; _g.NodeEdited(); });   // eccentric, still bound
         Do(() =>
         {
             var ap = _g.SubForecast!.Legs.SelectMany(l => l.Apsides).Where(x => x.Apo && x.Time >= _g.V!.AbsoluteTime).ToList();
@@ -375,6 +375,11 @@ public partial class Autotest : Node
         Do(() =>
         {
             Check("clearing the destination goes back to the job's", _g.V!.TargetStar == _heldTarget && !_g.FreeCourse);
+            (_g.Chart.Center, _g.Chart.Zoom) = (Vec3d.Zero, 5);   // the whole galaxy, where regions read
+        });
+        Do(() =>
+        {
+            Shot("03c_regions");
             Press(Key.Tab); Press(Key.Enter);
         });
         Do(() => _g.LookAtPublic(_g.NearestStarDirection()!.Value));
@@ -514,7 +519,12 @@ public partial class Autotest : Node
         {
             Key_(Key.Left, false);
             Check("the nose stays put while time is stopped", _g.Paused && _g.Helm.Nose == _view);
-            Press(Key.Space);
+            Press(Key.N);   // up to ignition: burned early, the node's direction does something else
+            _clock = Time.GetTicksMsec();
+        });
+        Until(() => !_g.ToNode || Time.GetTicksMsec() - _clock > 20000);
+        Do(() =>
+        {
             _g.SetHold(ViewHold.Node);
             _clock = Time.GetTicksMsec();
         });
