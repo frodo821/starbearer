@@ -40,6 +40,8 @@ public static class Economy
     public const double Spread = 0.3;
     /// <summary>Distance over which that falls to 1/e.</summary>
     public const double SpreadLy = 12;
+    /// <summary>How fast news of stock and prices travels along those links, and the day a gate pair adds.</summary>
+    public const double NewsLyPerDay = 1.5, GateRelayDays = 1;
 
     static (string, double) R(string ware, double rate) => (ware, rate);
     static Line Make(params (string, double)[] outs) => new(Array.Empty<(string, double)>(), outs);

@@ -214,32 +214,112 @@ public partial class PortWindow : PanelContainer
             var price = Economy.Price(w, stock / e.Target[i]);
             var role = e.Makes(ware) ? "製造" : ware == Wares.ShipFuel && !e.Uses(ware) ? "給油用" : "消費";
             var info = new VBoxContainer();
-            info.AddChild(Text($"{w.Name}  {role}", 16));
+            var carried = CargoBays.Of(s).RoomFor(w.Kind) > 0;
+            // A ware this ship has no bay for is struck through in red: it can't be bought into this hold.
+            info.AddChild(carried ? Text($"{w.Name}  {role}", 16) : Struck($"{w.Name}  {role}  （{Cargos.BayName(w.Kind)}がない）", 16));
             info.AddChild(Text($"{Cargos.Name(w.Kind)}   在庫 {stock:F0} / 目標 {e.Target[i]:F0}   質量 {w.Mass:F2}/単位   基準 {w.Price:F0}", 13, Dim));
             var cheap = price < w.Price * 0.9; var dear = price > w.Price * 1.1;
             var controls = new List<Control> { Text($"{price:F0}", 17, cheap ? Good : dear ? Warn : null) };
-            if (Trade.Sells(g, star, ware))
+            var deals = new VBoxContainer();
+            if (Trade.Sells(g, star, ware) && carried)
             {
                 var most = Trade.MaxBuy(s, g, m, ware);
-                if (most > 0)
-                {
-                    controls.Add(Press($"買う 1  {Trade.Cost(g, m, star, ware, 1, true):F0}", () => _game.BuyWare(ware, 1)));
-                    if (most > 1) controls.Add(Press($"買う {most}  {Trade.Cost(g, m, star, ware, most, true):F0}", () => _game.BuyWare(ware, most)));
-                }
-                else controls.Add(Text(CargoBays.Of(s).RoomFor(w.Kind) <= 0 ? $"{Cargos.BayName(w.Kind)}がない" : stock < 1 ? "在庫なし"
-                    : !CargoBays.Of(s).Fits(s.Hold, w.Load(1)) ? "ベイが満杯" : "資金不足", 13, Dim));
+                deals.AddChild(most > 0 ? Deal("買う", most, n => Trade.Cost(g, m, star, ware, n, true), n => _game.BuyWare(ware, n))
+                    : Text(stock < 1 ? "在庫なし" : !CargoBays.Of(s).Fits(s.Hold, w.Load(1)) ? "ベイが満杯" : "資金不足", 13, Dim));
             }
-            foreach (var lot in s.Hold.Where(c => !c.IsJob && c.Mission.Cargo.Ware == ware))
-                if (Trade.Offer(g, m, star, lot) is { } offer)
-                    controls.Add(Press($"売る {lot.Mission.Cargo.Volume:F0}  {offer:F0}", () => _game.SellLot(lot)));
+            if (Trade.Buys(g, star, ware) && Trade.Held(s, ware) is var held and > 0)
+                deals.AddChild(Deal("売る", held, n => Trade.SaleQuote(s, g, m, ware, n) ?? 0, n => _game.SellWare(ware, n)));
+            controls.Add(deals);
             box.AddChild(Row(info, controls.ToArray()));
         }
         var unsold = s.Hold.Where(c => !c.IsJob && !Trade.Buys(g, star, c.Mission.Cargo.Ware!)).ToList();
         if (unsold.Count > 0)
             box.AddChild(Text("ここでは売れない荷: " + string.Join("、", unsold.Select(c => $"{c.Mission.Cargo.Name} {c.Mission.Cargo.Volume:F0}")), 13, Dim));
         box.AddChild(new HSeparator());
+        Quotes(box, g, s, m);
+        box.AddChild(new HSeparator());
         box.AddChild(Row(Text("停泊して待つ。待つ間は生命維持を使わず、在庫と価格が動く", 14, Dim), Press($"{Tuning.PortWaitDays:F0} 日待つ", () => _game.WaitAtPort(Tuning.PortWaitDays))));
         return box;
+    }
+
+    /// <summary>Text struck through in red: something this ship can't do here.</summary>
+    static RichTextLabel Struck(string text, int size)
+    {
+        var l = new RichTextLabel { BbcodeEnabled = true, FitContent = true, ScrollActive = false, AutowrapMode = TextServer.AutowrapMode.Off,
+            Text = $"[s][color=#ff6b5e]{text}[/color][/s]", CustomMinimumSize = new Vector2(420, 0), MouseFilter = MouseFilterEnum.Ignore };
+        l.AddThemeFontSizeOverride("normal_font_size", size);
+        return l;
+    }
+
+    /// <summary>
+    /// A trade X-style: a slider for how many units, what that comes to, and a button to confirm. The
+    /// total follows the slider, unit by unit as the trade would move the price.
+    /// </summary>
+    static HBoxContainer Deal(string verb, int most, Func<int, double> total, Action<int> confirm)
+    {
+        var row = new HBoxContainer();
+        row.AddThemeConstantOverride("separation", 8);
+        var slider = new HSlider { MinValue = 0, MaxValue = most, Step = 1, Value = most, FocusMode = FocusModeEnum.None, CustomMinimumSize = new Vector2(170, 0), SizeFlagsVertical = SizeFlags.ShrinkCenter };
+        var label = Text("", 14);
+        label.CustomMinimumSize = new Vector2(150, 0);
+        var go = Press($"{verb}", () => { }, true);
+        void Show()
+        {
+            var n = (int)slider.Value;
+            label.Text = $"{n} 単位  {(n > 0 ? total(n) : 0):F0}";
+            go.Disabled = n == 0;
+        }
+        slider.ValueChanged += _ => Show();
+        go.Pressed += () => confirm((int)slider.Value);
+        Show();
+        row.AddChild(slider);
+        row.AddChild(label);
+        row.AddChild(go);
+        return row;
+    }
+
+    /// <summary>The ware looked up in other ports' quotes. Kept across rebuilds.</summary>
+    string? _lookup;
+
+    /// <summary>
+    /// Other stations' prices for one ware, as news has brought them here: where it can be bought,
+    /// cheapest first, and where it sells, dearest first. Each says how old its news is.
+    /// </summary>
+    void Quotes(VBoxContainer box, Galaxy g, SaveData s, Market m)
+    {
+        var here = s.PortStar;
+        var held = s.Hold.Where(c => c.Mission.Cargo.Ware != null).Select(c => c.Mission.Cargo.Ware!);
+        var ware = _lookup ?? held.FirstOrDefault() ?? g.Economies[here].Wares[0];
+        var pick = new OptionButton { FocusMode = FocusModeEnum.None };
+        for (int i = 0; i < Wares.All.Length; i++) pick.AddItem(Wares.All[i].Name, i);
+        pick.Selected = Wares.IndexOf(ware);
+        pick.ItemSelected += i => { _lookup = Wares.All[(int)i].Id; Rebuild(); };
+        box.AddChild(Row(Text("ほかの港の相場（届いている知らせの分だけ古い）", 16, Good), pick));
+        var w = Wares.Get(ware);
+        (int Star, double Price, double Fill, double Age)? Quote(int star) =>
+            star != here && m.Known(g, here, star, ware) is { } k ? (star, Economy.Price(w, k.Fill), k.Fill, m.Day - k.Day) : null;
+        string Line((int Star, double Price, double Fill, double Age) q)
+        {
+            var st = g.Stars[q.Star];
+            var far = (st.Position - g.Stars[here].Position).Length;
+            var stock = q.Fill < 0.1 ? "品切れ近い" : q.Fill < 0.6 ? "少ない" : q.Fill < 1.3 ? "普通" : "多い";
+            return $"{st.Name}{Missions.Mark(g, q.Star)}  {g.Regions[st.Region].Name}  {far:F0} ly   {q.Price:F0}   在庫{stock}   {q.Age:F0} 日前";
+        }
+        var sellers = g.EconomyOrder.Where(x => Trade.Sells(g, x, ware)).Select(Quote).OfType<(int, double, double, double)>().OrderBy(q => q.Item2).Take(6).ToList();
+        var buyers = g.EconomyOrder.Where(x => Trade.Buys(g, x, ware)).Select(Quote).OfType<(int, double, double, double)>().OrderByDescending(q => q.Item2).Take(6).ToList();
+        var lists = new HBoxContainer();
+        lists.AddThemeConstantOverride("separation", 30);
+        VBoxContainer List(string title, List<(int, double, double, double)> quotes)
+        {
+            var col = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+            col.AddChild(Text(title, 14, Good));
+            if (quotes.Count == 0) col.AddChild(Text("知らせがない", 13, Dim));
+            foreach (var q in quotes) col.AddChild(Text(Line(q), 13, Dim));
+            return col;
+        }
+        lists.AddChild(List($"{w.Name}を買える所（安い順）", sellers));
+        lists.AddChild(List($"{w.Name}を売れる所（高い順）", buyers));
+        box.AddChild(lists);
     }
 
     Control ModuleColumn(Galaxy g, SaveData s)

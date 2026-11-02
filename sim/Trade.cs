@@ -88,6 +88,47 @@ public static class Trade
         return value;
     }
 
+    /// <summary>Units of a ware aboard as goods of one's own, across its lots.</summary>
+    public static int Held(SaveData s, string ware) =>
+        (int)Math.Round(s.Hold.Where(c => !c.IsJob && c.Mission.Cargo.Ware == ware).Sum(c => c.Mission.Cargo.Volume));
+
+    /// <summary>What selling this many units here would fetch, the soundest lots first, spoilage taken off.</summary>
+    public static double? SaleQuote(SaveData s, Galaxy g, Market m, string ware, int units) =>
+        SellUnits(s, g, m.Copy(), ware, units, dryRun: true);
+
+    /// <summary>
+    /// Sells whole units of a ware out of the lots aboard, the soundest first; a lot sold in part keeps the
+    /// rest at its share of the cost. Returns what they fetched, or null if the station doesn't buy it
+    /// or the hold hasn't that many.
+    /// </summary>
+    public static double? SellUnits(SaveData s, Galaxy g, Market m, string ware, int units, bool dryRun = false)
+    {
+        var star = s.PortStar;
+        if (units <= 0 || !Buys(g, star, ware) || units > Held(s, ware)) return null;
+        double value = 0;
+        var left = (double)units;
+        foreach (var lot in s.Hold.Where(c => !c.IsJob && c.Mission.Cargo.Ware == ware).OrderByDescending(c => c.Integrity).ToList())
+        {
+            if (left <= 0) break;
+            var volume = lot.Mission.Cargo.Volume;
+            var k = Math.Min(left, volume);
+            value += Cost(g, m, star, ware, k, false) * lot.Integrity;
+            m.Put(g, star, ware, k);
+            left -= k;
+            if (dryRun) continue;
+            s.Hold.Remove(lot);
+            if (k < volume)
+                s.Hold.Add(new Consignment
+                {
+                    Mission = lot.Mission with { Cargo = Wares.Get(ware).Load(volume - k) },
+                    Integrity = lot.Integrity,
+                    Cost = lot.Cost * (1 - k / volume),
+                });
+        }
+        if (!dryRun) s.Credits += value;
+        return value;
+    }
+
     /// <summary>Units of ship fuel for a mass of it in the tank.</summary>
     public static double FuelUnits(double mass) => mass / Wares.Get(Wares.ShipFuel).Mass;
 

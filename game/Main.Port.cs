@@ -74,11 +74,11 @@ public partial class Main
         PortChanged();
     }
 
-    public void SellLot(Consignment lot)
+    public void SellWare(string ware, int units)
     {
         var s = Save!;
-        if (Trade.Sell(s, G!, s.MarketIn(G!), lot) is not { } got) { Refuse($"{lot.Mission.Cargo.Name}: ここでは売れない"); return; }
-        Message = $"{lot.Mission.Cargo.Name} を {got:F0} で売った（仕入 {lot.Cost:F0}）";
+        if (Trade.SellUnits(s, G!, s.MarketIn(G!), ware, units) is not { } got) { Refuse($"{Wares.Get(ware).Name}: ここでは売れない"); return; }
+        Message = $"{Wares.Get(ware).Name} を {units} 単位、{got:F0} で売った";
         PortChanged();
     }
 

@@ -11,14 +11,23 @@ public sealed class Market
     public double Day { get; set; }
     /// <summary>Per station (by star), stock in the order of its StationEconomy.Wares.</summary>
     public Dictionary<int, double[]> Stock { get; set; } = new();
+    /// <summary>How full every station was, every few days back, for news that is still on its way.</summary>
+    public List<MarketSnapshot> History { get; set; } = new();
 
-    /// <summary>Opening stock: around the target, a little either way by the seed.</summary>
+    /// <summary>Snapshots are taken this often, and kept this far back: older news than that is no news.</summary>
+    public const double SnapshotDays = 5, HistoryDays = 90;
+
+    /// <summary>
+    /// The market at the galaxy's day 0: stock seeded around the target, then run on from well before
+    /// the start, so it opens settled into its shortages and with news already travelling.
+    /// </summary>
     public static Market Open(Galaxy g)
     {
         var r = new Rng(g.Seed ^ 0x3A2C7E);
-        var m = new Market();
+        var m = new Market { Day = -HistoryDays };
         foreach (var (star, e) in g.Economies)
             m.Stock[star] = e.Target.Select(t => t * r.Range(0.6, 1.3)).ToArray();
+        m.AdvanceTo(g, 0);
         return m;
     }
 
@@ -54,11 +63,69 @@ public sealed class Market
     /// <summary>Runs the economy on to the given galaxy day, a day at a time.</summary>
     public void AdvanceTo(Galaxy g, double day)
     {
+        if (History.Count == 0) Record(g);
         while (Day + 1 <= day)
         {
             Step(g);
             Day += 1;
+            if (Day % SnapshotDays == 0) Record(g);
         }
+    }
+
+    /// <summary>Keeps how full every ware is everywhere, a byte each, and lets go of what no news is that old.</summary>
+    void Record(Galaxy g)
+    {
+        var bytes = new List<byte>();
+        foreach (var star in g.EconomyOrder)
+        {
+            var e = g.Economies[star];
+            for (int i = 0; i < e.Wares.Length; i++)
+                bytes.Add((byte)Math.Round(Math.Clamp(Stock[star][i] / e.Target[i] / Economy.Capacity, 0, 1) * 255));
+        }
+        History.RemoveAll(h => h.Day == Day || h.Day < Day - HistoryDays - SnapshotDays);
+        History.Add(new MarketSnapshot { Day = Day, Fills = Convert.ToBase64String(bytes.ToArray()) });
+    }
+
+    /// <summary>
+    /// The whole market as the news about one station that has reached another tells it: every
+    /// station's stock from the snapshot of that day (to a byte's rounding), and the day itself. Here
+    /// itself is the market as it stands. Null if no news that old is kept.
+    /// </summary>
+    public Market? KnownAs(Galaxy g, int here, int star)
+    {
+        if (star == here) return this;
+        var asOf = Day - g.InfoLag(here, star);
+        var snap = History.Where(h => h.Day <= asOf + 1e-9).MaxBy(h => h.Day);
+        if (snap == null) return null;
+        var bytes = Convert.FromBase64String(snap.Fills);
+        var known = new Market { Day = snap.Day };
+        var k = 0;
+        foreach (var s in g.EconomyOrder)
+        {
+            var e = g.Economies[s];
+            known.Stock[s] = e.Target.Select(t => bytes[k++] / 255.0 * Economy.Capacity * t).ToArray();
+        }
+        return known;
+    }
+
+    /// <summary>
+    /// What a pilot at one station knows of a ware at another: its fill as the news that has reached
+    /// here tells it, and the day that news is from. Here itself is known as it stands. Null where the
+    /// station doesn't deal in the ware or no news that old is kept.
+    /// </summary>
+    public (double Fill, double Day)? Known(Galaxy g, int here, int star, string ware)
+    {
+        if (!g.Economies.TryGetValue(star, out var e)) return null;
+        var i = e.IndexOf(ware);
+        if (i < 0) return null;
+        if (star == here) return (Stock[star][i] / e.Target[i], Day);
+        var asOf = Day - g.InfoLag(here, star);
+        var snap = History.Where(h => h.Day <= asOf + 1e-9).MaxBy(h => h.Day);
+        if (snap == null) return null;
+        var offset = 0;
+        foreach (var s in g.EconomyOrder) { if (s == star) break; offset += g.Economies[s].Wares.Length; }
+        var b = Convert.FromBase64String(snap.Fills)[offset + i];
+        return (b / 255.0 * Economy.Capacity, snap.Day);
     }
 
     void Step(Galaxy g)
@@ -109,5 +176,12 @@ public sealed class Market
         }
     }
 
-    public Market Copy() => new() { Day = Day, Stock = Stock.ToDictionary(k => k.Key, k => (double[])k.Value.Clone()) };
+    public Market Copy() => new() { Day = Day, Stock = Stock.ToDictionary(k => k.Key, k => (double[])k.Value.Clone()), History = History.ToList() };
+}
+
+/// <summary>Every station's fill on one day, a byte per ware in Galaxy.EconomyOrder, base64 for a small save.</summary>
+public sealed class MarketSnapshot
+{
+    public double Day { get; set; }
+    public string Fills { get; set; } = "";
 }

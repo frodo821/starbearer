@@ -77,6 +77,7 @@ public partial class Hud
         var v = Game.V!;
         yield return o == v.Goal ? new("目標を解除", () => Game.SetTarget(null)) : new("目標にする", () => Game.SetTarget(o));
         yield return new("遷移案", () => Game.PlanFor(o, Key.H));
+        if (o is Station here) yield return new("港の情報（市場・仕事）", () => Game.ShowStationInfo(here.Star));
         if (o is Station) yield return new("合流案", () => Game.PlanFor(o, Key.M));
         if (Game.Owns(Modules.Transfer)) yield return new("計算機で計画", () => Game.PlanFor(o, Key.T));
         if (o is Station && v.AtGate && !v.Docked && !v.Class.Gates)
@@ -89,6 +90,8 @@ public partial class Hud
     IEnumerable<MenuItem> StarMenu(int star)
     {
         var v = Game.V!;
+        if (Game.FuelNews(star) is { } news) yield return new(news, null);
+        if (Game.G!.Economies.ContainsKey(star)) yield return new("港の情報（市場・仕事）", () => Game.ShowStationInfo(star));
         if (star == v.TargetStar && Game.FreeCourse) yield return new("目的地を解除", Game.ClearCourse);
         else if (star != v.TargetStar) yield return new("目的地にする", () => Game.SetCourse(star));
         if (Game.Screen == Screen.Plan) yield return new("この星へ方位を合わせる", () => Game.SetPlanDir(v.ChartPositions[star] - v.EstimatedPosition));

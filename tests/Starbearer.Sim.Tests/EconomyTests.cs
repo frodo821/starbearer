@@ -219,3 +219,68 @@ public partial class SimTests
         Assert.False(lot.IsJob);
     }
 }
+
+public partial class SimTests
+{
+    [Fact]
+    public void NewsTakesLongerToComeFromFurtherAway()
+    {
+        var g = Galaxy.Generate(5);
+        var stations = g.EconomyOrder;
+        var a = stations[0];
+        Assert.Equal(0, g.InfoLag(a, a));
+        foreach (var b in stations)
+        {
+            Assert.Equal(g.InfoLag(a, b), g.InfoLag(b, a), 9);
+            Assert.True(double.IsFinite(g.InfoLag(a, b)));   // gates link every region
+        }
+        var near = stations.Where(b => b != a && g.Stars[b].Region == g.Stars[a].Region).Min(b => g.InfoLag(a, b));
+        var far = stations.Where(b => g.Stars[b].Region != g.Stars[a].Region).Max(b => g.InfoLag(a, b));
+        Assert.True(far > near * 2);
+    }
+
+    [Fact]
+    public void AFarStationIsKnownAsItWasWhenItsNewsSetOut()
+    {
+        var g = Galaxy.Generate(5);
+        var m = Market.Open(g);
+        var here = g.EconomyOrder[0];
+        var there = g.EconomyOrder.Where(s => s != here).MaxBy(s => g.InfoLag(here, s) < 60 ? g.InfoLag(here, s) : 0);
+        var lag = g.InfoLag(here, there);
+        var ware = g.Economies[there].Wares[0];
+        var then = m.Copy();
+        m.AdvanceTo(g, 200);
+        var (fill, day) = m.Known(g, here, there, ware)!.Value;
+        Assert.InRange(day, 200 - lag - Market.SnapshotDays, 200 - lag);
+        then.AdvanceTo(g, day);
+        Assert.Equal(then.Fill(g, there, ware)!.Value, fill, 1);           // a byte's worth of rounding
+        var mine = g.Economies[here].Wares[0];
+        Assert.Equal((m.Fill(g, here, mine)!.Value, 200.0), m.Known(g, here, here, mine));   // here is seen as it stands
+        // Old news is let go of, so the save stays small.
+        m.AdvanceTo(g, 800);
+        Assert.True(m.History.Count <= Market.HistoryDays / Market.SnapshotDays + 2);
+        Assert.True(new SaveData { Market = m }.ToJson().Length < 200_000);
+    }
+}
+
+public partial class SimTests
+{
+    [Fact]
+    public void AStationsBoardCanBeReadFromItsNews()
+    {
+        var g = Galaxy.Generate(5);
+        var m = Market.Open(g);
+        var here = g.EconomyOrder[0];
+        var there = g.EconomyOrder.First(s => s != here && Missions.KindOf(g, s) != StationKind.Gate && g.InfoLag(here, s) is > 5 and < 60);
+        var then = m.Copy();
+        m.AdvanceTo(g, 150);
+        Assert.Same(m, m.KnownAs(g, here, here));
+        var known = m.KnownAs(g, here, there)!;
+        Assert.Equal(m.Known(g, here, there, g.Economies[there].Wares[0])!.Value.Day, known.Day);
+        then.AdvanceTo(g, known.Day);
+        foreach (var (star, e) in g.Economies)
+            for (int i = 0; i < e.Wares.Length; i++)
+                Assert.InRange(known.Stock[star][i] - then.Stock[star][i], -e.Target[i] * 0.01, e.Target[i] * 0.01);
+        Assert.NotEmpty(Missions.Board(g, known, there, 0, Array.Empty<Consignment>()));
+    }
+}

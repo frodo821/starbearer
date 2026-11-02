@@ -13,6 +13,7 @@ public partial class Hud : Control
     public Hud() { MouseFilter = MouseFilterEnum.Ignore; }
     public PortWindow Port { get; private set; } = null!;
     public ManifestWindow Manifest { get; private set; } = null!;
+    public StationInfoWindow StationInfo { get; private set; } = null!;
 
     public override void _Ready()
     {
@@ -20,6 +21,8 @@ public partial class Hud : Control
         AddChild(Port);
         Manifest = new ManifestWindow(Game);
         AddChild(Manifest);
+        StationInfo = new StationInfoWindow(Game);
+        AddChild(StationInfo);
     }
 
     public override void _Process(double delta)
@@ -30,6 +33,7 @@ public partial class Hud : Control
             if (manifest) Manifest.Rebuild();
             Manifest.Visible = manifest;
         }
+        StationInfo.Visible = StationInfo.Star >= 0 && Game.Screen is Screen.Orbit or Screen.Plan or Screen.Flight && Game.V != null;
         var open = Game.Screen == Screen.Port;
         if (open == Port.Visible) return;
         if (open) Port.Rebuild();

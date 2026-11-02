@@ -79,6 +79,7 @@ public partial class Autotest : Node
     (Vec3d, float) _chartBefore;
     int _parkedAt;
     bool _sawDockable;
+    int _infoStar = -1;
     double _toll;
     double _credits, _heldFuel;
     int _retries;
@@ -152,6 +153,15 @@ public partial class Autotest : Node
         Do(() =>
         {
             Shot("01b_port");
+            _g.HudForTest.Port.ShowTab(1);
+        });
+        Do(() =>
+        {
+            Shot("01b_port_market");
+            _g.HudForTest.Port.ShowTab(0);
+        });
+        Do(() =>
+        {
             Check("the port opens while docked", _g.Screen == Screen.Port && _g.VisitingPort);
             Check("a station's board offers jobs", _g.HudForTest.Port.TakeButtons.Length > 0);
             Click(MouseButton.Left, _g.HudForTest.Port.TakeButtons[0].GetGlobalRect().GetCenter());
@@ -384,6 +394,29 @@ public partial class Autotest : Node
             Click(MouseButton.Right, _g.HudForTest.SystemPoint(_count, Vec3d.Zero));
         });
         Do(() => { if (_g.HudForTest.MenuItemForTest("目的地を解除") is { } at) Click(MouseButton.Left, at); });
+        Do(() =>
+        {
+            // A station's menu opens what the news says of it.
+            var v = _g.V!;
+            var screen = new Rect2(200, 150, Size().X - 400, Size().Y - 350);
+            var points = Enumerable.Range(0, _g.G!.Stars.Length).Select(i => _g.HudForTest.SystemPoint(i, Vec3d.Zero)).ToList();
+            _infoStar = Enumerable.Range(0, points.Count).FirstOrDefault(i => i != v.SystemStar && _g.G.Economies.ContainsKey(i) && screen.HasPoint(points[i])
+                && points.Where((q, j) => j != i).All(q => q.DistanceTo(points[i]) > 40), -1);
+            if (_infoStar >= 0) Click(MouseButton.Right, points[_infoStar]);
+        });
+        Do(() =>
+        {
+            var item = _g.HudForTest.MenuItemForTest("港の情報（市場・仕事）");
+            Check("a station's menu offers what the news says of it", _infoStar >= 0 && item != null);
+            if (item is { } at) Click(MouseButton.Left, at);
+        });
+        Do(() =>
+        {
+            Check("the station's market and jobs open as news", _g.HudForTest.StationInfo.Visible && _g.HudForTest.StationInfo.Star == _infoStar);
+            Shot("03d_station_info");
+            Press(Key.Escape);
+        });
+        Do(() => Check("Esc closes it", !_g.HudForTest.StationInfo.Visible));
         Do(() =>
         {
             Check("clearing the destination goes back to the job's", _g.V!.TargetStar == _heldTarget && !_g.FreeCourse);

@@ -34,6 +34,25 @@ public partial class Main
     /// <summary>The course was picked by the pilot, not set by a job in the hold.</summary>
     public bool FreeCourse => Save!.Course >= 0 && Save.Hold.All(c => c.Mission.Target != Save.Course);
 
+    /// <summary>
+    /// What the news that reached the last port says of a station's fuel: how much it had, and how many
+    /// days ago. Null for a star without a station.
+    /// </summary>
+    public string? FuelNews(int star)
+    {
+        if (Save is not { } s || !G!.Economies.ContainsKey(star)) return null;
+        var m = s.MarketIn(G);
+        if (m.Known(G, s.PortStar, star, Wares.ShipFuel) is not { } k) return "燃料 知らせなし";
+        var stock = k.Fill < 0.05 ? "品切れ" : k.Fill < 0.3 ? "わずか" : k.Fill < 0.8 ? "少ない" : "十分";
+        var age = m.Day - k.Day;
+        return $"燃料 {stock}  {Economy.Price(Wares.Get(Wares.ShipFuel), k.Fill):F0}/単位" + (age > 0.5 ? $"（{age:F0} 日前）" : "（いま）");
+    }
+
+    /// <summary>Opens what the news says of a station: its market and the jobs it had posted.</summary>
+    public void ShowStationInfo(int star) => _hud.StationInfo.Open(star);
+    public void CloseStationInfo() => _hud.StationInfo.Close();
+    public bool StationInfoOpen => _hud.StationInfo.Star >= 0;
+
     /// <summary>The manifest window: the hold and the jobs aboard, open over the chart or the sky.</summary>
     public bool ManifestOpen { get; private set; }
 

@@ -118,6 +118,7 @@ public partial class Main
         if (Screen is Screen.Orbit or Screen.Plan or Screen.Flight)
         {
             if (k.Keycode == Key.I) { ToggleManifest(); return; }
+            if (k.Keycode == Key.Escape && StationInfoOpen) { CloseStationInfo(); return; }
             if (k.Keycode == Key.Escape && ManifestOpen) { ToggleManifest(); return; }
         }
         if (MapOpen && k.Keycode == Key.R) Chart.Center = V!.EstimatedPosition;

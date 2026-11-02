@@ -58,6 +58,54 @@ public sealed class Galaxy
             .Select(b => (a, b, GateLinks.TryGetValue(a, out var y) && y == b ? 1.0 : Math.Exp(-(Stars[a].Position - Stars[b].Position).Length / Economy.SpreadLy))))
         .ToArray();
 
+    double[,]? _lag;
+    int[]? _economyOrder;
+
+    /// <summary>Stations in the fixed order market snapshots keep them.</summary>
+    public int[] EconomyOrder => _economyOrder ??= Economies.Keys.ToArray();
+
+    /// <summary>
+    /// Days news takes from one station to another: along the same links stock evens out over, at
+    /// Economy.NewsLyPerDay within a region and a day across each linked pair of gates.
+    /// </summary>
+    public double InfoLag(int from, int to)
+    {
+        if (from == to) return 0;
+        if (_lag == null)
+        {
+            var order = EconomyOrder;
+            var index = order.Select((s, i) => (s, i)).ToDictionary(x => x.s, x => x.i);
+            var n = order.Length;
+            var edges = Enumerable.Range(0, n).Select(_ => new List<(int To, double Days)>()).ToArray();
+            foreach (var (a, b, _) in Neighbours)
+            {
+                var days = GateLinks.TryGetValue(a, out var x) && x == b ? Economy.GateRelayDays
+                    : (Stars[a].Position - Stars[b].Position).Length / Economy.NewsLyPerDay;
+                edges[index[a]].Add((index[b], days));
+                edges[index[b]].Add((index[a], days));
+            }
+            var lag = new double[n, n];
+            for (int src = 0; src < n; src++)
+            {
+                var dist = Enumerable.Repeat(double.PositiveInfinity, n).ToArray();
+                var done = new bool[n];
+                dist[src] = 0;
+                for (int k = 0; k < n; k++)
+                {
+                    var u = -1;
+                    for (int i = 0; i < n; i++) if (!done[i] && (u < 0 || dist[i] < dist[u])) u = i;
+                    if (u < 0 || double.IsPositiveInfinity(dist[u])) break;
+                    done[u] = true;
+                    foreach (var (v, d) in edges[u]) dist[v] = Math.Min(dist[v], dist[u] + d);
+                }
+                for (int i = 0; i < n; i++) lag[src, i] = dist[i];
+            }
+            _lag = lag;
+        }
+        var idx = EconomyOrder;
+        return _lag[Array.IndexOf(idx, from), Array.IndexOf(idx, to)];
+    }
+
     readonly Dictionary<int, Center> _systems = new();
     readonly Dictionary<int, Station> _stations = new();
 
