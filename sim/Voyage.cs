@@ -314,14 +314,24 @@ public sealed class Voyage
         }
     }
 
+    /// <summary>The star whose well the ship was last found in: a hint, checked before use.</summary>
+    int _well = -1;
+
+    /// <summary>The well the ship is in and the distance to its star; MaxValue in open space. Wells never overlap.</summary>
     public double NearestWell(out Star? star)
     {
+        if (_well >= 0 && (_truth[_well] - TruePosition).Length is var d && d < G.Stars[_well].Soi)
+        {
+            star = G.Stars[_well];
+            return d;
+        }
         star = null; double best = double.MaxValue;
+        _well = -1;
         for (int i = 0; i < _truth.Length; i++)
         {
             var s = G.Stars[i];
             var r = (_truth[i] - TruePosition).Length;
-            if (r < s.Soi && r < best) { best = r; star = s; }
+            if (r < s.Soi && r < best) { best = r; star = s; _well = i; }
         }
         return best;
     }
@@ -383,15 +393,17 @@ public sealed class Voyage
         while (left > 0 && Phase == Phase.Flight)
         {
             var pos = TruePosition; var vel = Velocity;
-            var dt = Math.Min(left, Physics.SafeStep(G, _truth, pos, vel));
-            var thrustVec = Vec3d.Zero;
+            double dt;
             if (thrust.LengthSq > 0 && Fuel > 0)
             {
+                // Under power the path bends anywhere, so every star is checked as before.
+                dt = Math.Min(left, Physics.SafeStep(G, _truth, pos, vel));
                 var done = SpendDeltaV(Tuning.MaxThrust * thrust.Length * dt);
-                thrustVec = thrust.Normalized() * (done / dt);
+                Physics.Rk4(G, _truth, ref pos, ref vel, thrust.Normalized() * (done / dt), dt);
                 Thrusting = true;
+                _well = -1;
             }
-            Physics.Rk4(G, _truth, ref pos, ref vel, thrustVec, dt);
+            else dt = Physics.Coast(G, _truth, ref pos, ref vel, left, ref _well);   // the same steps the forecast takes
             TruePosition = pos; Velocity = vel;
             Time += dt; left -= dt;
             Tick(dt, shielded);
@@ -425,13 +437,12 @@ public sealed class Voyage
 
     void CheckStates()
     {
-        for (int i = 0; i < _truth.Length; i++)
-            if ((_truth[i] - TruePosition).Length < G.Stars[i].Radius) { Kill(DeathCause.Collision); return; }
+        // A star's body lies inside its well, so only the well's star can be hit.
+        var r = NearestWell(out var star);
+        if (star != null && r < star.Radius) { Kill(DeathCause.Collision); return; }
         if (Hull <= 0) { Kill(DeathCause.HullFailure); return; }
         if (LifeRemaining <= 0) { Kill(DeathCause.LifeSupport); return; }
 
-        var r = NearestWell(out var star);
-        _ = r;
         var speed = Velocity.Length;
         if (star == null && speed < Tuning.StallSpeed)
         {

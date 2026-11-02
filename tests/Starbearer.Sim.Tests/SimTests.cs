@@ -41,6 +41,51 @@ public class SimTests
     }
 
     [Fact]
+    public void ACoastInOpenSpaceIsExact()
+    {
+        var g = Empty(new Star(0, "far", new Vec3d(1000, 1000, 0), 1, 5000, Vec3d.Zero));
+        var positions = new[] { g.Stars[0].Position };
+        var (pos, vel, well, t) = (Vec3d.Zero, new Vec3d(1, 0, 0), -1, 0.0);
+        while (t < 5) t += Physics.Coast(g, positions, ref pos, ref vel, 5 - t, ref well);
+        var k = Tuning.BaseDrag;
+        Assert.Equal(5, t, 9);
+        Assert.Equal(Math.Log(1 + k * 5) / k, pos.X, 9);   // dt/ds = 1/v with v = exp(-k s)
+        Assert.Equal(Math.Exp(-k * pos.X), vel.X, 9);
+    }
+
+    [Fact]
+    public void CoastingMatchesFineSteps()
+    {
+        // In through a well and out again: the ray cast and the one-star steps against brute force.
+        var star = new Star(0, "s", new Vec3d(3, 0.3, 0), 1, 5000, Vec3d.Zero);
+        var other = new Star(1, "o", new Vec3d(-6, 5, 2), 1.5, 6000, Vec3d.Zero);
+        var g = Empty(star, other);
+        var positions = new[] { star.Position, other.Position };
+        var (p1, v1, p2, v2) = (Vec3d.Zero, new Vec3d(0.6, 0, 0), Vec3d.Zero, new Vec3d(0.6, 0, 0));
+        int well = -1;
+        double t1 = 0;
+        while (t1 < 12) t1 += Physics.Coast(g, positions, ref p1, ref v1, 12 - t1, ref well);
+        for (int i = 0; i < 120000; i++) Physics.Rk4(g, positions, ref p2, ref v2, Vec3d.Zero, 1e-4);
+        Assert.True((p1 - p2).Length < 2e-3, $"off by {(p1 - p2).Length}");
+        Assert.True((v1 - v2).Length < 2e-3, $"speed off by {(v1 - v2).Length}");
+        Assert.True(Math.Abs(v1.Y) > 0.01);   // it really passed through the well
+    }
+
+    [Fact]
+    public void ACaughtForecastStopsAfterALap()
+    {
+        var star = new Star(0, "s", Vec3d.Zero, 1, 5000, Vec3d.Zero);
+        var g = Empty(star);
+        var r = star.Soi * 0.3;
+        var speed = Math.Sqrt(star.Mu / r);
+        var f = Predictor.Run(g, new[] { star.Position }, new Vec3d(r, 0, 0), new Vec3d(0, 0, speed));
+        var lap = 2 * Math.PI * Math.Sqrt(r * r * r / star.Mu);
+        Assert.Equal(PredictionEnd.Captured, f.End);
+        Assert.InRange(f.Duration, lap * 0.9, lap * 2.1);
+        Assert.Single(f.Encounters);
+    }
+
+    [Fact]
     public void FlybyDeflectionMatchesHyperbolaFormula()
     {
         // A normal star at game scale: the well is short enough for drag to barely matter.

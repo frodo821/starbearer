@@ -122,6 +122,7 @@ public partial class Hud
                 PredictionEnd.Stall => ($"{fc.Duration:F0}日後に失速", Warn),
                 PredictionEnd.Collision => ($"{fc.Duration:F1}日後に {g.Stars[fc.CollisionStar!.Value].Name} へ突入", Bad),
                 PredictionEnd.Lost => ("星域から離脱", Warn),
+                PredictionEnd.Captured => ($"{g.Stars[fc.Encounters[^1].Star].Name} の井戸に捕まる。降下するか噴射で抜ける", Warn),
                 _ => ("", Ink),
             };
             if (txt != "") Text(new Vector2(x, y), txt, col, 16);
@@ -234,6 +235,7 @@ public partial class Hud
             PredictionEnd.Stall => "で失速",
             PredictionEnd.Collision => "で恒星に突入",
             PredictionEnd.Lost => "で星域を離脱",
+            PredictionEnd.Captured => "で井戸に捕まる",
             _ => "以上",
         };
         var line = $"航程 {total:F1} ly / {fc.Duration:F0} 日{ending}";
