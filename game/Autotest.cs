@@ -130,9 +130,10 @@ public partial class Autotest : Node
             _g.LookAtPublic(-_g.V!.SubPosition.Normalized());   // the body the port circles
             _g.OrbitSky = true;
         }, 20);
+        Do(() => { Shot("01d_body_from_port"); _g.LookAtPublic(_g.NearestStarDirection()!.Value); });
         Do(() =>
         {
-            Shot("01d_body_from_port");
+            Shot("01e_star_from_port");
             _g.OrbitSky = false;
             Press(Key.Enter);
         });
@@ -329,6 +330,8 @@ public partial class Autotest : Node
             Check("pan moves the chart pivot", (_g.Chart.Center - _center).Length > 0.1);
             Press(Key.Tab); Press(Key.Enter);
         });
+        Do(() => _g.LookAtPublic(_g.NearestStarDirection()!.Value));
+        Do(() => Shot("04a_star_in_well"));
         Do(() =>
         {
             Check("enter jumps to FTL", _g.Screen == Screen.Flight && _g.V!.Phase == Phase.Flight);
@@ -441,6 +444,13 @@ public partial class Autotest : Node
         {
             Check("D descends at the target", _g.Screen == Screen.Orbit && _g.V!.SystemStar == _g.V.TargetStar);
             Shot("06_orbit_arrival");
+            _g.OrbitSky = true;
+            _g.LookAtPublic(_g.NearestStarDirection()!.Value);
+        });
+        Do(() =>
+        {
+            Shot("06a_star_on_arrival");
+            _g.OrbitSky = false;
             _port = _g.Save!.PortStar;
             _g.CommandForTest(Key.H);
         });

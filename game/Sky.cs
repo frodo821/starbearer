@@ -65,8 +65,10 @@ public partial class Sky : MultiMeshInstance3D
             var to = truth[i] - shipPos;
             var dist = Math.Max(to.Length, 1e-4);
             var pos = ToV(to / dist) * Radius;
-            var angular = 2 * s.Radius * 7 / dist;                 // exaggerated disc so wells read at a glance
-            var size = (float)Math.Clamp(Radius * angular * 2.5 + 1.6, 0.5, Radius * 3);
+            // True size: the glow's bright core (a third of the quad) covers the star's real disc, which
+            // Worlds draws as a sphere when the star is close. Far off, the floor keeps it a point of light.
+            var disc = 2 * Radius * Math.Tan(Math.Min(Math.Atan(s.Radius / Math.Max(dist, s.Radius * 1.02)), 1.4));
+            var size = (float)Math.Clamp(disc * 3 + 1.6, 0.5, Radius * 3);
             var bright = (float)Math.Clamp(0.5 + 30 * s.Mass / (dist * dist), 0.5, 3);
             var c = StarColor(s.Temperature); c.A = bright;
             int idx = Background + i;
