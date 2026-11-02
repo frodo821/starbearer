@@ -95,7 +95,7 @@ public partial class Main
         if (v.Docked)
         {
             v.Undock();
-            ShowCue(new StateCue("出港", v.System.Name + " 港を離れた", new Color(0.5f, 1f, 0.7f), Major: false, Outward: true));
+            ShowCue(new StateCue("出港", v.System.Name + " 港を離れた", Palette.Good, Major: false, Outward: true));
             Message = "出港した。ここから生命維持を消費する";
             _forecastDirty = true;
         }

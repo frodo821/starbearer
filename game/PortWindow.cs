@@ -10,7 +10,9 @@ public partial class PortWindow : PanelContainer
 {
     readonly Main _game;
     readonly VBoxContainer _root = new();
-    static readonly Color Good = new(0.5f, 1f, 0.7f), Warn = new(1f, 0.7f, 0.25f), Dim = new(0.6f, 0.68f, 0.8f);
+    static readonly Color Good = Palette.Good, Warn = Palette.Warn;
+    /// <summary>Lighter than the HUD's, for small text on the opaque panel.</summary>
+    static readonly Color Dim = new(0.6f, 0.68f, 0.8f);
 
     /// <summary>Set at each Rebuild: the buttons taking the offers, in board order.</summary>
     public Button[] TakeButtons { get; private set; } = Array.Empty<Button>();
