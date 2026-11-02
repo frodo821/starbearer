@@ -66,6 +66,9 @@ public partial class Main
         if (acting) rate = Math.Min(rate, BurnTimeRate);
         if (NextNode is { } n && n.Time > v.AbsoluteTime)
             rate = Math.Min(rate, Math.Max(BurnTimeRate, (n.Time - v.AbsoluteTime) * 1.5));   // don't sail past ignition
+        // The auto burn is still turning onto a node that is due: hold the clock until it lights,
+        // or at full warp the node slips by unflown.
+        if (v.AutoBurn && !Helm.EngineOn && IgnitionIn is <= 0) rate = Math.Min(rate, BurnTimeRate);
         if (ToNode)
         {
             // Spend the wait in a few real seconds and slow down into it, stopping just short of ignition.
