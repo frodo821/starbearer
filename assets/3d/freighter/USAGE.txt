@@ -34,3 +34,9 @@ ORE船を参考にした工業ディテール:
 source/add_industrial_detail.py がこの追加処理です。
 参考: https://images.evetech.net/types/32880/render?size=1024 (Venture)
 参考: https://images.evetech.net/types/42244/render?size=1024 (Porpoise)
+
+製作・組み付けディテール:
+区画の接合線、段差付きの交換外板、ガスケット、ボルト、補修溶接を追加。
+配管は機器を避けて曲げた連続メッシュで、エルボ、フランジ継手、
+バルブ、クランプ、端部ソケット、フレキシブルホースを備えています。
+source/add_fabrication_detail.py がこの追加処理です。

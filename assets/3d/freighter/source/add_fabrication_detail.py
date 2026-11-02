@@ -172,17 +172,45 @@ def valve(center,tangent,normal,r=.08):
 
 def roof(x,y,offset=0):return Vector((x,y,main_profile(y)[1]+offset))
 
+def clip_y(poly,y,greater):
+    out=[]
+    for a,b in zip(poly,poly[1:]+poly[:1]):
+        ia=a.y>=y-1e-7 if greater else a.y<=y+1e-7
+        ib=b.y>=y-1e-7 if greater else b.y<=y+1e-7
+        if ia:out.append(a)
+        if ia!=ib:out.append(a.lerp(b,(y-a.y)/(b.y-a.y)))
+    clean=[]
+    for p in out:
+        if not clean or (p-clean[-1]).length>1e-7:clean.append(p)
+    if len(clean)>1 and (clean[0]-clean[-1]).length<1e-7:clean.pop()
+    return clean
+
 def plate(name,points,normal,mi=7):
     pts=[Vector(p) for p in points]
     n=Vector(normal).normalized()
-    extrude(panels,pts,n,.018,mi)
+    if n.z>.8:
+        ys=sorted(set([min(p.y for p in pts),max(p.y for p in pts)]
+                  +[s[0] for s in stations if min(p.y for p in pts)<s[0]<max(p.y for p in pts)]))
+        for low,high in zip(ys,ys[1:]):
+            part=clip_y(clip_y(pts,low,True),high,False)
+            part=[roof(p.x,p.y,.005) for p in part]
+            if len(part)>=3:extrude(panels,part,n,.018,mi)
+    else:extrude(panels,pts,n,.018,mi)
     for a,b in zip(pts,pts[1:]+pts[:1]):
         # Recessed gasket and a narrow weld toe give each edge a real joint.
-        joints.beam(a+n*.004,b+n*.004,.028,0)
+        edge=[a]
+        if n.z>.8 and abs(b.y-a.y)>.001:
+            ts=sorted((s[0]-a.y)/(b.y-a.y) for s in stations
+                      if min(a.y,b.y)<s[0]<max(a.y,b.y))
+            edge += [a.lerp(b,t) for t in ts]
+        edge.append(b)
+        if n.z>.8:edge=[roof(p.x,p.y,.005) for p in edge]
+        for q,r in zip(edge,edge[1:]):joints.beam(q+n*.004,r+n*.004,.028,0)
         length=(b-a).length
         count=max(1,int(length/.85))
         for i in range(count+1):
             p=a.lerp(b,(i+.12)/(count+.24))
+            if n.z>.8:p.z=main_profile(p.y)[1]+.005
             direction=(sum(pts,Vector())/len(pts)-p).normalized()
             bolt(p+direction*.075+n*.023,n)
 
@@ -295,10 +323,10 @@ bm.to_mesh(old.data);bm.free()
 
 # Dorsal trunk detours around each pump, with detachable flanges and valves.
 for sign in [-1,1]:
-    xy=([(.98,-5.15),(.98,-3.0),(1.18,-2.4),(1.18,-.8),(.90,-.3),
-         (.90,1.7),(1.16,2.2),(1.16,4.3),(.98,4.8),(.98,7.3)] if sign>0 else
-        [(.96,-5.15),(.96,-3.6),(1.15,-3.2),(1.15,-1.3),(.92,-.8),
-         (.92,3.1),(1.17,3.7),(1.17,5.6),(.97,6.1),(.97,7.3)])
+    xy=([(.98,-5.60),(.98,-3.0),(1.18,-2.4),(1.18,-.8),(.90,-.3),
+         (.90,1.7),(1.16,2.2),(1.16,4.3),(.98,4.8),(.98,7.8)] if sign>0 else
+        [(.96,-5.60),(.96,-3.6),(1.15,-3.2),(1.15,-1.3),(.92,-.8),
+         (.92,3.1),(1.17,3.7),(1.17,5.6),(.97,6.1),(.97,7.8)])
     pts=[roof(sign*x,y,-.25) for x,y in xy]
     pipe(pts,.085,2 if sign>0 else 1,.27)
     for p in [pts[0]+Vector((0,.22,0)),pts[-1]-Vector((0,.22,0))]:flange(p,(0,1,0),.085)
@@ -320,6 +348,10 @@ for sign in [-1,1]:
     for y,z in [(-16.3,-2.45),(-15.25,-2.45),(-11.4,.37)]:
         support((sign*12.32,y,z),(0,1,0),(sign*11.97,y,z),.067)
     for p,t in [(points[0],(0,1,0)),(points[-1],(0,1,0)),(points2[-1],(0,1,0))]:flange(p,t,.075)
+    for p in [points[0],points2[0]]:
+        fittings.cylinder((p[0],-16.96,p[2]),(p[0],p[1]+.03,p[2]),.12,mi=6,sides=12)
+    for p in [points[-1],points2[-1]]:
+        fittings.cylinder((p[0],p[1]-.03,p[2]),(p[0],-10.84,p[2]),.12,mi=6,sides=12)
 
     # Roof supply pipes dog-leg around the exchanger brackets.
     for x,dx in [(6.55,-.30),(11.45,.30)]:
@@ -327,6 +359,7 @@ for sign in [-1,1]:
             (sign*(x+dx),-15.7,2.96),(sign*(x+dx),-13.1,2.96),
             (sign*x,-12.6,2.96),(sign*x,-9.20,2.96)]
         pipe(ps,.11,1,.28)
+        for y in [-18.25,-9.20]:fittings.box((sign*x,y,2.87),(.44,.64,.42),6)
         for y in [-17.8,-10.0]:flange((sign*x,y,2.96),(0,1,0),.11)
         for y in [-17.4,-11.3]:support((sign*x,y,2.96),(0,1,0),(sign*x,y,2.72),.11)
     # Compressor line rises, bends around its collar and terminates in a union.
@@ -336,6 +369,7 @@ for sign in [-1,1]:
     pipe(ps,.072,2,.22)
     flange(ps[0],(sign,0,0),.072)
     flange(ps[-1],(sign,0,0),.072)
+    fittings.cylinder((sign*2.35,-14.95,5.60),(sign*2.75,-14.95,5.60),.12,mi=6,sides=12)
 
     # Rear hydraulic feed includes a visible flexible loop, not square elbows.
     ps=[(sign*1.3,-20.55,-1.70),(sign*1.3,-20.55,-2.2),
@@ -343,6 +377,8 @@ for sign in [-1,1]:
         (sign*1.5,-20.68,-3.55),(sign*2.75,-20.53,-3.55)]
     pipe(ps,.072,2,.32)
     for p,t in [(ps[0],(0,0,1)),(ps[-1],(sign,0,0))]:flange(p,t,.072)
+    fittings.box((sign*1.3,-20.55,-1.55),(.45,.32,.42),6)
+    fittings.cylinder((sign*2.70,-20.53,-3.55),(sign*3.05,-20.53,-3.55),.12,mi=6,sides=12)
     for k in range(9):torus(fittings,(sign*1.00,-20.70,-2.52-k*.065),(0,0,1),.081,.014,0,12)
 
 for batch,bevel in [(joints,.003),(panels,.008),(bolts,.003),(fittings,.005)]:batch.finish(bevel)

@@ -418,6 +418,10 @@ industrial=OUT/'source'/'add_industrial_detail.py'
 if industrial.exists():
     industrial_ns={'__file__':str(industrial)}
     exec(compile(industrial.read_text(),str(industrial),'exec'),industrial_ns)
+fabrication=OUT/'source'/'add_fabrication_detail.py'
+if fabrication.exists():
+    fabrication_ns={'__file__':str(fabrication)}
+    exec(compile(fabrication.read_text(),str(fabrication),'exec'),fabrication_ns)
 bpy.ops.wm.save_as_mainfile(filepath=str(OUT/'source'/'freighter.blend'))
 report={'class':'KESTREL K-40','meters_per_unit':1,'base_hull_dimensions_m':[25,40,15],
         'base_hull_preserved':not body.get('silhouette_revision',False),

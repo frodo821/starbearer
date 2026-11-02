@@ -139,6 +139,13 @@ public partial class Autotest : Node
         Do(() =>
         {
             Shot("01e_star_from_port");
+            var here = _g.V!.TruePosition;
+            var cloud = _g.G!.Nebulae.OrderBy(n => (n.Center - here).Length).First();
+            _g.LookAtPublic((cloud.Center - here).Normalized());
+        });
+        Do(() =>
+        {
+            Shot("01f_nearest_nebula");
             _g.OrbitSky = false;
             Press(Key.Enter);
         });

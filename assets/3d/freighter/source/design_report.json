@@ -22,5 +22,6 @@
     15.05
   ],
   "industrial_detail_revision": true,
-  "style_reference": "ORE industrial ships"
+  "style_reference": "ORE industrial ships",
+  "fabrication_revision": true
 }
