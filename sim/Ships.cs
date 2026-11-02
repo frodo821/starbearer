@@ -4,7 +4,9 @@ namespace Starbearer.Sim;
 
 /// <summary>
 /// A hull: its bays, which never change, and how it flies. Size costs nothing in delta-v (dry mass and
-/// tank grow together); it costs in hyperspace drag, thrust and whether a gate will take it.
+/// tank grow together); it costs in hyperspace drag, thrust and whether a gate will take it. A ship
+/// built for one kind of cargo carries the most of it; a mixed hull carries every kind but less, and is
+/// heavier for its separate bays. Pressure vessels weigh, so pressurized bays add dry mass.
 /// </summary>
 /// <param name="Price">What a shipyard asks for it new; also its value for gate tolls.</param>
 /// <param name="DryMass">Empty, without fuel or cargo.</param>
@@ -19,21 +21,50 @@ public sealed record ShipClass(string Id, string Name, Bay[] Bays, double Price,
 
 public static class Ships
 {
-    public static readonly ShipClass Courier = new("courier", "小型コンテナ船",
-        new[] { new Bay(BayKind.Container, 8) }, 600, 1.0, 1.8, 1.0, 1.0, true);
-    public static readonly ShipClass Freighter = new("freighter", "中型混載船",
-        new[] { new Bay(BayKind.Container, 6), new Bay(BayKind.Fluid, 4), new Bay(BayKind.Bulk, 4) }, 2500, 1.75, 3.15, 1.3, 0.8, true);
-    public static readonly ShipClass Tanker = new("tanker", "大型タンカー",
-        new[] { new Bay(BayKind.Fluid, 12), new Bay(BayKind.Fluid, 12) }, 5000, 3.0, 5.4, 2.0, 0.5, false);
-    public static readonly ShipClass Bulker = new("bulker", "大型バラ積み船",
-        new[] { new Bay(BayKind.Bulk, 24) }, 4500, 3.0, 5.4, 2.0, 0.5, false);
+    /// <summary>What a size of hull flies like, and how much it holds when built for one kind of cargo.</summary>
+    sealed record Size(string Id, string Name, double Volume, double DryMass, double Tank, double Drag, double Thrust, bool Gates, double Price);
 
-    public static readonly ShipClass[] All = { Courier, Freighter, Tanker, Bulker };
+    static readonly Size Small = new("small", "小型", 8, 1.0, 1.8, 1.0, 1.0, true, 600);
+    static readonly Size Medium = new("medium", "中型", 16, 1.75, 3.15, 1.3, 0.8, true, 2200);
+    static readonly Size Large = new("large", "大型", 24, 3.0, 5.4, 2.0, 0.5, false, 4500);
+
+    /// <summary>A mixed hull holds this share of a specialist's room, and is this much heavier.</summary>
+    const double MixedRoom = 0.8, MixedMass = 1.2;
+
+    static double Round(double price) => Math.Round(price / 50) * 50;
+
+    static ShipClass Make(Size z, string id, string name, Bay[] bays, double priceFactor, double dryFactor = 1) =>
+        new(id, z.Name + name, bays, Round(z.Price * priceFactor),
+            z.DryMass * dryFactor + bays.Where(b => b.Pressurized).Sum(b => b.Volume) * Tuning.PressureMassPerVolume,
+            z.Tank, z.Drag, z.Thrust, z.Gates);
+
+    static ShipClass ContainerShip(Size z, string? id = null) => Make(z, id ?? $"container-{z.Id}", "コンテナ船", new[] { new Bay(BayKind.Container, z.Volume) }, 1);
+    static ShipClass TankerShip(Size z) => Make(z, $"tanker-{z.Id}", "タンカー", new[] { new Bay(BayKind.Fluid, z.Volume / 2), new Bay(BayKind.Fluid, z.Volume / 2) }, 1.1);
+    static ShipClass GasShip(Size z) => Make(z, $"gas-{z.Id}", "ガス運搬船", new[] { new Bay(BayKind.Fluid, z.Volume / 2, true), new Bay(BayKind.Fluid, z.Volume / 2, true) }, 1.5);
+    static ShipClass BulkShip(Size z) => Make(z, $"bulk-{z.Id}", "バラ積み船", new[] { new Bay(BayKind.Bulk, z.Volume) }, 1);
+    static ShipClass MixedShip(Size z)
+    {
+        var room = z.Volume * MixedRoom;
+        return Make(z, $"mixed-{z.Id}", "混載船", new[] { new Bay(BayKind.Container, room / 2), new Bay(BayKind.Fluid, room / 4), new Bay(BayKind.Bulk, room / 4) }, 1.3, MixedMass);
+    }
+
+    public static readonly ShipClass Courier = ContainerShip(Small, "courier");
+    public static readonly ShipClass Tanker = TankerShip(Large);
+    public static readonly ShipClass Bulker = BulkShip(Large);
+
+    /// <summary>Every hull, the small container ship first. Big hulls are only built for one kind of cargo.</summary>
+    public static readonly ShipClass[] All =
+    {
+        Courier, TankerShip(Small), GasShip(Small), BulkShip(Small), MixedShip(Small),
+        ContainerShip(Medium), TankerShip(Medium), GasShip(Medium), BulkShip(Medium), MixedShip(Medium),
+        ContainerShip(Large), Tanker, GasShip(Large), Bulker,
+    };
+
     public static ShipClass Get(string id) => All.FirstOrDefault(s => s.Id == id) ?? Courier;
 
     /// <summary>
-    /// What a shipyard builds, from the seed. Every one builds the small ship; each of the others is built
-    /// at about half of them, and at least at one, so somewhere a long way off always has it.
+    /// What a shipyard builds, from the seed. Every one builds the small container ship; each of the others
+    /// is built at about a third of them, and at least at one, so somewhere a long way off always has it.
     /// </summary>
     public static ShipClass[] SoldAt(Galaxy g, int star)
     {
@@ -41,7 +72,7 @@ public static class Ships
         var yards = g.Ports.Where(p => Missions.KindOf(g, p) == StationKind.Shipyard).OrderBy(p => p).ToList();
         var index = yards.IndexOf(star);
         var r = new Rng(g.Seed * 2654435761 + (ulong)star);
-        return All.Where((c, i) => i == 0 || index % (All.Length - 1) == i - 1 || r.Unit() < 0.4).ToArray();
+        return All.Where((c, i) => i == 0 || (i - 1) % yards.Count == index || r.Unit() < 0.3).ToArray();
     }
 
     /// <summary>What a shipyard pays for a ship: half its price, less its wear, and half what its modules cost.</summary>
@@ -65,6 +96,8 @@ public sealed class OwnedShip
     public List<Consignment> Hold { get; set; } = new();
 
     [JsonIgnore] public ShipClass Type => Ships.Get(Class);
+    /// <summary>The hull as it flies: its class, plus the weight of the pressurizers fitted to it.</summary>
+    [JsonIgnore] public ShipClass Fitted => Type with { DryMass = Type.DryMass + Pressurized.Sum(i => Type.Bays[i].Volume) * Tuning.PressureMassPerVolume };
     public ShipState State => new(Fuel, Hull, Life);
 
     /// <summary>A new ship as a shipyard hands it over: full tank and supplies, empty bays.</summary>

@@ -5,7 +5,8 @@ public enum CargoKind { Fluid, PressurizedFluid, Bulk, Container }
 
 public enum BayKind { Fluid, Bulk, Container }
 
-public sealed record Bay(BayKind Kind, double Volume);
+/// <param name="Pressurized">Built as a pressure vessel: it takes pressurized fluid without a pressurizer.</param>
+public sealed record Bay(BayKind Kind, double Volume, bool Pressurized = false);
 
 /// <summary>The ship's bays as fitted: which fluid bays carry a pressurizer.</summary>
 public sealed record CargoBays(ShipClass Ship, IReadOnlyCollection<int> Pressurized)
@@ -15,7 +16,7 @@ public sealed record CargoBays(ShipClass Ship, IReadOnlyCollection<int> Pressuri
 
     public double Capacity => Ship.Bays.Sum(b => b.Volume);
     double Room(BayKind kind) => Ship.Bays.Where(b => b.Kind == kind).Sum(b => b.Volume);
-    double PressurizedRoom => Ship.Bays.Select((b, i) => (b, i)).Where(x => x.b.Kind == BayKind.Fluid && Pressurized.Contains(x.i)).Sum(x => x.b.Volume);
+    double PressurizedRoom => Ship.Bays.Select((b, i) => (b, i)).Where(x => x.b.Kind == BayKind.Fluid && (x.b.Pressurized || Pressurized.Contains(x.i))).Sum(x => x.b.Volume);
 
     /// <summary>Room for this kind of load, empty. Pressurized fluid has only the pressurized bays; plain fluid has every fluid bay.</summary>
     public double RoomFor(CargoKind kind) => kind switch
@@ -49,7 +50,7 @@ public sealed record CargoBays(ShipClass Ship, IReadOnlyCollection<int> Pressuri
         : $"{Cargos.BayName(more.Kind)}の空きが足りない";
 
     /// <summary>Fluid bays a pressurizer could still be fitted to.</summary>
-    public IEnumerable<int> Unpressurized => Ship.Bays.Select((b, i) => (b, i)).Where(x => x.b.Kind == BayKind.Fluid && !Pressurized.Contains(x.i)).Select(x => x.i);
+    public IEnumerable<int> Unpressurized => Ship.Bays.Select((b, i) => (b, i)).Where(x => x.b.Kind == BayKind.Fluid && !x.b.Pressurized && !Pressurized.Contains(x.i)).Select(x => x.i);
 }
 
 public static class Cargos

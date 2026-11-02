@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using Godot;
 using Starbearer.Sim;
@@ -58,6 +59,19 @@ public partial class PortWindow : PanelContainer
         return box;
     }
 
+    /// <summary>A column that scrolls when it outgrows the window, as a long shipyard list does.</summary>
+    static ScrollContainer Scroll(Control column)
+    {
+        var scroll = new ScrollContainer
+        {
+            CustomMinimumSize = new Vector2(column.CustomMinimumSize.X + 14, 0),
+            SizeFlagsVertical = SizeFlags.ExpandFill,
+            HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
+        };
+        scroll.AddChild(column);
+        return scroll;
+    }
+
     static HBoxContainer Row(Control text, params Control[] tail)
     {
         var row = new HBoxContainer();
@@ -80,8 +94,8 @@ public partial class PortWindow : PanelContainer
         var body = new HBoxContainer { SizeFlagsVertical = SizeFlags.ExpandFill };
         body.AddThemeConstantOverride("separation", 28);
         _root.AddChild(body);
-        body.AddChild(BoardColumn(g, s));
-        body.AddChild(ShipColumn(g, s));
+        body.AddChild(Scroll(BoardColumn(g, s)));
+        body.AddChild(Scroll(ShipColumn(g, s)));
         if (_game.Message != "") _root.AddChild(Text(_game.Message, 15, Warn));
         _root.AddChild(Row(new Control(), Press("船へ戻る", _game.LeavePort, key: "Enter")));
     }
@@ -121,9 +135,13 @@ public partial class PortWindow : PanelContainer
         return box;
     }
 
-    static string Spec(ShipClass c) =>
-        string.Join(" ", c.Bays.GroupBy(b => b.Kind).Select(k => $"{Cargos.Name(k.Key)}{Missions.Cubic(k.Sum(b => b.Volume))}"))
-        + $"   抵抗×{c.Drag:0.0#} 推力×{c.Thrust:0.0#} {(c.Gates ? "ゲート可" : "ゲート不可")}";
+    static string BayLabel(Bay b, bool fitted) => b.Pressurized || fitted ? "加圧液体ベイ" : Cargos.Name(b.Kind);
+
+    /// <summary>A hull at a glance: its bays by kind, its empty delta-v, and how it flies.</summary>
+    static string Spec(ShipClass c, IReadOnlyCollection<int>? fitted = null) =>
+        string.Join(" ", c.Bays.Select((b, i) => (Label: BayLabel(b, fitted?.Contains(i) == true), b.Volume)).GroupBy(x => x.Label)
+            .Select(k => $"{k.Key}{Missions.Cubic(k.Sum(x => x.Volume))}"))
+        + $"   空荷Δv {Tuning.ExhaustVelocity * Math.Log((c.DryMass + c.Tank) / c.DryMass):F2}   抵抗×{c.Drag:0.0#} 推力×{c.Thrust:0.0#} {(c.Gates ? "ゲート可" : "ゲート不可")}";
 
     /// <summary>The company's ships docked here, and at a shipyard what it builds.</summary>
     void HangarSection(VBoxContainer box, Galaxy g, SaveData s)
@@ -134,7 +152,7 @@ public partial class PortWindow : PanelContainer
         {
             var info = new VBoxContainer();
             info.AddChild(Text(ship.Type.Name + (ship.Id == s.Flown ? "（乗船中）" : ""), 16, ship.Id == s.Flown ? Good : null));
-            info.AddChild(Text($"燃料 {ship.Fuel:F2}/{ship.Type.Tank:F2}   船体 {ship.Hull:P0}   積荷 {ship.Hold.Count} 件   {Spec(ship.Type)}", 13, Dim));
+            info.AddChild(Text($"燃料 {ship.Fuel:F2}/{ship.Type.Tank:F2}   船体 {ship.Hull:P0}   積荷 {ship.Hold.Count} 件   {Spec(ship.Fitted, ship.Pressurized)}", 13, Dim));
             if (ship.Id == s.Flown) { box.AddChild(Row(info)); continue; }
             var sale = Hangar.SaleRefusal(s, g, ship);
             box.AddChild(Row(info, Press("乗り換え", () => _game.BoardShip(ship.Id)),
@@ -161,7 +179,7 @@ public partial class PortWindow : PanelContainer
         var bays = CargoBays.Of(s);
         box.AddChild(Text($"カーゴ  容積 {Missions.Cubic(Missions.VolumeUsed(s.Hold))} / {Missions.Cubic(bays.Capacity)}", 20, Good));
         box.AddChild(Text($"{bays.Ship.Name}: " + string.Join("、", bays.Ship.Bays.Select((b, i) =>
-            $"{Cargos.Name(b.Kind)}{(s.Pressurized.Contains(i) ? "（加圧）" : "")} {Missions.Cubic(b.Volume)}")), 14, Dim));
+            $"{BayLabel(b, s.Pressurized.Contains(i))} {Missions.Cubic(b.Volume)}")), 14, Dim));
         if (s.Hold.Count == 0) box.AddChild(Text("空荷", 15, Dim));
         foreach (var c in s.Hold)
         {

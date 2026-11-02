@@ -85,6 +85,45 @@ public class SimTests
         Assert.Equal(Ships.Tanker.Thrust, b2.Velocity.Y / s2.Velocity.Y, 2);
     }
 
+    static double EmptyDeltaV(ShipClass c) => Tuning.ExhaustVelocity * Math.Log((c.DryMass + c.Tank) / c.DryMass);
+
+    [Fact]
+    public void AMixedHullCarriesEveryKindButLessThanASpecialistOfItsSize()
+    {
+        foreach (var size in new[] { "small", "medium" })
+        {
+            var mixed = Ships.Get($"mixed-{size}");
+            Assert.Equal($"mixed-{size}", mixed.Id);
+            var specialists = Ships.All.Where(c => c.Id.EndsWith(size) && c != mixed || size == "small" && c == Ships.Courier).ToList();
+            Assert.Equal(4, specialists.Count);
+            foreach (var c in specialists)
+            {
+                Assert.True(mixed.Capacity < c.Capacity);
+                Assert.True(EmptyDeltaV(mixed) < EmptyDeltaV(c));
+                Assert.Equal(c.Drag, mixed.Drag);
+            }
+            Assert.True(mixed.Price > specialists.Where(c => !c.Id.StartsWith("gas")).Max(c => c.Price));
+            var bays = new CargoBays(mixed, Array.Empty<int>());
+            Assert.All(new[] { CargoKind.Container, CargoKind.Bulk, CargoKind.Fluid }, k => Assert.True(bays.RoomFor(k) > 0));
+        }
+        Assert.DoesNotContain(Ships.All, c => c.Id == "mixed-large");
+    }
+
+    [Fact]
+    public void AGasCarrierIsBuiltPressurizedAndPressureWeighs()
+    {
+        var gas = Ships.Get("gas-small");
+        var tanker = Ships.Get("tanker-small");
+        var built = new CargoBays(gas, Array.Empty<int>());
+        Assert.True(built.Fits(new[] { Load(CargoKind.PressurizedFluid, 8) }));
+        Assert.True(built.Fits(new[] { Load(CargoKind.Fluid, 8) }));
+        Assert.Empty(built.Unpressurized);                       // nothing left to fit a pressurizer to
+        Assert.True(gas.DryMass > tanker.DryMass);
+        var fitted = new OwnedShip { Class = tanker.Id, Pressurized = { 0, 1 } };
+        Assert.Equal(gas.DryMass, fitted.Fitted.DryMass, 9);     // a tanker pressurized throughout weighs the same
+        Assert.Equal(tanker.DryMass, new OwnedShip { Class = tanker.Id }.Fitted.DryMass, 9);
+    }
+
     [Fact]
     public void AGateTurnsAwayAHullTooBigForIt()
     {
