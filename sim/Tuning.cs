@@ -26,6 +26,8 @@ public static class Tuning
     public const double FuelPrice = 30;            // per unit of fuel
     public const double LifePricePerDay = 0.1;
     public const double HullRepairPrice = 60;      // for a whole hull
+    public const double HullValue = 600;           // what the ship itself is worth, for the gate toll
+    public const double GateTollRate = 0.08;       // share of ship, modules and cargo a gate charges
     public const double DepartureFuelFloor = 0.8;  // below this a ship can't reach another station
 
     // Normal space

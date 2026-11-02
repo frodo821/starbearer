@@ -74,7 +74,7 @@ public partial class PortWindow : PanelContainer
         var s = _game.Save!;
         var g = _game.G!;
         var star = _game.V!.SystemStar;
-        _root.AddChild(Text($"{g.Stars[star].Name} 港   {Missions.Name(Missions.KindOf(g, star))}", 28, Good));
+        _root.AddChild(Text($"{g.Stars[star].Name}   {Missions.Name(Missions.KindOf(g, star))}   {g.Regions[g.Stars[star].Region].Name} 宙域", 28, Good));
         _root.AddChild(Text($"資金 {s.Credits:F0}   配達 {s.Deliveries} 件   ここがチェックポイント", 15, Dim));
         foreach (var line in _game.PortReport) _root.AddChild(Text(line, 16));
         var body = new HBoxContainer { SizeFlagsVertical = SizeFlags.ExpandFill };
@@ -90,6 +90,14 @@ public partial class PortWindow : PanelContainer
     {
         var box = Column(680);
         box.AddChild(Text("ミッションボード", 20, Good));
+        if (_game.GateExit is var exit and >= 0)
+        {
+            box.AddChild(Text($"ゲートの行き先: {g.Stars[exit].Name}（{g.Regions[g.Stars[exit].Region].Name} 宙域）", 17));
+            box.AddChild(Text($"出港してから「ゲート通過」で予約し、ゲートまで寄ると向こうへ出る。速さはそのまま\n通行税は船・モジュール・積荷の価値の {Tuning.GateTollRate:P0}（今なら {_game.GateToll:F0}）、次の入港で精算", 14, Dim));
+            box.AddChild(Text("ゲートは仕事を出さない", 15, Dim));
+            TakeButtons = Array.Empty<Button>();
+            return box;
+        }
         var offers = _game.Offers;
         if (offers.Count == 0) box.AddChild(Text("請けられる仕事は残っていない", 15, Dim));
         TakeButtons = offers.Select(m =>

@@ -80,7 +80,9 @@ public partial class Main
             }
             list.Add(("操船", ShipCommands(Helm.EngineOn, this)));
             list.Add(("機首", NoseCommands));
-            list.Add(("港", new Command[] { new(Key.X, "X", "接近", st != null, Hold: true), new(Key.Z, "Z", "相対0", st != null, Hold: true), new(Key.U, "U", "入港", v.CanDock) }));
+            var port = new List<Command> { new(Key.X, "X", "接近", st != null, Hold: true), new(Key.Z, "Z", "相対0", st != null, Hold: true), new(Key.U, "U", "入港", v.CanDock) };
+            if (v.AtGate) port.Add(new(Key.K, "", v.GateBooked != null ? "通過を取消" : $"ゲート通過 {GateToll:F0}"));
+            list.Add(("港", port.ToArray()));
             list.Add(("航行", new Command[] { new(Key.J, "J", "FTL発進"), new(Key.Tab, "Tab", OrbitSky ? "軌道図" : "空") }));
             return list;
         }
@@ -123,6 +125,8 @@ public partial class Main
         var st = v.LocalStation;
         if (v.Goal == null)
             return v.LocalStation == null ? (Key.J, "この星系に港はない。発進して次へ") : (Key.C, "目標なし。「目標」か天体のタップで選ぶ");
+        if (v.GateBooked is { } toll && GateExit is var exit and >= 0)
+            return (null, $"ゲート通過を予約済み（{toll:F0}）。ゲートまで寄れば {G!.Stars[exit].Name} へ出る。速さはそのまま");
         if (Helm.EngineOn && NextNode != null)
             return v.AutoBurn ? (null, "自動噴射中。終わると自動で止まる")
                 : NodeOvershot ? (Key.E, "ノードを過ぎた。E で止める")

@@ -74,7 +74,8 @@ public partial class Autotest : Node
 
     double Off(Vec3d dir) => Math.Acos(Math.Clamp(_g.Helm.Nose.Dot(dir), -1, 1));
 
-    int _heldTarget, _stop, _bought;
+    int _heldTarget, _stop, _bought, _gate, _exit;
+    double _toll;
     double _credits, _heldFuel;
     int _retries;
     bool _paused, _sawEngine;
@@ -786,10 +787,52 @@ public partial class Autotest : Node
         }
         Do(() =>
         {
+            // Through a gate: dock at this region's, cast off, book, and drift into it.
             _g.OrbitSky = false;
             _g.ViewFromForTest(-1, Vec3d.Zero);
-            _g.GoBrokeForTest();
+            var g = _g.G!;
+            var region = g.Stars[_g.V!.SystemStar].Region;
+            _gate = g.Gates.FirstOrDefault(x => g.Stars[x].Region == region, g.Gates[0]);
+            _exit = g.GateLinks[_gate];
+            _g.Purchase(s => s.Credits = 1000);
+            _g.DockAtForTest(_gate);
         });
+        Do(() =>
+        {
+            Check("a gate's port says where it leads", _g.Screen == Screen.Port && _g.GateExit == _exit && _g.Offers.Count == 0);
+            Shot("13_gate_port");
+            Press(Key.Enter);
+        });
+        Do(() => Press(Key.U));
+        Do(() => _g.CommandForTest(Key.K));
+        Do(() =>
+        {
+            var v = _g.V!;
+            Check("the console books the passage", v.GateBooked is > 0);
+            _toll = v.GateBooked ?? 0;
+            _credits = _g.Save!.Credits;
+            var st = v.LocalStation!;
+            var t = v.AbsoluteTime;
+            var (along, _, _) = Sublight.Frame(st.Position(t), st.Velocity(t));
+            v.PlaceSublightForTest(st.Position(t) + along * (Tuning.DockRange * 0.5), st.Velocity(t) + along * 0.02);
+            if (_g.Paused) Press(Key.Space);
+            _clock = Time.GetTicksMsec();
+        });
+        Until(() => _g.V!.SystemStar == _exit || Time.GetTicksMsec() - _clock > 5000);
+        Do(() =>
+        {
+            var v = _g.V!;
+            Check("booked, the gate takes the ship through", v.SystemStar == _exit && v.Passages == 1 && v.TollsDue == _toll && _g.Screen == Screen.Orbit && v.Phase == Phase.Sublight);
+            Check("the ship comes out at the speed it went in", Math.Abs((v.SubVelocity - v.StationNow().Velocity).Length - 0.02) < 2e-3);
+            Shot("13a_gate_passed");
+            _g.DockAtForTest(_exit);
+        });
+        Do(() =>
+        {
+            Check("the toll is settled at the next dock", Math.Abs(_g.Save!.Credits - (_credits + _g.Earned - _toll)) < 1e-9 && _g.PortReport.Any(l => l.StartsWith("通行税")));
+            Press(Key.Enter);
+        });
+        Do(() => _g.GoBrokeForTest());
         Do(() =>
         {
             Shot("11_bankrupt");

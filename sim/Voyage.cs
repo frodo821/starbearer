@@ -259,6 +259,7 @@ public sealed class Voyage
                 var (sp, sv) = StationNow();
                 var near = (sp - p).Length < Tuning.DockRange;
                 if (!near) _clearOfDock = true;
+                else if (GateBooked != null && G.GateLinks.TryGetValue(SystemStar, out var exit)) PassGate(ref p, ref v, sp, sv, exit);
                 else if (_clearOfDock && (sv - v).Length < Tuning.DockRelativeSpeed)
                     Phase = Phase.Arrived;
             }
@@ -266,6 +267,49 @@ public sealed class Voyage
         SubPosition = p; SubVelocity = v;
         SyncTruePosition();
         Observe();
+    }
+
+    int _bookedAt = -1;
+    double _toll;
+
+    /// <summary>The toll of the passage booked through this system's gate, or null if none is.</summary>
+    public double? GateBooked => _bookedAt >= 0 && _bookedAt == SystemStar ? _toll : null;
+    /// <summary>Tolls of passages made since the last dock; they are settled there.</summary>
+    public double TollsDue { get; private set; }
+    /// <summary>How many gates the ship has gone through, so the game can tell a passage happened.</summary>
+    public int Passages { get; private set; }
+    public bool AtGate => G.GateLinks.ContainsKey(SystemStar);
+
+    /// <summary>Books the passage: from now, coming within docking range of the gate takes the ship through.</summary>
+    public void BookGate(double toll)
+    {
+        if (!AtGate || Docked) return;
+        (_bookedAt, _toll) = (SystemStar, toll);
+    }
+
+    public void CancelGate() => _bookedAt = -1;
+
+    /// <summary>
+    /// Through the gate: position and velocity relative to it, taken in its own orbit's frame, come out
+    /// the same relative to the exit gate in that one's frame. A fast entry is a fast exit.
+    /// </summary>
+    void PassGate(ref Vec3d p, ref Vec3d v, Vec3d gateAt, Vec3d gateSpeed, int exit)
+    {
+        var t = AbsoluteTime;
+        var from = LocalStation!;
+        var (t0, r0, n0) = Sublight.Frame(from.Position(t), from.Velocity(t));
+        var to = G.StationAt(exit);
+        var (t1, r1, n1) = Sublight.Frame(to.Position(t), to.Velocity(t));
+        Vec3d Turn(Vec3d x) => t1 * x.Dot(t0) + r1 * x.Dot(r0) + n1 * x.Dot(n0);
+        var (dp, dv) = (Turn(p - gateAt), Turn(v - gateSpeed));
+        Primary = to.Host ?? G.System(exit);
+        p = to.Position(t) + dp;
+        v = to.Velocity(t) + dv;
+        TollsDue += _toll;
+        _bookedAt = -1;
+        Passages++;
+        Nodes.Clear();
+        _clearOfDock = false;   // out beside the exit gate: no docking there until clear of it
     }
 
     void PassSublightTime(double days)

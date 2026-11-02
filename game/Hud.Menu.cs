@@ -79,6 +79,8 @@ public partial class Hud
         yield return new("遷移案", () => Game.PlanFor(o, Key.H));
         if (o is Station) yield return new("合流案", () => Game.PlanFor(o, Key.M));
         if (Game.Owns(Modules.Transfer)) yield return new("計算機で計画", () => Game.PlanFor(o, Key.T));
+        if (o is Station && v.AtGate && !v.Docked)
+            yield return new(v.GateBooked != null ? "通過の予約を取消" : $"通過を予約（通行税 {Game.GateToll:F0}）", Game.ToggleGate);
     }
 
     /// <summary>What can be done with a star: make it the destination, or, while planning a jump, aim at it.</summary>
@@ -94,6 +96,7 @@ public partial class Hud
     {
         var g = Game.G!;
         return g.Stars[star].Name + Missions.Mark(g, star)
+            + (g.GateLinks.TryGetValue(star, out var exit) ? $" → {g.Stars[exit].Name}" : "")
             + (star == Game.V!.TargetStar ? "  目的地" : "");
     }
 

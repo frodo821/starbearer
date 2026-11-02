@@ -2,7 +2,7 @@ namespace Starbearer.Sim;
 
 /// <summary>What a station does. It decides which jobs its board offers.</summary>
 /// <summary>Production kinds come first, up to Depot; the ones after it each have a role of their own.</summary>
-public enum StationKind { Farm, Foundry, Lab, Clinic, Mine, City, Depot, Shipyard, Colony }
+public enum StationKind { Farm, Foundry, Lab, Clinic, Mine, City, Depot, Shipyard, Colony, Gate }
 
 /// <summary>A job from a mission board: carry Cargo to Target for Pay, less whatever the cargo loses.</summary>
 public sealed record Mission(string Id, int Origin, int Target, Cargo Cargo, double Pay);
@@ -45,6 +45,7 @@ public static class Missions
         StationKind.City => "都市ステーション",
         StationKind.Shipyard => "造船所",
         StationKind.Colony => "コロニー",
+        StationKind.Gate => "ゲート",
         _ => "補給ステーション",
     };
 
@@ -54,6 +55,7 @@ public static class Missions
         StationKind.Depot => "補給港",
         StationKind.Shipyard => "造船所",
         StationKind.Colony => "コロニー",
+        StationKind.Gate => "ゲート",
         _ => "港",
     };
 
@@ -63,6 +65,7 @@ public static class Missions
         StationKind.Depot => " ◇",
         StationKind.Shipyard => " ▲",
         StationKind.Colony => " ●",
+        StationKind.Gate => " ◎",
         _ => " ◆",
     };
 
@@ -87,10 +90,11 @@ public static class Missions
     {
         var r = new Rng(g.Seed * 7919 + (ulong)star * 104729 + (ulong)deliveries * 31);
         var kind = KindOf(g, star);
-        var goods = Catalog[kind];
-        // Within the region for now: crossing to another takes gates, which aren't built yet.
+        if (!Catalog.TryGetValue(kind, out var goods)) return new();   // a gate posts no jobs
+        // Within the region, or one a gate from here leads to.
         var region = g.Stars[star].Region;
-        var places = g.Ports.Concat(g.Depots).Where(s => s != star && g.Stars[s].Region == region)
+        var reach = g.LinkedRegions(region).Append(region).ToHashSet();
+        var places = g.Ports.Concat(g.Depots).Where(s => s != star && reach.Contains(g.Stars[s].Region))
             .OrderBy(s => r.Unit() / (KindOf(g, s) == StationKind.Colony ? ColonyPull : 1)).ToArray();
         var count = Math.Min(kind is StationKind.Depot or StationKind.Shipyard ? SmallOffers : PortOffers, places.Length);
         var offers = new List<Mission>();

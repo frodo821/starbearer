@@ -14,7 +14,7 @@ public partial class Main
     bool _fromButton;
 
     /// <summary>Planning is done on the chart and its buttons; these have no key of their own.</summary>
-    static bool ButtonOnly(Key key) => key is Key.H or Key.M or Key.T or Key.Y or Key.C;
+    static bool ButtonOnly(Key key) => key is Key.H or Key.M or Key.T or Key.Y or Key.C or Key.K;
 
     /// <summary>While a chart menu is open it takes the next click, and Esc closes it.</summary>
     bool MenuInput(InputEvent e)
@@ -141,6 +141,7 @@ public partial class Main
                 if (k.Keycode == Key.T) RunTransferComputer();
                 if (k.Keycode == Key.G) ToggleAutoBurn();
                 if (k.Keycode == Key.C) CycleTarget();
+                if (k.Keycode == Key.K) ToggleGate();
                 if (k.Keycode == Key.R) Chart.Glide(PrimaryOnChart, ChartView.ZoomFor(V!.Primary));
                 if (k.Keycode >= Key.Key1 && k.Keycode < Key.Key1 + Rates.Length) { SubRateIndex = (int)(k.Keycode - Key.Key1); Paused = false; ToNode = false; Aligning = false; }
                 break;

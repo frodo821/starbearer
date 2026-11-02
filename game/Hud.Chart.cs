@@ -22,6 +22,10 @@ public partial class Hud
             for (int i = 4; i >= 1; i--)
                 DrawCircle(c, (float)n.Radius * Game.Chart.Zoom * i * 0.45f, new Color(0.35f, 0.5f, 0.8f, 0.018f * (float)n.Density));
         }
+        // Gate links, faint, under the stars.
+        foreach (var (gate, exit) in g.GateLinks)
+            if (gate < exit)
+                DrawDashedLine(MapPoint(v.ChartPositions[gate]), MapPoint(v.ChartPositions[exit]), new Color(0.8f, 0.6f, 1f, 0.45f), 1.5f, 8, true);
         var current = CurrentStar();
         var zoom = Game.Chart.Zoom;
         var view = new Rect2(Vector2.Zero, Size).Grow(60);

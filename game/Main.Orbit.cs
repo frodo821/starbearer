@@ -97,7 +97,9 @@ public partial class Main
         var fuelBefore = v.Fuel;
         var firedOn = engine.LengthSq > 0 ? NextNode : null;
         Burn.Prepare(v, firedOn, PlanFrozen ? SubForecast : null);
+        var passages = v.Passages;
         v.AdvanceSublight(rate * delta, engine);
+        if (v.Passages != passages) PassedGate();
         var burned = v.Fuel < fuelBefore ? engine * (Tuning.SublightThrust * rate * delta) : (Vec3d?)null;
         Burn.Measure(v, firedOn, burned);
         if (firedOn != null && burned != null && firedOn == Burn.Node)
@@ -137,6 +139,18 @@ public partial class Main
         Helm.Slew(dir, delta);
         Helm.Firing = Helm.Nose.Dot(dir) > 0.99;
         return Helm.Firing ? Helm.Nose : Vec3d.Zero;
+    }
+
+    /// <summary>Out of a gate into another system: the plan is gone and the chart follows.</summary>
+    void PassedGate()
+    {
+        var v = V!;
+        var region = G!.Regions[G.Stars[v.SystemStar].Region].Name;
+        ShowCue(new StateCue("ゲート通過", $"{v.System.Name} 星系 / {region} 宙域", new Color(0.8f, 0.6f, 1f), Major: true, Outward: true));
+        Message = $"{v.System.Name} のゲートへ出た。通行税 {v.TollsDue:F0} は次の入港で精算";
+        Selected = null;
+        Chart.Show(PrimaryOnChart, ChartView.ZoomFor(v.Primary));
+        Replan();
     }
 
     /// <summary>The burn on the node being flown.</summary>

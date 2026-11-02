@@ -90,6 +90,26 @@ public partial class Main
         PortChanged();
     }
 
+    /// <summary>Where the gate of this system leads, or -1.</summary>
+    public int GateExit => V != null && G!.GateLinks.TryGetValue(V.SystemStar, out var exit) ? exit : -1;
+
+    /// <summary>What a passage through this system's gate would cost now.</summary>
+    public double GateToll => Gates.Toll(Save!, V!);
+
+    /// <summary>Books the passage through this system's gate, or lets the booking go. The toll is settled at the next dock.</summary>
+    public void ToggleGate()
+    {
+        var v = V!;
+        if (GateExit < 0) return;
+        if (v.Docked) { Message = "出港してからゲートへ向かう"; return; }
+        if (v.GateBooked != null) { v.CancelGate(); Message = "ゲート通過の予約を取り消した"; return; }
+        var toll = GateToll;
+        if (Save!.Credits - v.TollsDue < toll) { Message = $"通行税 {toll:F0} を払えない"; return; }
+        v.BookGate(toll);
+        var exit = GateExit;
+        Message = $"ゲート通過を予約（通行税 {toll:F0}、次の入港で精算）。ゲートの入港距離まで寄ると {G!.Stars[exit].Name}（{G.Regions[G.Stars[exit].Region].Name} 宙域）へ出る";
+    }
+
     /// <summary>The port the ship is at builds modules: only a shipyard does.</summary>
     public bool AtShipyard => V != null && Missions.KindOf(G!, V.SystemStar) == StationKind.Shipyard;
 
@@ -166,7 +186,8 @@ public partial class Main
         PortReport = here.Select(c => $"配達  {c.Mission.Cargo.Name}  健全度 {c.Integrity:P0}   報酬 {c.Payout:F0}").ToList();
         PortReport.Add($"所要 {v.Time:F1} 日   残燃料 {v.Fuel:F2}   船体 {v.Hull:P0}");
         Earned = here.Sum(c => c.Payout);
-        s.Credits += Earned;
+        if (v.TollsDue > 0) PortReport.Add($"通行税  -{v.TollsDue:F0}");
+        s.Credits = Math.Max(0, s.Credits + Earned - v.TollsDue);
         s.Deliveries += here.Count;
         s.Hold = v.Hold.Except(here).Select(c => c.Copy()).ToList();
         s.HeldFuel = v.Fuel;

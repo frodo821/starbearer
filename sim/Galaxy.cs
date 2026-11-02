@@ -26,13 +26,21 @@ public sealed class Galaxy
     public Dictionary<int, StationKind> Kinds { get; init; } = new();
     /// <summary>Star ids with a small resupply station. Its board has only small jobs.</summary>
     public int[] Depots { get; init; } = Array.Empty<int>();
+    /// <summary>Star ids with a gate. Gates post no jobs and take no deliveries.</summary>
+    public int[] Gates { get; init; } = Array.Empty<int>();
+    /// <summary>Where each gate leads: the star of the gate it is paired with.</summary>
+    public Dictionary<int, int> GateLinks { get; init; } = new();
+
+    /// <summary>The regions a gate in this one leads to.</summary>
+    public IEnumerable<int> LinkedRegions(int region) =>
+        Gates.Where(g => Stars[g].Region == region).Select(g => Stars[GateLinks[g]].Region).Distinct();
 
     HashSet<int>? _ports, _depots;
     public bool IsPort(int star) => (_ports ??= Ports.ToHashSet()).Contains(star);
     public bool IsDepot(int star) => (_depots ??= Depots.ToHashSet()).Contains(star);
 
     /// <summary>Each port's station, derived from the seed so it never needs saving.</summary>
-    public bool HasStation(int star) => IsPort(star) || IsDepot(star);
+    public bool HasStation(int star) => IsPort(star) || IsDepot(star) || GateLinks.ContainsKey(star);
     public Station? StationOrNull(int star) => HasStation(star) ? StationAt(star) : null;
 
     readonly Dictionary<int, Center> _systems = new();
@@ -57,7 +65,7 @@ public sealed class Galaxy
         var moons = system.Children.SelectMany(p => p.Children).Where(m => m.Edge * 0.25 > Tuning.DockRange * 3).ToList();
         return kind switch
         {
-            StationKind.Mine => system,
+            StationKind.Mine or StationKind.Gate => system,
             StationKind.Lab or StationKind.Foundry or StationKind.Shipyard when moons.Count > 0 => moons[r.Index(moons.Count)],
             _ when planets.Count > 0 => planets[r.Index(planets.Count)],
             _ => system,
@@ -138,15 +146,59 @@ public sealed class Galaxy
         stars = stars.Select(s => s with { Region = regions.Member[s.Id] }).ToList();
 
         var kinds = new Dictionary<int, StationKind>();
+        var links = PlaceGates(r, stars, regions.List, kinds);
         for (int k = 0; k < regions.List.Length; k++)
             PlaceStations(r, stars, stars.Where(s => s.Region == k).ToList(), kinds);
         var stations = kinds.Keys.ToList();   // in placement order: each region's guaranteed ones first
         return new Galaxy
         {
             Seed = seed, Stars = stars.ToArray(), Nebulae = nebulae, Regions = regions.List, Kinds = kinds,
-            Ports = stations.Where(s => kinds[s] != StationKind.Depot).ToArray(),
+            Ports = stations.Where(s => kinds[s] is not (StationKind.Depot or StationKind.Gate)).ToArray(),
             Depots = stations.Where(s => kinds[s] == StationKind.Depot).ToArray(),
+            Gates = stations.Where(s => kinds[s] == StationKind.Gate).ToArray(),
+            GateLinks = links,
         };
+    }
+
+    /// <summary>
+    /// Gate pairs between regions: a spanning tree over the region centres so every region can be
+    /// reached, each region's nearest neighbour, and one long link across. Gates sit near their
+    /// region's middle, so a passage saves a long run.
+    /// </summary>
+    static Dictionary<int, int> PlaceGates(Rng r, List<Star> stars, Region[] regions, Dictionary<int, StationKind> kinds)
+    {
+        var links = new Dictionary<int, int>();
+        if (regions.Length < 2) return links;
+        double Apart(int a, int b) => (regions[a].Center - regions[b].Center).Length;
+        var pairs = new HashSet<(int, int)>();
+        void Pair(int a, int b) { if (a != b) pairs.Add((Math.Min(a, b), Math.Max(a, b))); }
+        var joined = new List<int> { 0 };
+        while (joined.Count < regions.Length)
+        {
+            var (from, to) = joined.SelectMany(a => Enumerable.Range(0, regions.Length).Where(b => !joined.Contains(b)).Select(b => (a, b))).MinBy(x => Apart(x.a, x.b));
+            Pair(from, to);
+            joined.Add(to);
+        }
+        for (int a = 0; a < regions.Length; a++) Pair(a, Enumerable.Range(0, regions.Length).Where(b => b != a).MinBy(b => Apart(a, b)));
+        if (regions.Length >= 4)
+        {
+            var (x, y) = Enumerable.Range(0, regions.Length).SelectMany(a => Enumerable.Range(a + 1, regions.Length - a - 1).Select(b => (a, b))).MaxBy(p => Apart(p.a, p.b));
+            Pair(x, y);
+        }
+        // Each link gets a star near the middle of each end, leaning toward the other region.
+        int GateStar(int region, int toward)
+        {
+            var mid = regions[region].Center;
+            var lean = mid + (regions[toward].Center - mid).Normalized() * 4;
+            return stars.Where(s => s.Region == region && !kinds.ContainsKey(s.Id)).MinBy(s => (s.Position - lean).Length)!.Id;
+        }
+        foreach (var (a, b) in pairs.OrderBy(p => p))
+        {
+            var ga = GateStar(a, b); kinds[ga] = StationKind.Gate;
+            var gb = GateStar(b, a); kinds[gb] = StationKind.Gate;
+            links[ga] = gb; links[gb] = ga;
+        }
+        return links;
     }
 
     /// <summary>
@@ -158,11 +210,14 @@ public sealed class Galaxy
         if (mine.Count == 0) return;
         var production = Enumerable.Range(0, (int)StationKind.Depot).Select(i => (StationKind)i).ToArray();
         var guaranteed = Tuning.RegionMinimum.OrderBy(_ => r.Next()).ToList();
-        var placed = new List<int> { mine[r.Index(mine.Count)].Id };
-        while (placed.Count < Math.Min(guaranteed.Count, mine.Count))
+        // The gates already here count for the spread, so the rest keep away from them.
+        var placed = mine.Where(s => kinds.ContainsKey(s.Id)).Select(s => s.Id).ToList();
+        var preset = placed.Count;
+        if (preset == 0) placed.Add(mine[r.Index(mine.Count)].Id);
+        while (placed.Count - preset < Math.Min(guaranteed.Count, mine.Count - preset))
             placed.Add(mine.Where(s => !placed.Contains(s.Id)).MaxBy(s => placed.Min(p => (all[p].Position - s.Position).Length))!.Id);
-        for (int i = 0; i < placed.Count; i++)
-            kinds[placed[i]] = guaranteed[i] == StationKind.Farm ? production[r.Index(production.Length)] : guaranteed[i];
+        for (int i = preset; i < placed.Count; i++)
+            kinds[placed[i]] = guaranteed[i - preset] == StationKind.Farm ? production[r.Index(production.Length)] : guaranteed[i - preset];
         var total = (int)Math.Round(mine.Count * r.Range(Tuning.StationShareMin, Tuning.StationShareMax));
         var rest = mine.Where(s => !kinds.ContainsKey(s.Id)).OrderBy(_ => r.Next()).Take(Math.Max(0, total - placed.Count));
         foreach (var s in rest)
