@@ -15,7 +15,6 @@ public static partial class Sublight
     public static double Mu(Star s) => s.Mu / Scale;
     public static double SystemRadius(Star s) => s.Soi / Scale;
     public static double StarRadius(Star s) => s.Radius / Scale;
-    public static Vec3d Tangent(Vec3d v) => v.Normalized();
 
     /// <summary>Orbit frame at a state: tangent, outward radial and orbit normal, all unit length.</summary>
     public static (Vec3d T, Vec3d R, Vec3d N) Frame(Vec3d p, Vec3d v)

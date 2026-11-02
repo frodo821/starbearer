@@ -17,8 +17,6 @@ public static class Modules
 /// <summary>What a stop on the way sells. Purchases go straight to the checkpoint.</summary>
 public static class Supply
 {
-    public static double FullTank => Tuning.TankCapacity * Tuning.FuelPrice;
-
     static double Spend(SaveData s, double room, double price)
     {
         var amount = Math.Clamp(s.Credits / price, 0, Math.Max(room, 0));

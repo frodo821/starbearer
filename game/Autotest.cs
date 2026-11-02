@@ -285,12 +285,12 @@ public partial class Autotest : Node
         Do(() =>
         {
             Check("the Ap node can be deleted", _g.V!.Nodes.Count == 0);
-            _zoom = _g.OrbitYaw;
+            _zoom = _g.MapYaw;
             Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Position = new Vector2(1300, 100), Pressed = true });
             Input.ParseInputEvent(new InputEventMouseMotion { Position = new Vector2(1360, 120), Relative = new Vector2(60, 20) });
             Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Position = new Vector2(1360, 120), Pressed = false });
         });
-        Do(() => { Check("dragging empty space rotates the orbit view", _g.OrbitYaw != _zoom); Shot("02d_rotated"); Press(Key.J); });
+        Do(() => { Check("dragging empty space rotates the orbit view", _g.MapYaw != _zoom); Shot("02d_rotated"); Press(Key.J); });
         Do(() =>
         {
             Check("J opens the jump plan", _g.Screen == Screen.Plan);

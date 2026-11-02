@@ -88,14 +88,8 @@ public partial class Main : Node3D
     public bool Firing { get; private set; }
     public bool HandlesOpen;
     // There is one chart. The orbit view is the galaxy map looked at closely, in AU around this system.
-    public float OrbitYaw { get => MapYaw; set => MapYaw = value; }
-    public float OrbitPitch { get => MapPitch; set => MapPitch = value; }
-    public float OrbitZoom { get => MapZoom * (float)Sublight.Scale; set => MapZoom = value / (float)Sublight.Scale; }
-    public Vec3d OrbitCenter
-    {
-        get => (MapCenter - V!.System.Position) / Sublight.Scale;
-        set => MapCenter = V!.System.Position + value * Sublight.Scale;
-    }
+    /// <summary>Pixels per AU on the chart.</summary>
+    public float OrbitZoom => MapZoom * (float)Sublight.Scale;
     const float SystemZoom = 425f, GalaxyZoom = 11f;
     /// <summary>Where the chart is gliding to after a change of layer.</summary>
     (Vec3d Center, float Zoom)? _glide;
