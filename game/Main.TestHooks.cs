@@ -24,10 +24,10 @@ public partial class Main
         Board();
     }
 
-    public void DockAtDepotForTest()
+    /// <summary>Autotest only: puts the ship beside a station and docks there.</summary>
+    public void DockAtForTest(int depot)
     {
         var v = V!;
-        var depot = G!.Depots[0];
         var st = G.StationAt(depot);
         v.EnterFtl();
         var host = st.Host!;

@@ -447,7 +447,7 @@ public partial class Hud
         Polyline3(a => host + (u * Math.Cos(a) + w * Math.Sin(a)) * rad, new Color(Good, 0.35f), 1);
         var sp = StationPoint()!.Value;
         DrawRect(new Rect2(sp - new Vector2(4, 4), 8, 8), Good);
-        Text(sp + new Vector2(8, -6), v.SystemStar == v.TargetStar ? "目的港" : Game.G!.Ports.Contains(v.SystemStar) ? "港" : "補給港", Good, 13);
+        Text(sp + new Vector2(8, -6), Missions.ShortName(Missions.KindOf(Game.G!, v.SystemStar)) + (v.SystemStar == v.TargetStar ? "（目的地）" : ""), Good, 13);
         if (st.Host?.Key != v.Primary.Key) return;
         // Drop line from the ship to the station's plane, so height reads in 3D.
         var height = v.SubPosition.Dot(st.PlaneNormal);

@@ -93,7 +93,7 @@ public partial class Hud
     string StarTitle(int star)
     {
         var g = Game.G!;
-        return g.Stars[star].Name + (g.Ports.Contains(star) ? " ◆" : g.Depots.Contains(star) ? " ◇" : "")
+        return g.Stars[star].Name + Missions.Mark(g, star)
             + (star == Game.V!.TargetStar ? "  目的地" : "");
     }
 
@@ -109,7 +109,7 @@ public partial class Hud
     {
         var v = Game.V!;
         if (v.LocalStation is { } st && StationPoint() is { } sp && sp.DistanceTo(at) < 14)
-            OpenMenu(at, v.SystemStar == v.TargetStar ? "目的港" : "港", OrbiterMenu(st));
+            OpenMenu(at, Missions.ShortName(Missions.KindOf(Game.G!, v.SystemStar)) + (v.SystemStar == v.TargetStar ? "（目的地）" : ""), OrbiterMenu(st));
         else if (OrbiterAt(at) is Center body)
             OpenMenu(at, body.Name, OrbiterMenu(body));
         else if (Game.Chart.PixelsPerAu < 35 && PickStar(at) is int star && star != v.SystemStar)

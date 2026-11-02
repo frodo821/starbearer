@@ -74,7 +74,7 @@ public partial class Autotest : Node
 
     double Off(Vec3d dir) => Math.Acos(Math.Clamp(_g.Helm.Nose.Dot(dir), -1, 1));
 
-    int _heldTarget;
+    int _heldTarget, _stop, _bought;
     double _credits, _heldFuel;
     int _retries;
     bool _paused, _sawEngine;
@@ -635,14 +635,13 @@ public partial class Autotest : Node
             Shot("09_delivered");
             Check("docking delivers the cargo", _g.Screen == Screen.Port);
             Check("checkpoint moved to the target", _g.Save!.PortStar != _port && _g.Save.Deliveries == 1);
-            _g.Save.Modules.Clear();
-            _g.Save.Credits = 200;
+            _g.Purchase(s => { s.Modules.Clear(); s.Credits = 200; });   // saved, so a reload sees it
             Press(Key.Key1);
-            Press(Key.Key2);
         });
         Do(() =>
         {
-            Check("port sells what you can afford", _g.Save!.Modules.SequenceEqual(new[] { Modules.AutoBurn }) && Math.Abs(_g.Save.Credits - 50) < 1e-9);
+            _bought = _g.Save!.Modules.Count;
+            Check("modules are sold only at a shipyard", _bought == (_g.AtShipyard ? 1 : 0));
             Press(Key.Enter);
         });
         Do(() =>
@@ -652,17 +651,22 @@ public partial class Autotest : Node
         });
         Do(() =>
         {
-            Check("save reloads from disk", _g.Save!.Deliveries == 1 && _g.Save.Modules.Count == 1 && _g.Screen == Screen.Orbit);
-            _g.TakeMissionForTest(_g.G!.Depots[0]);
+            Check("save reloads from disk", _g.Save!.Deliveries == 1 && _g.Save.Modules.Count == _bought && _g.Screen == Screen.Orbit);
+            // A stop at the region's shipyard on the way somewhere else.
+            var g = _g.G!;
+            var here = _g.V!.SystemStar;
+            var region = g.Ports.Concat(g.Depots).Where(s => s != here && g.Stars[s].Region == g.Stars[here].Region).ToList();
+            _stop = region.FirstOrDefault(s => Missions.KindOf(g, s) == StationKind.Shipyard, region[0]);
+            _g.TakeMissionForTest(_stop);
             _heldTarget = _g.V!.TargetStar;
             _heldJob = _g.Save!.Hold[0].Mission.Id;
             _g.V.Burn(new Vec3d(1, 0, 0), 0.2);
-            _g.DockAtDepotForTest();
+            _g.DockAtForTest(_stop);
         });
         Do(() =>
         {
             Shot("10_layover");
-            Check("docking at a depot is a stop, not a delivery", _g.Screen == Screen.Port && _g.Save!.Deliveries == 1 && _g.Save.Hold.Single().Mission.Id == _heldJob);
+            Check("docking elsewhere is a stop, not a delivery", _g.Screen == Screen.Port && _g.Save!.Deliveries == 1 && _g.Save.Hold.Single().Mission.Id == _heldJob);
             _credits = _g.Save!.Credits;
             _heldFuel = _g.Save.HeldFuel;
             Press(Key.Key3);
@@ -671,17 +675,27 @@ public partial class Autotest : Node
         {
             Check("fuel at a stop costs credits", Math.Abs(_credits - _g.Save!.Credits - (_g.Save.HeldFuel - _heldFuel) * Tuning.FuelPrice) < 1e-9 && _g.Save.HeldFuel > _heldFuel);
             _heldFuel = _g.Save.HeldFuel;
+            (_credits, _g.Save.Credits) = (_g.Save.Credits, 200);
+            _g.Save.Modules.Clear();
+            Press(Key.Key1);
+            Press(Key.Key2);
+        });
+        Do(() =>
+        {
+            Shot("10a_shipyard");
+            Check("a shipyard sells the modules you can afford", !_g.AtShipyard || _g.Save!.Modules.SequenceEqual(new[] { Modules.AutoBurn }) && Math.Abs(_g.Save.Credits - 50) < 1e-9);
+            _g.Save!.Credits = _credits;
             Press(Key.Enter);
         });
         Do(() =>
         {
             var v = _g.V!;
-            Check("the stop keeps what was bought and the contract", Math.Abs(v.Fuel - _heldFuel) < 1e-9 && v.Time == 0 && v.TargetStar == _heldTarget && v.Hold.Single().Mission.Id == _heldJob && v.SystemStar == _g.G!.Depots[0]);
+            Check("the stop keeps what was bought and the contract", Math.Abs(v.Fuel - _heldFuel) < 1e-9 && v.Time == 0 && v.TargetStar == _heldTarget && v.Hold.Single().Mission.Id == _heldJob && v.SystemStar == _stop);
             _g.ReloadForTest();
         });
         Do(() =>
         {
-            Check("a stop survives a reload", _g.V!.TargetStar == _heldTarget && _g.V.SystemStar == _g.G!.Depots[0]);
+            Check("a stop survives a reload", _g.V!.TargetStar == _heldTarget && _g.V.SystemStar == _stop);
             _g.Save!.Credits = 100000;
             _voyage = _g.V;
             Press(Key.Enter);

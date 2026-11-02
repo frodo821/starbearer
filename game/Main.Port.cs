@@ -90,10 +90,22 @@ public partial class Main
         PortChanged();
     }
 
+    /// <summary>The port the ship is at builds modules: only a shipyard does.</summary>
+    public bool AtShipyard => V != null && Missions.KindOf(G!, V.SystemStar) == StationKind.Shipyard;
+
+    /// <summary>The nearest shipyard in the region, for pointing the way to one; -1 if none.</summary>
+    public int NearestShipyard()
+    {
+        var here = G!.Stars[V!.SystemStar];
+        return G.Ports.Where(p => Missions.KindOf(G, p) == StationKind.Shipyard && G.Stars[p].Region == here.Region)
+            .OrderBy(p => (G.Stars[p].Position - here.Position).Length).DefaultIfEmpty(-1).First();
+    }
+
     public void Buy(string id, double price, string name)
     {
         var s = Save!;
         if (s.Modules.Contains(id)) return;
+        if (!AtShipyard) { Message = "モジュールは造船所で買える"; _hud.Port.Rebuild(); return; }
         if (s.Credits < price) { Message = $"{name}: 資金が足りない"; _hud.Port.Rebuild(); return; }
         s.Credits -= price;
         s.Modules.Add(id);

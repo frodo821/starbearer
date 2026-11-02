@@ -135,8 +135,11 @@ public partial class PortWindow : PanelContainer
         {
             var m = Modules.Shop[i];
             var owned = s.Modules.Contains(m.Id);
-            box.AddChild(Row(Text(m.Name, 15), owned ? Text("搭載済み", 14, Good) : Press($"{m.Price:F0}", () => _game.Buy(m.Id, m.Price, m.Name), s.Credits >= m.Price, $"{i + 1}")));
+            Control buy = _game.AtShipyard ? Press($"{m.Price:F0}", () => _game.Buy(m.Id, m.Price, m.Name), s.Credits >= m.Price, $"{i + 1}") : Text($"{m.Price:F0}", 14, Dim) as Control;
+            box.AddChild(Row(Text(m.Name, 15), owned ? Text("搭載済み", 14, Good) : buy));
         }
+        if (!_game.AtShipyard)
+            box.AddChild(Text(_game.NearestShipyard() is var yard and >= 0 ? $"買えるのは造船所だけ。最寄りは {g.Stars[yard].Name} ▲" : "買えるのは造船所だけ", 13, Dim));
         return box;
     }
 }

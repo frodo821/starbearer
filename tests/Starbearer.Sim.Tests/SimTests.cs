@@ -12,20 +12,30 @@ public class SimTests
     };
 
     [Fact]
-    public void EveryRegionHasItsOwnPortsAndDepots()
+    public void EveryRegionHasTheStationsItIsPromised()
     {
-        var g = Galaxy.Generate(7);
-        Assert.Equal(Tuning.RegionCount, g.Regions.Length);
-        Assert.Equal(g.Regions.Length, g.Regions.Select(r => r.Name).Distinct().Count());
-        foreach (var region in g.Regions)
+        var counts = new HashSet<int>();
+        for (ulong seed = 1; seed <= 5; seed++)
         {
-            var stars = g.Stars.Count(s => s.Region == region.Id);
-            Assert.InRange(stars, Tuning.StarsPerRegion / 3, Tuning.StarsPerRegion * 3);
-            Assert.Equal(Tuning.PortsPerRegion, g.Ports.Count(p => g.Stars[p].Region == region.Id));
-            Assert.Equal(Tuning.DepotsPerRegion, g.Depots.Count(p => g.Stars[p].Region == region.Id));
+            var g = Galaxy.Generate(seed);
+            Assert.Equal(Tuning.RegionCount, g.Regions.Length);
+            Assert.Equal(g.Regions.Length, g.Regions.Select(r => r.Name).Distinct().Count());
+            foreach (var region in g.Regions)
+            {
+                Assert.InRange(g.Stars.Count(s => s.Region == region.Id), Tuning.StarsPerRegion / 3, Tuning.StarsPerRegion * 3);
+                var kinds = g.Ports.Concat(g.Depots).Where(p => g.Stars[p].Region == region.Id).Select(p => Missions.KindOf(g, p)).ToList();
+                Assert.True(kinds.Count(k => k < StationKind.Depot) >= 2, "two production stations");
+                Assert.Contains(StationKind.Colony, kinds);
+                Assert.Contains(StationKind.Shipyard, kinds);
+                counts.Add(kinds.Count);
+            }
+            Assert.All(g.Ports, p => Assert.NotEqual(StationKind.Depot, Missions.KindOf(g, p)));
+            Assert.All(g.Depots, p => Assert.Equal(StationKind.Depot, Missions.KindOf(g, p)));
         }
+        Assert.True(counts.Count > 1, "the number of stations varies from region to region");
+        var g7 = Galaxy.Generate(7);
         // A region is one stretch of the disc: each star is nearer its own region's centre than any other's.
-        Assert.All(g.Stars, s => Assert.Equal(s.Region, g.Regions.MinBy(r => (r.Center - s.Position).Length)!.Id));
+        Assert.All(g7.Stars, s => Assert.Equal(s.Region, g7.Regions.MinBy(r => (r.Center - s.Position).Length)!.Id));
     }
 
     [Fact]

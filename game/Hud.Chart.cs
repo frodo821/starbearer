@@ -35,14 +35,13 @@ public partial class Hud
             // Chart ring: how far this star may be from where it is drawn.
             var err = (float)(Tuning.ChartErrorLy * Voyage.ChartFactor(v.ClosestApproach[i]) * zoom);
             if (err > 2) DrawArc(p, err * 2, 0, Mathf.Tau, 20, new Color(1f, 0.6f, 0.3f, 0.45f), 1f, true);
-            var port = g.IsPort(i);
-            var depot = g.IsDepot(i);
-            var name = s.Name + (port ? " ◆" : depot ? " ◇" : "");
+            var station = g.HasStation(i);
+            var name = s.Name + Missions.Mark(g, i);
             if (i == current) { DrawHere(p, name, ring: true); continue; }
             var key = i == v.TargetStar || bound.Contains(i);
             // Zoomed out, names thin to the stations, then to where the ship is bound.
-            if (!key && (zoom < 4 || zoom < 8 && !port && !depot)) continue;
-            Text(p + new Vector2(8, 4), name, i == v.TargetStar ? Good : bound.Contains(i) ? Warn : port || depot ? Ink : Dim, 13);
+            if (!key && (zoom < 4 || zoom < 8 && !station)) continue;
+            Text(p + new Vector2(8, 4), name, i == v.TargetStar ? Good : bound.Contains(i) ? Warn : station ? Ink : Dim, 13);
         }
         DrawRegionNames();
         var fc = Game.Forecast;
@@ -125,7 +124,7 @@ public partial class Hud
             }
             var at = SystemPoint(star, host + st.Position(v.AbsoluteTime));
             DrawRect(new Rect2(at - new Vector2(3, 3), 6, 6), Good);
-            Text(at + new Vector2(7, -5), star == v.TargetStar ? "目的港" : g.Ports.Contains(star) ? "港" : "補給港", Good, 12);
+            Text(at + new Vector2(7, -5), Missions.ShortName(Missions.KindOf(g, star)) + (star == v.TargetStar ? "（目的地）" : ""), Good, 12);
         }
     }
 

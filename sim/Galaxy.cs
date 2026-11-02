@@ -22,6 +22,8 @@ public sealed class Galaxy
     public Region[] Regions { get; init; } = Array.Empty<Region>();
     /// <summary>Star ids that host a port.</summary>
     public required int[] Ports { get; init; }
+    /// <summary>What each station is, by star. Stars missing here fall back to a kind from the seed.</summary>
+    public Dictionary<int, StationKind> Kinds { get; init; } = new();
     /// <summary>Star ids with a small resupply station. Its board has only small jobs.</summary>
     public int[] Depots { get; init; } = Array.Empty<int>();
 
@@ -56,7 +58,7 @@ public sealed class Galaxy
         return kind switch
         {
             StationKind.Mine => system,
-            StationKind.Lab or StationKind.Foundry when moons.Count > 0 => moons[r.Index(moons.Count)],
+            StationKind.Lab or StationKind.Foundry or StationKind.Shipyard when moons.Count > 0 => moons[r.Index(moons.Count)],
             _ when planets.Count > 0 => planets[r.Index(planets.Count)],
             _ => system,
         };
@@ -135,23 +137,42 @@ public sealed class Galaxy
         var regions = Partition(r, stars, names);
         stars = stars.Select(s => s with { Region = regions.Member[s.Id] }).ToList();
 
-        // In each region, ports spread by greedy farthest point so contracts cross it, and depots fill the gaps.
-        var ports = new List<int>();
-        var depots = new List<int>();
+        var kinds = new Dictionary<int, StationKind>();
         for (int k = 0; k < regions.List.Length; k++)
+            PlaceStations(r, stars, stars.Where(s => s.Region == k).ToList(), kinds);
+        var stations = kinds.Keys.ToList();   // in placement order: each region's guaranteed ones first
+        return new Galaxy
         {
-            var mine = stars.Where(s => s.Region == k).ToList();
-            var placed = new List<int> { mine[r.Index(mine.Count)].Id };
-            int Farthest() => mine.Where(s => !placed.Contains(s.Id))
-                .OrderByDescending(s => placed.Min(p => (stars[p].Position - s.Position).Length)).First().Id;
-            while (placed.Count < Math.Min(Tuning.PortsPerRegion, mine.Count)) placed.Add(Farthest());
-            ports.AddRange(placed);
-            var portCount = placed.Count;
-            while (placed.Count < Math.Min(portCount + Tuning.DepotsPerRegion, mine.Count)) placed.Add(Farthest());
-            depots.AddRange(placed.Skip(portCount));
-        }
+            Seed = seed, Stars = stars.ToArray(), Nebulae = nebulae, Regions = regions.List, Kinds = kinds,
+            Ports = stations.Where(s => kinds[s] != StationKind.Depot).ToArray(),
+            Depots = stations.Where(s => kinds[s] == StationKind.Depot).ToArray(),
+        };
+    }
 
-        return new Galaxy { Seed = seed, Stars = stars.ToArray(), Nebulae = nebulae, Regions = regions.List, Ports = ports.ToArray(), Depots = depots.ToArray() };
+    /// <summary>
+    /// A region's stations. The guaranteed ones (see Tuning.RegionMinimum) are spread by greedy farthest
+    /// point so jobs cross the region; the rest, a varying number, go to random stars and kinds.
+    /// </summary>
+    static void PlaceStations(Rng r, List<Star> all, List<Star> mine, Dictionary<int, StationKind> kinds)
+    {
+        if (mine.Count == 0) return;
+        var production = Enumerable.Range(0, (int)StationKind.Depot).Select(i => (StationKind)i).ToArray();
+        var guaranteed = Tuning.RegionMinimum.OrderBy(_ => r.Next()).ToList();
+        var placed = new List<int> { mine[r.Index(mine.Count)].Id };
+        while (placed.Count < Math.Min(guaranteed.Count, mine.Count))
+            placed.Add(mine.Where(s => !placed.Contains(s.Id)).MaxBy(s => placed.Min(p => (all[p].Position - s.Position).Length))!.Id);
+        for (int i = 0; i < placed.Count; i++)
+            kinds[placed[i]] = guaranteed[i] == StationKind.Farm ? production[r.Index(production.Length)] : guaranteed[i];
+        var total = (int)Math.Round(mine.Count * r.Range(Tuning.StationShareMin, Tuning.StationShareMax));
+        var rest = mine.Where(s => !kinds.ContainsKey(s.Id)).OrderBy(_ => r.Next()).Take(Math.Max(0, total - placed.Count));
+        foreach (var s in rest)
+        {
+            var roll = r.Unit();
+            kinds[s.Id] = roll < 0.45 ? production[r.Index(production.Length)]
+                : roll < 0.8 ? StationKind.Depot
+                : roll < 0.93 ? StationKind.Colony
+                : StationKind.Shipyard;
+        }
     }
 
     /// <summary>
