@@ -22,6 +22,7 @@ public partial class Hud
             for (int i = 4; i >= 1; i--)
                 DrawCircle(c, (float)n.Radius * Game.Chart.Zoom * i * 0.45f, new Color(0.35f, 0.5f, 0.8f, 0.018f * (float)n.Density));
         }
+        var current = v.Phase == Phase.Sublight ? v.SystemStar : v.NearestWell(out var well) < double.MaxValue && well != null ? well.Id : -1;
         for (int i = 0; i < g.Stars.Length; i++)
         {
             var s = g.Stars[i];
@@ -35,7 +36,8 @@ public partial class Hud
             var port = g.Ports.Contains(i);
             var depot = g.Depots.Contains(i);
             var lc = i == v.TargetStar ? Good : v.Hold.Any(c => c.Mission.Target == i) ? Warn : port || depot ? Ink : Dim;
-            Text(p + new Vector2(8, 4), s.Name + (port ? " ◆" : depot ? " ◇" : ""), lc, 13);
+            if (i == current) DrawHere(p, s.Name + (port ? " ◆" : depot ? " ◇" : ""), ring: true);
+            else Text(p + new Vector2(8, 4), s.Name + (port ? " ◆" : depot ? " ◇" : ""), lc, 13);
         }
         var fc = Game.Forecast;
         // Up close, in orbit, the FTL line would only cross the orbit it starts from.
@@ -51,6 +53,23 @@ public partial class Hud
                 last = p;
             }
         }
+    }
+
+    /// <summary>The system the ship is in: its name in full on a dark backing, and a ring when it is only a point on the chart.</summary>
+    void DrawHere(Vector2 at, string name, bool ring)
+    {
+        if (ring)
+        {
+            var pulse = 0.5f + 0.5f * Mathf.Sin(Time.GetTicksMsec() / 300f);
+            DrawArc(at, 12, 0, Mathf.Tau, 32, Colors.White, 2f, true);
+            DrawArc(at, 17 + 4 * pulse, 0, Mathf.Tau, 32, new Color(Colors.White, 0.15f + 0.3f * pulse), 1.5f, true);
+        }
+        var label = "現在地  " + name;
+        var width = F.GetStringSize(label, HorizontalAlignment.Left, -1, 15).X;
+        var p = at + new Vector2(ring ? 24 : 12, -10);
+        DrawRect(new Rect2(p + new Vector2(-5, -16), width + 10, 22), new Color(0.01f, 0.02f, 0.05f, 0.8f));
+        DrawRect(new Rect2(p + new Vector2(-5, -16), width + 10, 22), new Color(Colors.White, 0.5f), false, 1);
+        Text(p, label, Colors.White, 15);
     }
 
     public Vector2 SystemPoint(int star, Vec3d p) => MapPoint(Game.V!.ChartPositions[star] + p * Sublight.Scale);

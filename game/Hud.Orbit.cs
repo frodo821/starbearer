@@ -294,13 +294,14 @@ public partial class Hud
         var col = Sky.StarColor(star.Temperature);
         for (int i = 4; i >= 1; i--) DrawCircle(c, 5f * i * i * 0.5f, new Color(col, 0.13f));
         DrawCircle(c, 5, col);
-        Text(c + new Vector2(10, -8), star.Name, Dim, 14);
         if (Game.Chart.PixelsPerAu < 35)
         {
             // Zoomed out to the galaxy the system is one point, but where the ship is bound still reads.
             if (Game.SubForecast is { } leaving) DrawHandover(leaving, Warn);
+            DrawHere(c, star.Name, ring: true);
             return;
         }
+        DrawHere(c, star.Name, ring: false);
         DrawBodies();
         DrawTarget();
         DrawLocalStation();
