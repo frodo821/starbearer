@@ -170,7 +170,7 @@ public partial class Main
                 if (k.Keycode == Key.Enter) LeavePort();
                 for (int i = 0; i < Modules.Shop.Length; i++)
                     if (k.Keycode == Key.Key1 + i) Buy(Modules.Shop[i].Id, Modules.Shop[i].Price, Modules.Shop[i].Name);
-                if (k.Keycode == Key.Key3) Purchase(Supply.BuyFuel);
+                if (k.Keycode == Key.Key3) BuyFuel();
                 if (k.Keycode == Key.Key4) Purchase(Supply.BuyLife);
                 if (k.Keycode == Key.Key5) Purchase(Supply.RepairHull);
                 break;

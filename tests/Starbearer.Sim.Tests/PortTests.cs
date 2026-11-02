@@ -61,24 +61,51 @@ public partial class SimTests
     }
 
     [Fact]
-    public void SuppliesCostCreditsAndStopAtWhatYouCanAfford()
+    public void FuelComesOutOfTheStationsStockAtItsPrice()
     {
-        var s = new SaveData { HeldFuel = 0.5, Credits = 15 };
-        Supply.BuyFuel(s);
-        Assert.Equal(1.0, s.HeldFuel, 9);
+        var (s, g) = SaveData.NewGalaxy(5);
+        var m = s.MarketIn(g);
+        var fuel = Wares.ShipFuel;
+        var stock = m.StockOf(g, s.PortStar, fuel);
+        s.HeldFuel = 0.5; s.Credits = 1000;
+        var (mass, cost) = Trade.FuelQuote(s, g, m);
+        Assert.Equal(Ships.Courier.Tank - 0.5, mass, 9);
+        Trade.BuyFuel(s, g, m);
+        Assert.Equal(Ships.Courier.Tank, s.HeldFuel, 9);
+        Assert.Equal(1000 - cost, s.Credits, 9);
+        Assert.Equal(stock - Trade.FuelUnits(mass), m.StockOf(g, s.PortStar, fuel), 9);
+        // Short of credits: as much as they pay for.
+        s.HeldFuel = 0.5; s.Credits = 10;
+        Trade.BuyFuel(s, g, m);
+        Assert.InRange(s.HeldFuel, 0.5 + 1e-6, Ships.Courier.Tank - 1e-6);
+        Assert.Equal(0, s.Credits, 6);
+        // Out of stock: nothing to buy, whatever the credits.
+        m.Take(g, s.PortStar, fuel, 1e9);
+        s.HeldFuel = 0.5; s.Credits = 1000;
+        Trade.BuyFuel(s, g, m);
+        Assert.Equal(0.5, s.HeldFuel, 9);
+        Assert.Equal(1000, s.Credits, 9);
+    }
+
+    [Fact]
+    public void LifeSupportAndRepairsStopAtWhatYouCanAfford()
+    {
+        var s = new SaveData { HeldLife = 100, Credits = 10 };
+        Supply.BuyLife(s);
+        Assert.Equal(200, s.HeldLife, 9);
         Assert.Equal(0, s.Credits, 9);
-        var rich = new SaveData { HeldFuel = 1.0, Credits = 1000 };
-        Supply.BuyFuel(rich);
-        Assert.Equal(Ships.Courier.Tank, rich.HeldFuel, 9);
-        Assert.Equal(1000 - 0.8 * Tuning.FuelPrice, rich.Credits, 9);
     }
 
     [Fact]
     public void BankruptcyMeansTheFuelToLeaveCannotBeBought()
     {
-        Assert.True(Supply.Bankrupt(new SaveData { HeldFuel = 0.1, Credits = 0 }));
-        Assert.False(Supply.Bankrupt(new SaveData { HeldFuel = 0.1, Credits = 100 }));
-        Assert.False(Supply.Bankrupt(new SaveData { HeldFuel = 1.0, Credits = 0 }));
+        var (s, g) = SaveData.NewGalaxy(5);
+        (s.HeldFuel, s.Credits) = (0.1, 0);
+        Assert.True(Supply.Bankrupt(s, g));
+        (s.HeldFuel, s.Credits) = (0.1, 100);
+        Assert.False(Supply.Bankrupt(s, g));
+        (s.HeldFuel, s.Credits) = (1.0, 0);
+        Assert.False(Supply.Bankrupt(s, g));
     }
 
     [Fact]

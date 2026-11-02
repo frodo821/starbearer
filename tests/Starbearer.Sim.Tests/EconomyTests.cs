@@ -123,3 +123,99 @@ public partial class SimTests
         }
     }
 }
+
+public partial class SimTests
+{
+    /// <summary>A new galaxy docked at a station that makes this ware, with credits to spend.</summary>
+    static (SaveData S, Galaxy G, Market M) DockedWhereMade(string ware, double credits = 5000)
+    {
+        var (s, g) = SaveData.NewGalaxy(5);
+        s.PortStar = g.Economies.First(e => e.Value.Makes(ware)).Key;
+        s.Credits = credits;
+        return (s, g, s.MarketIn(g));
+    }
+
+    [Fact]
+    public void BuyingTakesStockAndRaisesThePriceUnitByUnit()
+    {
+        var (s, g, m) = DockedWhereMade("food");
+        var star = s.PortStar;
+        var price = m.Price(g, star, "food")!.Value;
+        var one = Trade.Cost(g, m, star, "food", 1, true);
+        Assert.True(one > price);                                         // the spread
+        Assert.True(Trade.Cost(g, m, star, "food", 4, true) > 4 * one);   // dearer as stock falls
+        var stock = m.StockOf(g, star, "food");
+        Assert.True(Trade.Buy(s, g, m, "food", 3));
+        Assert.Equal(stock - 3, m.StockOf(g, star, "food"), 9);
+        Assert.True(m.Price(g, star, "food") > price);
+        var lot = Assert.Single(s.Hold);
+        Assert.False(lot.IsJob);
+        Assert.Equal(3, lot.Mission.Cargo.Volume);
+        Assert.Equal("food", lot.Mission.Cargo.Ware);
+        Assert.Equal(5000 - lot.Cost, s.Credits, 9);
+        // More of the same joins the lot.
+        Assert.True(Trade.Buy(s, g, m, "food", 2));
+        Assert.Equal(5, Assert.Single(s.Hold).Mission.Cargo.Volume);
+    }
+
+    [Fact]
+    public void AStationSellsWhatItMakesAndBuysWhatItUses()
+    {
+        var (s, g, m) = DockedWhereMade("steel");
+        Assert.True(Trade.Sells(g, s.PortStar, "steel"));
+        Assert.True(Trade.Sells(g, s.PortStar, Wares.ShipFuel));   // fuel everywhere
+        Assert.False(Trade.Buys(g, s.PortStar, "steel"));
+        Assert.Equal(0, Trade.MaxBuy(s, g, m, "food"));             // not made here
+        // The courier's bays take containers only: steel is bulk.
+        Assert.Equal(0, Trade.MaxBuy(s, g, m, "steel"));
+        s.Fleet.Add(OwnedShip.Build(Ships.Bulker, 2, s.PortStar));
+        Hangar.Board(s, 2);
+        var most = Trade.MaxBuy(s, g, m, "steel");
+        Assert.True(most > 0 && most <= m.StockOf(g, s.PortStar, "steel"));
+        Assert.True(Trade.Buy(s, g, m, "steel", most));
+        Assert.Equal(0, Trade.MaxBuy(s, g, m, "steel"));               // the bays, the stock or the credits ran out
+        Assert.False(Trade.Buy(s, g, m, "steel", 1));
+        // Sold where it is used, at that station's price.
+        var lot = s.Hold.Single();
+        Assert.Null(Trade.Offer(g, m, s.PortStar, lot));
+        var user = g.Economies.First(e => e.Value.Uses("steel")).Key;
+        s.PortStar = user;   // as if flown there (test only)
+        var userStock = m.StockOf(g, user, "steel");
+        var offer = Trade.Offer(g, m, user, lot)!.Value;
+        var credits = s.Credits;
+        Assert.Equal(offer, Trade.Sell(s, g, m, lot));
+        Assert.Equal(credits + offer, s.Credits, 9);
+        Assert.Empty(s.Hold);
+        Assert.Equal(userStock + most, m.StockOf(g, user, "steel"), 9);
+    }
+
+    [Fact]
+    public void GoodsOfOnesOwnCountInTheTollAndCostNothingToLeave()
+    {
+        var (s, g, m) = DockedWhereMade("food");
+        Trade.Buy(s, g, m, "food", 2);
+        var lot = s.Hold.Single();
+        Assert.Equal(lot.Cost, lot.Value, 9);
+        Assert.Equal(0, Missions.DropFee(lot));
+        var credits = s.Credits;
+        Missions.Drop(s, lot);
+        Assert.Empty(s.Hold);
+        Assert.Equal(credits, s.Credits);
+    }
+
+    [Fact]
+    public void TheMarketAndGoodsAboardSurviveASave()
+    {
+        var (s, g, m) = DockedWhereMade("food");
+        Trade.Buy(s, g, m, "food", 2);
+        s.TotalDays = 30;
+        s.MarketIn(g);
+        var back = SaveData.FromJson(s.ToJson())!;
+        Assert.Equal(30, back.Market!.Day);
+        foreach (var (star, stock) in s.Market!.Stock) Assert.Equal(stock, back.Market.Stock[star]);
+        var lot = back.Hold.Single();
+        Assert.Equal(s.Hold.Single().Cost, lot.Cost, 9);
+        Assert.Equal("food", lot.Mission.Cargo.Ware);
+        Assert.False(lot.IsJob);
+    }
+}

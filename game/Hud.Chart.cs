@@ -29,7 +29,7 @@ public partial class Hud
         var current = CurrentStar();
         var zoom = Game.Chart.Zoom;
         var view = new Rect2(Vector2.Zero, Size).Grow(60);
-        var bound = v.Hold.Select(c => c.Mission.Target).ToHashSet();
+        var bound = v.Hold.Where(c => c.IsJob).Select(c => c.Mission.Target).ToHashSet();
         // The company's other ships, where they wait.
         var save = Game.Save!;
         var parked = save.Fleet.Where(x => x.Id != save.Flown).GroupBy(x => x.Star).ToDictionary(k => k.Key, k => k.Count());

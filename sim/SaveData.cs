@@ -17,6 +17,16 @@ public sealed class SaveData
     public int Flown { get; set; } = 1;
     /// <summary>The star the instruments steer for. Falls back when no cargo is bound there.</summary>
     public int Course { get; set; } = -1;
+    /// <summary>The galaxy's stock, as of the checkpoint.</summary>
+    public Market? Market { get; set; }
+
+    /// <summary>The market brought up to the checkpoint's day, opened from the seed if this save has none yet.</summary>
+    public Market MarketIn(Galaxy g)
+    {
+        Market ??= Market.Open(g);
+        Market.AdvanceTo(g, TotalDays);
+        return Market;
+    }
 
     [JsonIgnore] public OwnedShip Ship => Fleet.First(x => x.Id == Flown);
     // The ship flown, as the rest of the game reads it.
@@ -43,6 +53,7 @@ public sealed class SaveData
         {
             Seed = seed, Fleet = new() { new OwnedShip { Id = 1, Star = g.Ports[0] } },
             ClosestApproach = Enumerable.Repeat(double.MaxValue, g.Stars.Length).ToArray(),
+            Market = Market.Open(g),
         }, g);
     }
 }

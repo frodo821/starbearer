@@ -54,6 +54,46 @@ public partial class Main
         _hud.Port.Rebuild();
     }
 
+    /// <summary>The galaxy's day at the checkpoint, as the port shows it.</summary>
+    public string GalaxyDayText => $"銀河暦 {Save!.TotalDays:F0} 日";
+
+    /// <summary>Fills the tank from the station's fuel stock, as far as stock and credits go.</summary>
+    public void BuyFuel()
+    {
+        var s = Save!;
+        if (s.MarketIn(G!).StockOf(G!, s.PortStar, Wares.ShipFuel) < 1e-3) { Refuse("燃料が品切れ。待てば補充される"); return; }
+        Purchase(x => Trade.BuyFuel(x, G!, x.MarketIn(G!)));
+    }
+
+    public void BuyWare(string ware, int units)
+    {
+        var s = Save!;
+        if (!Trade.Buy(s, G!, s.MarketIn(G!), ware, units)) { Refuse($"{Wares.Get(ware).Name}: 買えない（在庫・資金・ベイの空きを確認）"); return; }
+        Message = $"{Wares.Get(ware).Name} を {units} 単位買った";
+        SteerForCourse();
+        PortChanged();
+    }
+
+    public void SellLot(Consignment lot)
+    {
+        var s = Save!;
+        if (Trade.Sell(s, G!, s.MarketIn(G!), lot) is not { } got) { Refuse($"{lot.Mission.Cargo.Name}: ここでは売れない"); return; }
+        Message = $"{lot.Mission.Cargo.Name} を {got:F0} で売った（仕入 {lot.Cost:F0}）";
+        PortChanged();
+    }
+
+    /// <summary>Waits at the port: the galaxy's clock and its market move on, life support is the port's.
+    /// The voyage starts over from the new day when the ship leaves.</summary>
+    public void WaitAtPort(double days)
+    {
+        var s = Save!;
+        s.TotalDays += days;
+        s.MarketIn(G!);
+        VisitingPort = false;
+        Message = $"{days:F0} 日待った";
+        PortChanged();
+    }
+
     public void Purchase(Action<SaveData> buy)
     {
         buy(Save!);
@@ -115,6 +155,7 @@ public partial class Main
         s.HeldHull = v.Hull;
         s.HeldLife = v.LifeRemaining;
         s.TotalDays += v.Time;
+        s.MarketIn(G!);   // the galaxy's stock catches up with the days flown
         s.PortStar = v.SystemStar;
         s.ClosestApproach = v.ClosestApproach;
         WriteSave();

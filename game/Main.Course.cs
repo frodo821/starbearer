@@ -27,7 +27,7 @@ public partial class Main
         var s = Save!;
         var v = V!;
         if (s.Course == v.SystemStar && v.Docked) s.Course = -1;   // arrived
-        if (s.Course < 0 && s.Hold.FirstOrDefault(c => c.Mission.Target != v.SystemStar) is { } job) s.Course = job.Mission.Target;
+        if (s.Course < 0 && s.Hold.FirstOrDefault(c => c.IsJob && c.Mission.Target != v.SystemStar) is { } job) s.Course = job.Mission.Target;
         v.TargetStar = s.Course >= 0 ? s.Course : NearestStation();
     }
 

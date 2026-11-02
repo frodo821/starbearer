@@ -6,5 +6,5 @@ public static class Gates
     public static double Toll(SaveData s, Voyage v) =>
         Math.Round(Tuning.GateTollRate * (s.Ship.Type.Price * v.Hull
             + Modules.Value(s.Ship)
-            + v.Hold.Sum(c => c.Payout)));
+            + v.Hold.Sum(c => c.Value)));
 }

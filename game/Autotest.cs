@@ -400,7 +400,7 @@ public partial class Autotest : Node
         Do(() =>
         {
             var m = _g.HudForTest.Manifest;
-            Check("I opens the manifest in flight", m.Visible && m.CourseButtons.Length == _g.V!.Hold.Count && _g.V.Hold.Count > 0);
+            Check("I opens the manifest in flight", m.Visible && m.CourseButtons.Length == _g.V!.Hold.Count(c => c.IsJob) && _g.V.Hold.Count > 0);
             Shot("04b_manifest");
             Press(Key.I);
         });
@@ -706,7 +706,7 @@ public partial class Autotest : Node
         });
         Do(() =>
         {
-            Check("fuel at a stop costs credits", Math.Abs(_credits - _g.Save!.Credits - (_g.Save.HeldFuel - _heldFuel) * Tuning.FuelPrice) < 1e-9 && _g.Save.HeldFuel > _heldFuel);
+            Check("fuel at a stop costs credits", _g.Save!.Credits < _credits && _g.Save.HeldFuel > _heldFuel);
             _heldFuel = _g.Save.HeldFuel;
             (_credits, _g.Save.Credits) = (_g.Save.Credits, 200);
             _g.Save.Modules.Clear();
@@ -747,10 +747,12 @@ public partial class Autotest : Node
                 && s.Fleet.Single(x => x.Id == _firstShip).Hold.Single().Mission.Id == _heldJob && s.Fleet.All(x => x.Star == _stop));
             Press(Key.Enter);
         });
+        Do(() => { if (_boughtClass != null) _g.HudForTest.Port.ShowTab(2); });
+        Do(() => { if (_boughtClass != null) { Shot("10f_hangar"); _g.HudForTest.Port.ShowTab(1); } });
+        Do(() => { if (_boughtClass != null) { Shot("10h_market"); _g.HudForTest.Port.ShowTab(0); } });
         Do(() =>
         {
             if (_boughtClass == null) return;
-            Shot("10f_hangar");
             _g.BoardShip(_firstShip);
             _g.LeavePort();
         });

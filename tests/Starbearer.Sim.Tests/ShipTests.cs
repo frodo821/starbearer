@@ -142,13 +142,13 @@ public partial class SimTests
     [Fact]
     public void BankruptcyCountsOnlyTheShipsDockedHere()
     {
-        var s = new SaveData { Credits = 0 };
-        s.HeldFuel = 0;
-        Assert.True(Supply.Bankrupt(s));
-        var spare = new OwnedShip { Id = 2, Star = 99, Fuel = Ships.Courier.Tank };
+        var (s, g) = SaveData.NewGalaxy(5);
+        (s.HeldFuel, s.Credits) = (0, 0);
+        Assert.True(Supply.Bankrupt(s, g));
+        var spare = new OwnedShip { Id = 2, Star = g.Ports[1], Fuel = Ships.Courier.Tank };
         s.Fleet.Add(spare);
-        Assert.True(Supply.Bankrupt(s));    // out of reach
+        Assert.True(Supply.Bankrupt(s, g));    // out of reach
         spare.Star = s.PortStar;
-        Assert.False(Supply.Bankrupt(s));
+        Assert.False(Supply.Bankrupt(s, g));
     }
 }

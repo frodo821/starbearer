@@ -78,7 +78,7 @@ public partial class Main
         if (G == null || G.Seed != s.Seed) ShowGalaxy(Galaxy.Generate(s.Seed));
         V = new Voyage(G!, s.PortStar, s.PortStar, s.Hold, (double[])s.ClosestApproach.Clone(),
             s.Seed ^ (ulong)(s.Deliveries * 31 + ++_attempt * 1009), s.TotalDays, s.Ship.State, s.Ship.Fitted);
-        if (Supply.Bankrupt(s)) { Bankrupt = true; Screen = Screen.Dead; return; }
+        if (Supply.Bankrupt(s, G!)) { Bankrupt = true; Screen = Screen.Dead; return; }
         SteerForCourse();
         PlanDir = (V.ChartPositions[V.TargetStar] - V.EstimatedPosition).Normalized();
         PlanDv = 0.35;

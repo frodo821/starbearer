@@ -10,13 +10,21 @@ public enum StationKind { Mine, IceMine, GasHarvester, Refinery, ChemPlant, Fuel
 /// <summary>A job from a mission board: carry Cargo to Target for Pay, less whatever the cargo loses.</summary>
 public sealed record Mission(string Id, int Origin, int Target, Cargo Cargo, double Pay);
 
-/// <summary>A mission's cargo in the hold.</summary>
+/// <summary>
+/// A load in the hold: a job's cargo, or goods bought to trade (a lot, with no destination: its
+/// mission's Target is -1 and what was paid is its Cost).
+/// </summary>
 public sealed class Consignment
 {
     public required Mission Mission { get; init; }
     public double Integrity { get; set; } = 1;
-    public double Payout => Mission.Pay * Integrity;
-    public Consignment Copy() => new() { Mission = Mission, Integrity = Integrity };
+    /// <summary>What was paid for goods bought to trade; zero for a job.</summary>
+    public double Cost { get; init; }
+    public bool IsJob => Mission.Target >= 0;
+    public double Payout => IsJob ? Mission.Pay * Integrity : 0;
+    /// <summary>What it is worth, for a gate's toll: a job's pay, goods what they cost, less damage either way.</summary>
+    public double Value => IsJob ? Payout : Cost * Integrity;
+    public Consignment Copy() => new() { Mission = Mission, Integrity = Integrity, Cost = Cost };
 }
 
 public static class Missions
@@ -136,7 +144,8 @@ public static class Missions
     public static double VolumeUsed(IEnumerable<Consignment> hold) => hold.Sum(c => c.Mission.Cargo.Volume);
     public static bool Fits(SaveData s, Mission m) => CargoBays.Of(s).Fits(s.Hold, m.Cargo);
 
-    public static double DropFee(Consignment c) => c.Mission.Pay * Tuning.DropPenalty;
+    /// <summary>Giving up a job costs a share of its pay; goods of one's own are just left behind.</summary>
+    public static double DropFee(Consignment c) => c.IsJob ? c.Mission.Pay * Tuning.DropPenalty : 0;
 
     public static bool Take(SaveData s, Mission m)
     {

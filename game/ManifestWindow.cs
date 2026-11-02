@@ -18,7 +18,7 @@ public partial class ManifestWindow : PanelContainer
     static readonly Color Dim = Ui.PanelDim;
     double _sinceBuilt;
 
-    /// <summary>Set at each Rebuild: the buttons that steer for each job's destination, in hold order.</summary>
+    /// <summary>Set at each Rebuild: the buttons that steer for each job's destination, in hold order (goods of one's own have none).</summary>
     public Button[] CourseButtons { get; private set; } = Array.Empty<Button>();
 
     public ManifestWindow(Main game)
@@ -69,7 +69,13 @@ public partial class ManifestWindow : PanelContainer
         scroll.AddChild(jobs);
         _root.AddChild(scroll);
         var here = v.EstimatedPosition;
-        CourseButtons = v.Hold.Select(c =>
+        foreach (var lot in v.Hold.Where(c => !c.IsJob))
+        {
+            var cargo = lot.Mission.Cargo;
+            var hot = v.Heat > cargo.HeatTolerance;
+            jobs.AddChild(Text($"{cargo.Name} {cargo.Volume:F0} 単位  自分の荷   仕入 {lot.Cost:F0}   健全度 {lot.Integrity:P0}" + (hot ? "  熱で傷んでいる" : ""), 14, hot || lot.Integrity < 0.999 ? Warn : null));
+        }
+        CourseButtons = v.Hold.Where(c => c.IsJob).Select(c =>
         {
             var m = c.Mission;
             var target = m.Target;
