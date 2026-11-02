@@ -18,7 +18,6 @@ public static class Tuning
     public const double ExhaustVelocity = 1.6;
     public const double MaxThrust = 1.0;      // ly/day^2, used during manual flyby burns
     public const double LifeSupportDays = 600;
-    public const double HoldVolume = 8;
     public const double CubicMetersPerVolume = 20;   // for display: one unit is about a 20ft container
     public const double StartingCredits = 200;
 

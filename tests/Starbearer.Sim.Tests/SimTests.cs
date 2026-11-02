@@ -323,6 +323,70 @@ public class SimTests
         Assert.DoesNotContain(Missions.Board(g, g.Ports[0], 0, taken), m => m.Id == board[0].Id);
     }
 
+    static readonly ShipClass Tanker = new("test", "test", new[] { new Bay(BayKind.Fluid, 4), new Bay(BayKind.Fluid, 4), new Bay(BayKind.Bulk, 3), new Bay(BayKind.Container, 2) });
+    static Cargo Load(CargoKind kind, double volume) => new($"{kind}", 0.5, 0.9, 100, volume, kind);
+
+    [Fact]
+    public void ABayCarriesOnlyItsOwnKind()
+    {
+        var courier = new CargoBays(Ships.Courier, Array.Empty<int>());
+        Assert.True(courier.Fits(new[] { Load(CargoKind.Container, 8) }));
+        foreach (var kind in new[] { CargoKind.Bulk, CargoKind.Fluid, CargoKind.PressurizedFluid })
+        {
+            Assert.False(courier.Fits(new[] { Load(kind, 1) }));
+            Assert.NotNull(courier.Refusal(Array.Empty<Consignment>(), Load(kind, 1)));
+        }
+        var tanker = new CargoBays(Tanker, Array.Empty<int>());
+        Assert.True(tanker.Fits(new[] { Load(CargoKind.Fluid, 8), Load(CargoKind.Bulk, 3), Load(CargoKind.Container, 2) }));
+        Assert.False(tanker.Fits(new[] { Load(CargoKind.Bulk, 4) }));            // the fluid bays' room is no use to it
+        Assert.False(tanker.Fits(new[] { Load(CargoKind.Container, 3) }));
+        Assert.Equal("加圧モジュールがない", tanker.Refusal(Array.Empty<Consignment>(), Load(CargoKind.PressurizedFluid, 1)));
+    }
+
+    [Fact]
+    public void APressurizedFluidBayTakesBothKindsOfFluid()
+    {
+        var one = new CargoBays(Tanker, new[] { 1 });
+        Assert.True(one.Fits(new[] { Load(CargoKind.PressurizedFluid, 4), Load(CargoKind.Fluid, 4) }));
+        Assert.False(one.Fits(new[] { Load(CargoKind.PressurizedFluid, 5) }));                              // only one bay is pressurized
+        Assert.False(one.Fits(new[] { Load(CargoKind.PressurizedFluid, 2), Load(CargoKind.Fluid, 7) }));   // they share the fluid bays
+        Assert.True(one.Fits(new[] { Load(CargoKind.Fluid, 8) }));                                          // plain fluid goes in either
+        Assert.True(new CargoBays(Tanker, new[] { 0, 1 }).Fits(new[] { Load(CargoKind.PressurizedFluid, 8) }));
+    }
+
+    [Fact]
+    public void APressurizerIsFittedPerFluidBayAndCountsInTheToll()
+    {
+        var courier = new SaveData { Credits = 1000 };
+        Assert.False(Modules.FitPressurizer(courier));   // no fluid bay to fit it to
+        Assert.Equal(1000, courier.Credits);
+        var s = new SaveData { Credits = 1000 };
+        var (v, _, _) = AtGate();
+        var bare = Gates.Toll(s, v);
+        s.Pressurized.Add(0);
+        Assert.Equal(Math.Round(Tuning.GateTollRate * (Tuning.HullValue + Modules.PressurizerPrice)), Gates.Toll(s, v));
+        Assert.True(Gates.Toll(s, v) > bare);
+        var back = SaveData.FromJson(s.ToJson())!;
+        Assert.Equal(new[] { 0 }, back.Pressurized);
+        Assert.Equal(Ships.Courier.Id, back.Ship);
+    }
+
+    [Fact]
+    public void EveryBoardOpensWithAJobInContainers()
+    {
+        var g = Galaxy.Generate(5);
+        var kinds = new HashSet<CargoKind>();
+        foreach (var port in g.Ports.Concat(g.Depots))
+            for (int d = 0; d < 4; d++)
+            {
+                var board = Missions.Board(g, port, d, Array.Empty<Consignment>());
+                if (board.Count == 0) continue;   // a gate
+                Assert.Equal(CargoKind.Container, board[0].Cargo.Kind);
+                kinds.UnionWith(board.Select(m => m.Cargo.Kind));
+            }
+        Assert.Equal(4, kinds.Count);
+    }
+
     [Fact]
     public void EachLoadWeighsOnTheShipAndTakesItsOwnHeat()
     {

@@ -41,7 +41,7 @@ public partial class Main
     public void TakeMissionForTest(int notTo)
     {
         var s = Save!;
-        Missions.Take(s, Offers.First(m => m.Target != notTo));
+        Missions.Take(s, Offers.First(m => m.Target != notTo && Missions.Fits(s, m)));
         SteerForCourse();
         V!.Restock(new ShipState(s.HeldFuel, s.HeldHull, s.HeldLife), s.Hold);
         WriteSave();

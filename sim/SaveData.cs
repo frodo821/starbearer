@@ -12,6 +12,24 @@ public static class Modules
         (AutoBurn, "自動噴射装置", 150),
         (Transfer, "転送計算機", 250),
     };
+
+    /// <summary>Fitted to one fluid bay, it lets that bay carry pressurized fluid. Sold per bay, so it is not in the shop list.</summary>
+    public const string PressurizerName = "加圧モジュール";
+    public const double PressurizerPrice = 200;
+
+    /// <summary>What the modules aboard are worth, pressurizers included.</summary>
+    public static double Value(SaveData s) =>
+        s.Modules.Sum(id => Shop.FirstOrDefault(m => m.Id == id).Price) + s.Pressurized.Count * PressurizerPrice;
+
+    /// <summary>Fits a pressurizer to the first fluid bay without one. False if there is none, or not the money.</summary>
+    public static bool FitPressurizer(SaveData s)
+    {
+        var bay = CargoBays.Of(s).Unpressurized.Cast<int?>().FirstOrDefault();
+        if (bay is not int i || s.Credits < PressurizerPrice) return false;
+        s.Credits -= PressurizerPrice;
+        s.Pressurized.Add(i);
+        return true;
+    }
 }
 
 /// <summary>What a stop on the way sells. Purchases go straight to the checkpoint.</summary>
@@ -42,6 +60,10 @@ public sealed class SaveData
     public double TotalDays { get; set; }
     public double[] ClosestApproach { get; set; } = Array.Empty<double>();
     public List<string> Modules { get; set; } = new();
+    /// <summary>The hull, by ship class id. Its bays are fixed.</summary>
+    public string Ship { get; set; } = Ships.Courier.Id;
+    /// <summary>Indexes of the fluid bays that carry a pressurizer.</summary>
+    public List<int> Pressurized { get; set; } = new();
     /// <summary>Jobs in the cargo hold, as of the last dock.</summary>
     public List<Consignment> Hold { get; set; } = new();
     /// <summary>The star the instruments steer for. Falls back when no cargo is bound there.</summary>

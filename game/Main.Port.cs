@@ -56,7 +56,7 @@ public partial class Main
 
     public void TakeMission(Mission m)
     {
-        if (!Missions.Take(Save!, m)) { Message = "カーゴの容積が足りない"; _hud.Port.Rebuild(); return; }
+        if (!Missions.Take(Save!, m)) { Message = CargoBays.Of(Save!).Refusal(Save!.Hold, m.Cargo) ?? "積めない"; _hud.Port.Rebuild(); return; }
         Message = "";
         SteerForCourse();
         PortChanged();
@@ -130,6 +130,15 @@ public partial class Main
         s.Credits -= price;
         s.Modules.Add(id);
         Message = $"{name} を搭載";
+        PortChanged();
+    }
+
+    /// <summary>Fits a pressurizer to the next fluid bay without one.</summary>
+    public void BuyPressurizer()
+    {
+        if (!AtShipyard) { Message = "モジュールは造船所で買える"; _hud.Port.Rebuild(); return; }
+        if (!Modules.FitPressurizer(Save!)) { Message = $"{Modules.PressurizerName}: 付けられる液体ベイがないか、資金が足りない"; _hud.Port.Rebuild(); return; }
+        Message = $"{Modules.PressurizerName} を液体ベイに搭載";
         PortChanged();
     }
 

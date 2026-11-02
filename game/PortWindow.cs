@@ -99,16 +99,18 @@ public partial class PortWindow : PanelContainer
             return box;
         }
         var offers = _game.Offers;
+        var bays = CargoBays.Of(s);
         if (offers.Count == 0) box.AddChild(Text("請けられる仕事は残っていない", 15, Dim));
         TakeButtons = offers.Select(m =>
         {
             var c = m.Cargo;
             var far = (g.Stars[m.Target].Position - g.Stars[m.Origin].Position).Length;
-            var fits = Missions.Fits(s.Hold, m);
+            var refusal = bays.Refusal(s.Hold, c);
             var info = new VBoxContainer();
             info.AddChild(Text($"{c.Name}  →  {g.Stars[m.Target].Name}（{Missions.Name(Missions.KindOf(g, m.Target))}）", 17));
-            info.AddChild(Text($"直線 {far:F1} ly   容積 {Missions.Cubic(c.Volume)}   質量 {c.Mass:F1}   耐熱 {c.HeatTolerance:F2}", 14, Dim));
-            var take = Press("請ける", () => _game.TakeMission(m), fits);
+            info.AddChild(Text($"{Cargos.Name(c.Kind)}   直線 {far:F1} ly   容積 {Missions.Cubic(c.Volume)}   質量 {c.Mass:F1}   耐熱 {c.HeatTolerance:F2}", 14, Dim));
+            if (refusal != null) info.AddChild(Text($"積めない: {refusal}", 13, Warn));
+            var take = Press("請ける", () => _game.TakeMission(m), refusal == null);
             box.AddChild(Row(info, Text($"報酬 {m.Pay:F0}", 17, Good), take));
             return take;
         }).ToArray();
@@ -118,14 +120,17 @@ public partial class PortWindow : PanelContainer
     Control ShipColumn(Galaxy g, SaveData s)
     {
         var box = Column(490);
-        box.AddChild(Text($"カーゴ  容積 {Missions.Cubic(Missions.VolumeUsed(s.Hold))} / {Missions.Cubic(Tuning.HoldVolume)}", 20, Good));
+        var bays = CargoBays.Of(s);
+        box.AddChild(Text($"カーゴ  容積 {Missions.Cubic(Missions.VolumeUsed(s.Hold))} / {Missions.Cubic(bays.Capacity)}", 20, Good));
+        box.AddChild(Text($"{bays.Ship.Name}: " + string.Join("、", bays.Ship.Bays.Select((b, i) =>
+            $"{Cargos.Name(b.Kind)}{(s.Pressurized.Contains(i) ? "（加圧）" : "")} {Missions.Cubic(b.Volume)}")), 14, Dim));
         if (s.Hold.Count == 0) box.AddChild(Text("空荷", 15, Dim));
         foreach (var c in s.Hold)
         {
             var target = c.Mission.Target;
             var info = new VBoxContainer();
             info.AddChild(Text($"{c.Mission.Cargo.Name}  →  {g.Stars[target].Name}", 16));
-            info.AddChild(Text($"健全度 {c.Integrity:P0}   報酬 {c.Payout:F0}   容積 {Missions.Cubic(c.Mission.Cargo.Volume)}", 13, Dim));
+            info.AddChild(Text($"{Cargos.Name(c.Mission.Cargo.Kind)}   健全度 {c.Integrity:P0}   報酬 {c.Payout:F0}   容積 {Missions.Cubic(c.Mission.Cargo.Volume)}", 13, Dim));
             var course = _game.Course == target ? Text("針路", 14, Good) as Control : Press("針路に", () => _game.SetCourse(target));
             box.AddChild(Row(info, course, Press($"破棄 -{Missions.DropFee(c):F0}", () => _game.DropCargo(c))));
         }
@@ -145,6 +150,15 @@ public partial class PortWindow : PanelContainer
             var owned = s.Modules.Contains(m.Id);
             Control buy = _game.AtShipyard ? Press($"{m.Price:F0}", () => _game.Buy(m.Id, m.Price, m.Name), s.Credits >= m.Price, $"{i + 1}") : Text($"{m.Price:F0}", 14, Dim) as Control;
             box.AddChild(Row(Text(m.Name, 15), owned ? Text("搭載済み", 14, Good) : buy));
+        }
+        {
+            var free = bays.Unpressurized.Any();
+            var fitted = s.Pressurized.Count;
+            var label = Modules.PressurizerName + (fitted > 0 ? $"（{fitted} 基搭載）" : "");
+            Control buy = !free ? Text(fitted > 0 ? "全液体ベイに搭載済み" : "液体ベイがない", 14, Dim)
+                : _game.AtShipyard ? Press($"{Modules.PressurizerPrice:F0}", _game.BuyPressurizer, s.Credits >= Modules.PressurizerPrice)
+                : Text($"{Modules.PressurizerPrice:F0}", 14, Dim);
+            box.AddChild(Row(Text(label, 15), buy));
         }
         if (!_game.AtShipyard)
             box.AddChild(Text(_game.NearestShipyard() is var yard and >= 0 ? $"買えるのは造船所だけ。最寄りは {g.Stars[yard].Name} ▲" : "買えるのは造船所だけ", 13, Dim));

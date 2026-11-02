@@ -5,7 +5,8 @@ public enum DeathCause { None, Collision, HullFailure, Stranded, LifeSupport }
 
 /// <param name="Reward">Pay for a standard haul; a mission scales it by distance.</param>
 /// <param name="Volume">Room it takes in the hold.</param>
-public sealed record Cargo(string Name, double Mass, double HeatTolerance, double Reward, double Volume = 1);
+/// <param name="Kind">Which bays can carry it.</param>
+public sealed record Cargo(string Name, double Mass, double HeatTolerance, double Reward, double Volume = 1, CargoKind Kind = CargoKind.Container);
 /// <summary>The ship as the last dock left it.</summary>
 public sealed record ShipState(double Fuel, double Hull, double Life);
 

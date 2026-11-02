@@ -58,7 +58,7 @@ public partial class Hud
         DrawRect(new Rect2(10, 8, 345, Game.Screen == Screen.Orbit ? 700 : 420), new Color(0.01f, 0.02f, 0.05f, 0.72f));   // keeps gauges legible over the chart and the sky
         float x = 24, y = 34;
         Text(new Vector2(x, y), (v.Hold.Count == 0 ? "空荷" : $"積荷 {v.Hold.Count} 件") + $"  →  {g.Stars[v.TargetStar].Name}", Good, 20); y += 28;
-        Text(new Vector2(x, y), $"質量 {v.Mass:F2}   積荷 {v.CargoMass:F1}   容積 {Missions.Cubic(Missions.VolumeUsed(v.Hold))}/{Missions.Cubic(Tuning.HoldVolume)}" + (v.Hold.Count > 0 ? $"   耐熱 {v.HeatTolerance:F2}" : ""), Dim, 15); y += 20;
+        Text(new Vector2(x, y), $"質量 {v.Mass:F2}   積荷 {v.CargoMass:F1}   容積 {Missions.Cubic(Missions.VolumeUsed(v.Hold))}/{Missions.Cubic(CargoBays.Of(Game.Save!).Capacity)}" + (v.Hold.Count > 0 ? $"   耐熱 {v.HeatTolerance:F2}" : ""), Dim, 15); y += 20;
         foreach (var c in v.Hold.Take(3)) { Text(new Vector2(x, y), $"{c.Mission.Cargo.Name} → {g.Stars[c.Mission.Target].Name}", c.Mission.Target == v.TargetStar ? Ink : Dim, 14); y += 18; }
         y += 8;
         Bar(x, ref y, "燃料", v.Fuel / Tuning.TankCapacity, Ink, $"Δv {v.DeltaVRemaining:F2}");
