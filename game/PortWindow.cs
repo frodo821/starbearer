@@ -97,7 +97,7 @@ public partial class PortWindow : PanelContainer
             var fits = Missions.Fits(s.Hold, m);
             var info = new VBoxContainer();
             info.AddChild(Text($"{c.Name}  →  {g.Stars[m.Target].Name}（{Missions.Name(Missions.KindOf(g, m.Target))}）", 17));
-            info.AddChild(Text($"直線 {far:F1} ly   容積 {c.Volume:F0}   質量 {c.Mass:F1}   耐熱 {c.HeatTolerance:F2}", 14, Dim));
+            info.AddChild(Text($"直線 {far:F1} ly   容積 {Missions.Cubic(c.Volume)}   質量 {c.Mass:F1}   耐熱 {c.HeatTolerance:F2}", 14, Dim));
             var take = Press("請ける", () => _game.TakeMission(m), fits);
             box.AddChild(Row(info, Text($"報酬 {m.Pay:F0}", 17, Good), take));
             return take;
@@ -108,14 +108,14 @@ public partial class PortWindow : PanelContainer
     Control ShipColumn(Galaxy g, SaveData s)
     {
         var box = Column(490);
-        box.AddChild(Text($"カーゴ  容積 {Missions.VolumeUsed(s.Hold):F0} / {Tuning.HoldVolume:F0}", 20, Good));
+        box.AddChild(Text($"カーゴ  容積 {Missions.Cubic(Missions.VolumeUsed(s.Hold))} / {Missions.Cubic(Tuning.HoldVolume)}", 20, Good));
         if (s.Hold.Count == 0) box.AddChild(Text("空荷", 15, Dim));
         foreach (var c in s.Hold)
         {
             var target = c.Mission.Target;
             var info = new VBoxContainer();
             info.AddChild(Text($"{c.Mission.Cargo.Name}  →  {g.Stars[target].Name}", 16));
-            info.AddChild(Text($"健全度 {c.Integrity:P0}   報酬 {c.Payout:F0}   容積 {c.Mission.Cargo.Volume:F0}", 13, Dim));
+            info.AddChild(Text($"健全度 {c.Integrity:P0}   報酬 {c.Payout:F0}   容積 {Missions.Cubic(c.Mission.Cargo.Volume)}", 13, Dim));
             var course = _game.Course == target ? Text("針路", 14, Good) as Control : Press("針路に", () => _game.SetCourse(target));
             box.AddChild(Row(info, course, Press($"破棄 -{Missions.DropFee(c):F0}", () => _game.DropCargo(c))));
         }

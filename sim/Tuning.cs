@@ -19,6 +19,7 @@ public static class Tuning
     public const double MaxThrust = 1.0;      // ly/day^2, used during manual flyby burns
     public const double LifeSupportDays = 600;
     public const double HoldVolume = 8;
+    public const double CubicMetersPerVolume = 20;   // for display: one unit is about a 20ft container
     public const double StartingCredits = 200;
 
     // Resupply at a stop on the way. A full tank is about a third of a contract's pay.

@@ -73,6 +73,9 @@ public static class Missions
         return offers.Where(m => !taken.Contains(m.Id)).ToList();
     }
 
+    /// <summary>A volume as the player reads it.</summary>
+    public static string Cubic(double volume) => $"{volume * Tuning.CubicMetersPerVolume:F0} m³";
+
     public static double VolumeUsed(IEnumerable<Consignment> hold) => hold.Sum(c => c.Mission.Cargo.Volume);
     public static bool Fits(IEnumerable<Consignment> hold, Mission m) => VolumeUsed(hold) + m.Cargo.Volume <= Tuning.HoldVolume;
 
