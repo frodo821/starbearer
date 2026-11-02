@@ -284,3 +284,28 @@ public partial class SimTests
         Assert.NotEmpty(Missions.Board(g, known, there, 0, Array.Empty<Consignment>()));
     }
 }
+
+public partial class SimTests
+{
+    [Fact]
+    public void SellingInPartKeepsTheRestOfTheLotAtItsShareOfTheCost()
+    {
+        var (s, g, m) = DockedWhereMade("food");
+        Trade.Buy(s, g, m, "food", 6);
+        var lot = s.Hold.Single();
+        var cost = lot.Cost;
+        s.PortStar = g.Economies.First(e => e.Value.Uses("food")).Key;   // as if flown there (test only)
+        var quote = Trade.SaleQuote(s, g, m, "food", 4)!.Value;
+        var stock = m.StockOf(g, s.PortStar, "food");
+        var credits = s.Credits;
+        Assert.Equal(stock, m.StockOf(g, s.PortStar, "food"));            // a quote moves nothing
+        Assert.Equal(quote, Trade.SellUnits(s, g, m, "food", 4)!.Value, 9);
+        Assert.Equal(credits + quote, s.Credits, 9);
+        Assert.Equal(stock + 4, m.StockOf(g, s.PortStar, "food"), 9);
+        var rest = s.Hold.Single();
+        Assert.Equal(2, rest.Mission.Cargo.Volume);
+        Assert.Equal(cost / 3, rest.Cost, 9);
+        Assert.Equal(2, Trade.Held(s, "food"));
+        Assert.Null(Trade.SellUnits(s, g, m, "food", 3));                 // more than aboard
+    }
+}
