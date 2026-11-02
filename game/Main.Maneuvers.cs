@@ -1,14 +1,18 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading.Tasks;
 using Godot;
 using Starbearer.Sim;
 
 namespace Starbearer;
 
+/// <summary>The plan in normal space: nodes, the target, and the suggestions that place burns.</summary>
 public partial class Main
 {
+    public Maneuver? Selected;
+    public bool HandlesOpen;
+    public Maneuver? NextNode => V?.Nodes.OrderBy(n => n.Time).FirstOrDefault();
+    public double? NoseOffNode => NodeDirection() is { } d ? Math.Acos(Math.Clamp(Helm.Nose.Dot(d), -1, 1)) * 180 / Math.PI : null;
 
     public void AddNode(double time)
     {
@@ -28,32 +32,28 @@ public partial class Main
     }
 
     public void SelectNodeQuietly(Maneuver m) => Selected = m;
-
     public void NodeEdited() => Replan();
 
-    /// <summary>Rebuilds the plan from where the ship actually is.</summary>
-    void Replan()
-    {
-        PlanFrozen = false;
-        Burn.Forget();   // measured afresh against the new plan
-        _forecastDirty = true;
-    }
-
-    /// <summary>Distance between the ship and where the frozen plan says it should be now.</summary>
-    public double? PlanDeviation()
-    {
-        if (!PlanFrozen || SubForecast == null || SubForecast.Track.Count == 0) return null;
-        var now = V!.AbsoluteTime;
-        var planned = SubForecast.Track.OrderBy(t => Math.Abs(t.Time - now)).First();
-        return (planned.Position - V.SubPosition).Length;
-    }
-
-    double ForecastSpan()
+    /// <summary>Deletes the selected node, or the next one if the selection has gone stale.</summary>
+    public void DeleteNode()
     {
         var v = V!;
-        var el = Sublight.OrbitOf(v.Primary.Mu, v.SubPosition, v.SubVelocity);
-        var target = v.Waypoint != null ? 3 * Math.PI / v.Waypoint.Omega : 0;
-        return Math.Max(el.Bound ? Math.Clamp(el.Period * 1.5, 10, 150) : 60, target);
+        var target = Selected != null && v.Nodes.Contains(Selected) ? Selected : NextNode;
+        if (target == null) { Selected = null; return; }
+        v.Nodes.Remove(target);
+        Selected = NextNode;
+        if (Selected == null) HandlesOpen = false;
+        Message = v.Nodes.Count > 0 ? $"ノードを削除 (残り {v.Nodes.Count})" : "ノードをすべて削除";
+        Replan();
+    }
+
+    void ClearNodes()
+    {
+        V!.Nodes.Clear();
+        Selected = null;
+        HandlesOpen = false;
+        Message = "ノードをすべて削除";
+        Replan();
     }
 
     public static string NameOf(IOrbiter? o) => o switch { Center c => c.Name, Station => "港", _ => "" };
@@ -143,30 +143,6 @@ public partial class Main
         Replan();
     }
 
-    /// <summary>Deletes the selected node, or the next one if the selection has gone stale.</summary>
-    public void DeleteNode()
-    {
-        var v = V!;
-        var target = Selected != null && v.Nodes.Contains(Selected) ? Selected : NextNode;
-        if (target == null) { Selected = null; return; }
-        v.Nodes.Remove(target);
-        Selected = NextNode;
-        if (Selected == null) HandlesOpen = false;
-        Message = v.Nodes.Count > 0 ? $"ノードを削除 (残り {v.Nodes.Count})" : "ノードをすべて削除";
-        Replan();
-    }
-
-    void ClearNodes()
-    {
-        V!.Nodes.Clear();
-        Selected = null;
-        HandlesOpen = false;
-        Message = "ノードをすべて削除";
-        Replan();
-    }
-
-    public Maneuver? NextNode => V?.Nodes.OrderBy(n => n.Time).FirstOrDefault();
-
     void RunTransferComputer()
     {
         if (!Owns(Modules.Transfer)) { Message = "転送計算機が未搭載"; return; }
@@ -179,112 +155,5 @@ public partial class Main
         HandlesOpen = false;
         Message = $"転送計算機: {plan.Count}段の噴射を計画 (Δv {plan.Sum(n => n.DeltaV):F2})";
         Replan();
-    }
-
-    public double? NoseOffNode => NodeDirection() is { } d ? Math.Acos(Math.Clamp(Helm.Nose.Dot(d), -1, 1)) * 180 / Math.PI : null;
-
-    /// <summary>The autopilot module: points the nose at the node and lights the engine on time.</summary>
-    void FlyNodeAutomatically()
-    {
-        var v = V!;
-        if (!v.AutoBurn || IgnitionIn is not { } wait) return;
-        if (wait < 1) Helm.Hold = ViewHold.Node;
-        if (Helm.EngineOn || wait > 0 || NodeDirection() is not { } dir || Helm.Nose.Dot(dir) < 0.98) return;
-        if (Helm.Throttle <= 0) Helm.SetThrottle(1);
-        Helm.LightEngine();
-        Paused = false;
-        Message = "自動噴射 点火";
-    }
-
-    void ToggleAutoBurn()
-    {
-        if (!Owns(Modules.AutoBurn)) { Message = "自動噴射装置が未搭載"; return; }
-        V!.AutoBurn = !V.AutoBurn;
-        Message = V.AutoBurn ? "自動噴射 ON" : "自動噴射 OFF";
-    }
-
-    void WarpToNode()
-    {
-        if (NextNode == null) return;
-        ToNode = !ToNode;
-        Aligning = false;
-        if (ToNode) Paused = false;
-    }
-
-    void UpdateOrbit(double delta)
-    {
-        var v = V!;
-        FlyNodeAutomatically();
-        var acting = !v.Docked && (Helm.EngineOn || IsDown(Key.X) || IsDown(Key.Z));
-        if (acting) Aligning = false;
-        if (Paused && !acting) { CurrentRate = 0; ToNode = false; Aligning = false; return; }
-        var rate = ToNode ? Rates[^1] : Rates[SubRateIndex];
-        if (acting) rate = Math.Min(rate, BurnTimeRate);
-        if (NextNode is { } n && n.Time > v.AbsoluteTime)
-            rate = Math.Min(rate, Math.Max(BurnTimeRate, (n.Time - v.AbsoluteTime) * 1.5));   // don't sail past ignition
-        if (ToNode)
-        {
-            // Spend the wait in a few real seconds and slow down into it, stopping just short of ignition.
-            var left = (IgnitionIn ?? 0) - 0.05;
-            if (left <= 0 || acting)
-            {
-                ToNode = false;
-                Paused = v.Docked;
-                Aligning = !v.Docked && !v.AutoBurn && !acting;
-                if (Aligning) Message = "点火の時機。実時間に落とした。機首を合わせて点火";
-                if (Paused) { CurrentRate = 0; Message = "点火の時機。U で出港する"; return; }
-            }
-            else rate = Math.Min(rate, Math.Max(left * 2, 0.02));
-        }
-        if (Aligning) rate = Rates[0];
-        CurrentRate = rate;
-        var engine = SublightThrust(delta);
-        if (engine.LengthSq > 0)
-        {
-            if (v.Nodes.Count > 0) PlanFrozen = true;   // from here on the plan is the reference
-            _forecastDirty = true;                      // keep "if I stop now" live
-            // The auto burn throttles its last moment down to exactly what is left.
-            if (v.AutoBurn && NextNode is { } aim && Helm.EngineOn && !IsDown(Key.X) && !IsDown(Key.Z))
-            {
-                var step = engine.Length * Tuning.SublightThrust * rate * delta;
-                if (step > aim.DeltaV) engine *= aim.DeltaV / step;
-            }
-        }
-        var fuelBefore = v.Fuel;
-        var firedOn = engine.LengthSq > 0 ? NextNode : null;
-        Burn.Prepare(v, firedOn, PlanFrozen ? SubForecast : null);
-        v.AdvanceSublight(rate * delta, engine);
-        var burned = v.Fuel < fuelBefore ? engine * (Tuning.SublightThrust * rate * delta) : (Vec3d?)null;
-        Burn.Measure(v, firedOn, burned);
-        if (firedOn != null && burned != null && firedOn == Burn.Node)
-        {
-            _forecastDirty = true;
-            if (v.AutoBurn && (Burn.Overshot || Burn.Stalled || firedOn.DeltaV < Burn.Planned * 1e-4)) CutEngine("自動噴射 完了");
-        }
-        if (Burn.Live && !Helm.EngineOn) EndBurn();
-        if (v.Phase == Phase.Arrived) Dock();
-        else if (v.Phase == Phase.Dead) Screen = Screen.Dead;
-    }
-
-    /// <summary>The burn on the node being flown.</summary>
-    public NodeBurn Burn { get; } = new();
-
-    /// <summary>The burn has gone past the node: now is the time to stop.</summary>
-    public bool NodeOvershot => Burn.Overshot;
-
-    void EndBurn()
-    {
-        var node = Burn.Node!;
-        switch (Burn.Stop(V!))
-        {
-            case NodeBurn.Ending.Short:
-                Message = $"ノード残 Δv {node.DeltaV:F4}。続けるなら再点火";
-                break;
-            case NodeBurn.Ending.Done:
-                if (Selected == node) Selected = NextNode;
-                Message = $"ノード完了 (誤差 Δv {node.DeltaV:F4})" + (V!.Nodes.Count > 0 ? "。残りの段を現在の軌道で計画し直した" : "");
-                Replan();   // what this stage actually achieved is now the baseline for the rest
-                break;
-        }
     }
 }

@@ -7,62 +7,43 @@ using Starbearer.Sim;
 
 namespace Starbearer;
 
+/// <summary>Forecasts, worked out off the main thread: the plan, the path if the engine stops now, the jump and the descent.</summary>
 public partial class Main
 {
+    public Prediction? Forecast { get; private set; }
 
-    public void BeginCorrection()
-    {
-        if (Screen != Screen.Flight || V!.Phase == Phase.Dead) return;
-        CutEngine("エンジン停止");
-        Screen = Screen.Plan;
-        PlanDir = CameraForward();
-        PlanDv = 0.02;
-        Message = "修正噴射: 空をタップして方向を選び、W/S で量を決める";
-        _forecastDirty = true;
-    }
+    /// <summary>The plan: the path with its burns. Frozen once a burn starts, so it stays the reference.</summary>
+    public OrbitForecast? SubForecast { get; private set; }
 
-    public void ExecutePlan()
-    {
-        var v = V!;
-        if (v.Docked) { Message = "停泊中は発進できない。Esc で戻り、U で出港する"; return; }
-        var jumping = v.Phase == Phase.Sublight;
-        v.EnterFtl();
-        v.Burn(PlanDir, PlanDv);
-        if (jumping) ShowCue(new StateCue("FTL 発進", $"速度 {v.Velocity.Length:F2}   失速線 {Tuning.StallSpeed:F2}", new Color(0.45f, 0.75f, 1f), Major: true, Outward: true));
-        Helm.Nose = PlanDir.Normalized();
-        Screen = Screen.Flight;
-        Paused = false;
-        MapOpen = false;
-        Message = "";
-        _forecastDirty = true;
-    }
+    /// <summary>Where the ship goes if the engine stops now and nothing more is flown.</summary>
+    public OrbitForecast? SubCurrent { get; private set; }
 
-    public void CancelPlan()
-    {
-        Screen = V!.Phase == Phase.Sublight ? Screen.Orbit : Screen.Flight;
-        _forecastDirty = true;
-    }
+    public bool PlanFrozen { get; private set; }
 
-    public void SetAimScreen(Vector2 screen)
-    {
-        if (Camera.ProjectRayNormal(screen) is var d)
-        {
-            PlanDir = new Vec3d(d.X, d.Y, d.Z).Normalized();
-            _forecastDirty = true;
-        }
-    }
+    /// <summary>What a descent right now would leave the ship on, in AU around the star. Null outside a well.</summary>
+    public OrbitForecast? DescentForecast { get; private set; }
 
-    public void SetPlanDir(Vec3d dir) { PlanDir = dir.Normalized(); _forecastDirty = true; }
-    public void SetPlanDv(double dv) { PlanDv = Math.Clamp(dv, 0, V!.DeltaVRemaining); _forecastDirty = true; }
-
-    public double SigmaAt(double t) =>
-        Math.Sqrt(V!.NavSigma * V.NavSigma + Tuning.PositionDriftPerSqrtDay * Tuning.PositionDriftPerSqrtDay * t);
+    public Star? DescentStar { get; private set; }
+    bool _forecastDirty = true;
+    double _forecastTimer;
+    double _pathGoodUntil;
 
     /// <summary>What a forecast worked out away from the main thread, for the voyage and screen it was asked for.</summary>
     sealed record ForecastResult(Voyage For, Screen On, bool Path, OrbitForecast? Current, OrbitForecast? Plan, double GoodUntil,
         Prediction? Jump, OrbitForecast? Descent, Star? DescentAt);
 
     Task<ForecastResult>? _forecastJob;
+
+    /// <summary>Starts a forecast when something changed, or now and then for the drift of time.</summary>
+    void TickForecast(double delta)
+    {
+        _forecastTimer -= delta;
+        CollectForecast();
+        if (_forecastJob != null || Screen is not (Screen.Plan or Screen.Flight or Screen.Orbit) || (!_forecastDirty && _forecastTimer > 0)) return;
+        RefreshForecast(_forecastDirty);
+        _forecastDirty = false;
+        _forecastTimer = 0.4;
+    }
 
     /// <summary>Takes in a finished forecast. A late one is harmless: the old lines stay up a few frames longer.</summary>
     void CollectForecast()
@@ -121,7 +102,28 @@ public partial class Main
         });
     }
 
-    /// <summary>Delta-v needed at periapsis to dock at the target, per the chart.</summary>
-    public double CaptureDv(Encounter e) =>
-        Math.Max(0, e.PeriapsisSpeed - Physics.CaptureSpeed(G!.Stars[e.Star], e.Periapsis));
+    /// <summary>Rebuilds the plan from where the ship actually is.</summary>
+    void Replan()
+    {
+        PlanFrozen = false;
+        Burn.Forget();   // measured afresh against the new plan
+        _forecastDirty = true;
+    }
+
+    /// <summary>Distance between the ship and where the frozen plan says it should be now.</summary>
+    public double? PlanDeviation()
+    {
+        if (!PlanFrozen || SubForecast == null || SubForecast.Track.Count == 0) return null;
+        var now = V!.AbsoluteTime;
+        var planned = SubForecast.Track.OrderBy(t => Math.Abs(t.Time - now)).First();
+        return (planned.Position - V.SubPosition).Length;
+    }
+
+    double ForecastSpan()
+    {
+        var v = V!;
+        var el = Sublight.OrbitOf(v.Primary.Mu, v.SubPosition, v.SubVelocity);
+        var target = v.Waypoint != null ? 3 * Math.PI / v.Waypoint.Omega : 0;
+        return Math.Max(el.Bound ? Math.Clamp(el.Period * 1.5, 10, 150) : 60, target);
+    }
 }

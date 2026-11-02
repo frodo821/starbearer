@@ -1,14 +1,21 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 using Godot;
 using Starbearer.Sim;
 
 namespace Starbearer;
 
+/// <summary>Keys, clicks and gestures.</summary>
 public partial class Main
 {
+    bool _looking, _dragged;
+    Vector2 _pressAt;
+    bool _consolePress;
+
+    /// <summary>Set while a console button stands in for its key, so button-only commands go through.</summary>
+    bool _fromButton;
+
+    /// <summary>Planning is done on the chart and its buttons; these have no key of their own.</summary>
+    static bool ButtonOnly(Key key) => key is Key.H or Key.M or Key.T or Key.Y or Key.C;
+
     void OrbitInput(InputEvent e)
     {
         if (e is InputEventMouseButton mb)
@@ -143,41 +150,10 @@ public partial class Main
         }
     }
 
-    /// <summary>Planning is done on the chart and its buttons; these have no key of their own.</summary>
-    static bool ButtonOnly(Key key) => key is Key.H or Key.M or Key.T or Key.Y or Key.C;
-
-    /// <summary>Set while a console button stands in for its key, so button-only commands go through.</summary>
-    bool _fromButton;
-
-    void TogglePause()
-    {
-        Paused = !Paused;
-        ToNode = false;
-        Aligning = false;
-        Message = Paused ? "時間停止" : "時間再開";
-    }
-
     void Look(Vector2 d)
     {
         CameraFollow = false;
         _yaw -= d.X;
         _pitch = Mathf.Clamp(_pitch - d.Y, -1.5f, 1.5f);
-    }
-
-    void Nudge(Key key, bool fine)
-    {
-        var deg = Mathf.DegToRad(fine ? 0.02 : 0.2);
-        var up = new Vec3d(0, 1, 0);
-        var right = PlanDir.Cross(up).Normalized();
-        var pitch = right.Cross(PlanDir).Normalized();
-        Vec3d? d = key switch
-        {
-            Key.Left => PlanDir - right * deg,
-            Key.Right => PlanDir + right * deg,
-            Key.Up => PlanDir + pitch * deg,
-            Key.Down => PlanDir - pitch * deg,
-            _ => null,
-        };
-        if (d is { } dir) SetPlanDir(dir);
     }
 }

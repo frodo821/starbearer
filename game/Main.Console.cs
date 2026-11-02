@@ -1,15 +1,17 @@
-using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading.Tasks;
 using Godot;
 using Starbearer.Sim;
 
 namespace Starbearer;
 
+/// <summary>The console buttons, the advice line, and the cues for changes of state.</summary>
 public partial class Main
 {
-
+    int _lastWell = -1, _lastPrimary = -1;
+    Phase _lastPhase = Phase.Sublight;
+    public StateCue? Cue { get; private set; }
+    public float CueAge { get; private set; }
     bool IsDown(Key key) => Input.IsKeyPressed(key) || HeldButton == key;
 
     public void PressButton(Command c)
@@ -19,11 +21,6 @@ public partial class Main
         try { _UnhandledInput(new InputEventKey { Keycode = c.Key, Pressed = true }); }
         finally { _fromButton = false; }
     }
-
-    /// <summary>Days until the burn for the next node should start at the current throttle.</summary>
-    public double? IgnitionIn => NextNode is { } n
-        ? n.Time - (EngineAcceleration > 0 ? n.DeltaV / EngineAcceleration / 2 : 0) - V!.AbsoluteTime
-        : null;
 
     static List<(string, Command[])> RateGroup(double[] rates, int current) => new()
     {

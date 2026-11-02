@@ -1,7 +1,5 @@
 using System;
-using System.Collections.Generic;
 using System.Linq;
-using System.Threading.Tasks;
 using Godot;
 using Starbearer.Sim;
 
@@ -15,7 +13,7 @@ public sealed record StateCue(string Title, string Detail, Color Colour, bool Ma
 
 public enum Screen { Title, Loading, Orbit, Plan, Flight, Port, Dead }
 
-/// <summary>Owns game flow: one checkpoint on disk, one Voyage in memory.</summary>
+/// <summary>Owns game flow: one checkpoint on disk, one Voyage in memory. The other parts of Main are split by what they handle.</summary>
 public partial class Main : Node3D
 {
     // The scripted smoke run must never touch the player's save.
@@ -25,87 +23,29 @@ public partial class Main : Node3D
     public SaveData? Save { get; private set; }
     public Galaxy? G { get; private set; }
     public Voyage? V { get; private set; }
-
     public Camera3D Camera { get; private set; } = null!;
-    public bool MapOpen { get; set; }
-    public Vec3d PlanDir;
-    public double PlanDv = 0.45;
-    public Prediction? Forecast { get; private set; }
     public string Message = "";
-    public int RateIndex = 4;
-    public static readonly double[] Rates = Instruments.TimeScales.Select(x => x / Instruments.SecondsPerDay).ToArray();
-    public double CurrentRate { get; private set; }
-    public double Earned { get; private set; }
     public ChartView Chart { get; } = new();
-
-    // Normal space
-    public int SubRateIndex = 3;
-    /// <summary>The plan: the path with its burns. Frozen once a burn starts, so it stays the reference.</summary>
-    public OrbitForecast? SubForecast { get; private set; }
-    /// <summary>The ship's primary on the galaxy chart, in ly.</summary>
-    public Vec3d PrimaryOnChart => V!.System.Position + V.Primary.StarPosition(V.AbsoluteTime) * Sublight.Scale;
-
-    /// <summary>Autotest only: shows the worlds of a system from a given place.</summary>
-    (int Star, Vec3d At)? _viewForTest;
-    public void ViewFromForTest(int star, Vec3d at) => _viewForTest = (star, at);
-
-    void ShowWorlds()
-    {
-        var v = V!;
-        if (_viewForTest is { Star: >= 0 } view) { _worlds.Show(G!, view.Star, view.At, v.AbsoluteTime); return; }
-        var star = v.Phase == Phase.Flight ? (v.NearestWell(out var s) < double.MaxValue && s != null ? s.Id : -1) : v.SystemStar;
-        _worlds.Show(G!, star, star < 0 ? Vec3d.Zero : (v.TruePosition - v.TruePositions[star]) / Sublight.Scale, v.AbsoluteTime);
-    }
-
-    /// <summary>Where the ship goes if the engine stops now and nothing more is flown.</summary>
-    public OrbitForecast? SubCurrent { get; private set; }
-    public bool PlanFrozen { get; private set; }
-    public Maneuver? Selected;
+    public Helm Helm { get; } = new();
+    public bool CameraFollow;
+    public bool MapOpen { get; set; }
     public bool OrbitSky;
     public bool Paused = true;
-    public Helm Helm { get; } = new();
+    public static readonly double[] Rates = Instruments.TimeScales.Select(x => x / Instruments.SecondsPerDay).ToArray();
+    /// <summary>Time rate chosen in flight and in normal space, as indices into Rates.</summary>
+    public int RateIndex = 4, SubRateIndex = 3;
+    public double CurrentRate { get; private set; }
     const double BurnRate = 0.25;
-    public bool CameraFollow;
-    public bool HandlesOpen;
-    void ToggleMap()
-    {
-        MapOpen = !MapOpen;
-        if (!MapOpen) return;
-        var close = V!.Phase == Phase.Flight && V.NearestWell(out _) < double.MaxValue;
-        Chart.Glide(V.EstimatedPosition, close ? ChartView.SystemZoom / 3 : ChartView.GalaxyZoom);
-    }
-
-    /// <summary>What a descent right now would leave the ship on, in AU around the star. Null outside a well.</summary>
-    public OrbitForecast? DescentForecast { get; private set; }
-    public Star? DescentStar { get; private set; }
-    public bool Owns(string module) => Save?.Modules.Contains(module) == true;
-
+    public Key? HeldButton { get; private set; }
     Sky? _sky;
     Hud _hud = null!;
     readonly Worlds _worlds = new();
     float _yaw, _pitch;
-    bool _looking, _dragged;
-    Vector2 _pressAt;
-    double _forecastTimer;
-    double _pathGoodUntil;
-    Task? _loading;
-    bool _consolePress;
-    int _lastWell = -1, _lastPrimary = -1;
-    Phase _lastPhase = Phase.Sublight;
-    public Key? HeldButton { get; private set; }
-    /// <summary>Time is running fast up to the next ignition.</summary>
-    public bool ToNode { get; private set; }
-    /// <summary>Holds real time after N arrives at a node, so the nose can be brought round before ignition.</summary>
-    public bool Aligning { get; private set; }
-    public StateCue? Cue { get; private set; }
-    public float CueAge { get; private set; }
-    Action? _loaded;
-    public string LoadingLabel { get; private set; } = "";
-    public bool LoadFailed { get; private set; }
-    bool _forecastDirty = true;
-    int _attempt;
 
-    public bool Shielded { get; private set; }
+    /// <summary>The ship's primary on the galaxy chart, in ly.</summary>
+    public Vec3d PrimaryOnChart => V!.System.Position + V.Primary.StarPosition(V.AbsoluteTime) * Sublight.Scale;
+
+    public bool Owns(string module) => Save?.Modules.Contains(module) == true;
     public bool HasSave => FileAccess.FileExists(SavePath);
 
     public override void _Ready()
@@ -146,48 +86,20 @@ public partial class Main : Node3D
         var v = V;
 
         if (Screen == Screen.Orbit) UpdateOrbit(delta);
-
-        if (Screen == Screen.Plan)
-        {
-            var dir = (IsDown(Key.W) ? 1 : 0) - (IsDown(Key.S) ? 1 : 0);
-            if (dir != 0) SetPlanDv(PlanDv + dir * (Input.IsKeyPressed(Key.Shift) ? 0.01 : 0.12) * delta);
-        }
-
-        if (Screen == Screen.Flight)
-        {
-            if (v.Phase == Phase.Arrived) { Dock(); _hud.QueueRedraw(); return; }
-            if (v.Phase == Phase.Dead) { Screen = Screen.Dead; _hud.QueueRedraw(); return; }
-            var r = v.NearestWell(out var star);
-            var rate = Rates[RateIndex];
-            if (star != null)
-                rate = Math.Clamp(0.5 * r / Math.Max(v.Velocity.Length, 0.01), 0.04, rate);
-            if (Helm.EngineOn) rate = Math.Min(rate, BurnRate);
-            else if (Paused) rate = 0;   // a lit engine runs the clock, as in orbit
-            CurrentRate = rate;
-
-            var toStar = star != null ? (v.TruePositions[star.Id] - v.TruePosition).Normalized() : Vec3d.Zero;
-            Shielded = star != null && Helm.Nose.Dot(toStar) > 0.8;
-            var engine = EngineCommand();
-            if (engine.LengthSq > 0) _forecastDirty = true;   // the coasting forecast is "if I stop now"
-            v.Advance(rate * delta, engine, Shielded);
-
-            if (v.Phase == Phase.Arrived) Dock();
-            else if (v.Phase == Phase.Dead) Screen = Screen.Dead;
-            else if (v.Phase == Phase.Stalled) Message = "失速。FTLから脱落した。Cで再キック";
-        }
-
+        if (Screen == Screen.Plan) UpdatePlan(delta);
+        if (Screen == Screen.Flight) UpdateFlight(delta);
         if (Screen == Screen.Orbit) Chart.Follow(PrimaryOnChart, v.Primary.Parent != null);
-        _forecastTimer -= delta;
-        CollectForecast();
-        if (_forecastJob == null && Screen is Screen.Plan or Screen.Flight or Screen.Orbit && (_forecastDirty || _forecastTimer <= 0))
-        {
-            RefreshForecast(_forecastDirty);
-            _forecastDirty = false;
-            _forecastTimer = 0.4;
-        }
+        TickForecast(delta);
         _sky?.UpdateSky(v.TruePositions, v.TruePosition);
         ShowWorlds();
         _hud.QueueRedraw();
     }
 
+    void ShowWorlds()
+    {
+        var v = V!;
+        if (_viewForTest is { Star: >= 0 } view) { _worlds.Show(G!, view.Star, view.At, v.AbsoluteTime); return; }
+        var star = v.Phase == Phase.Flight ? (v.NearestWell(out var s) < double.MaxValue && s != null ? s.Id : -1) : v.SystemStar;
+        _worlds.Show(G!, star, star < 0 ? Vec3d.Zero : (v.TruePosition - v.TruePositions[star]) / Sublight.Scale, v.AbsoluteTime);
+    }
 }

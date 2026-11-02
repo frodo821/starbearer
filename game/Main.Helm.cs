@@ -1,15 +1,13 @@
 using System;
-using System.Collections.Generic;
 using System.Linq;
-using System.Threading.Tasks;
 using Godot;
 using Starbearer.Sim;
 
 namespace Starbearer;
 
+/// <summary>Attitude and engine, and the directions the holds point at.</summary>
 public partial class Main
 {
-
     public Vec3d CameraForward()
     {
         var f = -Camera.GlobalTransform.Basis.Z;
@@ -23,7 +21,6 @@ public partial class Main
     }
 
     public void LookAtPublic(Vec3d dir) => LookAt(dir);
-
     public Vec3d CurrentVelocity => V!.Phase == Phase.Sublight ? V.SubVelocity : V.Velocity;
 
     /// <summary>Direction of the nearest star, or the system's star in normal space.</summary>
