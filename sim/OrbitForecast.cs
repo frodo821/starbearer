@@ -35,6 +35,9 @@ public readonly record struct Crossing(double Time, Vec3d Ship, Vec3d Station, d
 /// <summary>One planned burn as the forecast sees it: the state it starts from and the orbit it leaves.</summary>
 public readonly record struct Stage(Maneuver Node, Vec3d Position, Vec3d Velocity, Elements After, int TrackIndex);
 
+/// <summary>Where a planned burn was to happen and the velocity it was to leave the ship with.</summary>
+public readonly record struct BurnTarget(double Time, Vec3d Position, Vec3d Before, Vec3d After);
+
 /// <summary>A periapsis or apoapsis on a path. Radius is from the centre of the leg's body.</summary>
 public readonly record struct Apsis(double Time, Vec3d Position, double Radius, bool Apo);
 

@@ -265,21 +265,31 @@ public sealed class Voyage
     }
 
     /// <summary>
-    /// Takes a burn actually flown off what remains of a node. Thrust off the node's axis leaves a
-    /// residual in the other axes, so pointing the ship properly matters. Burning past the node
-    /// turns the residual around; the node stays until whoever flies it says it is done.
+    /// Re-measures a node against the orbit it was planned to leave on: what is left of the burn is
+    /// the difference between that orbit and the one the ship would coast on if it stopped now,
+    /// compared at the node's time, or now once that has passed. Whatever the burn so far got
+    /// wrong, aim or the orbit turning under a long burn, shows up here to be flown off.
     /// </summary>
-    public void ConsumeNode(Maneuver node, Vec3d flown) => ConsumeNode(node, flown, SubPosition, SubVelocity);
-
-    /// <param name="position">State the node's axes are defined at: its own burn point, which a
-    /// burn started early has not reached yet.</param>
-    /// <param name="velocity">Velocity at that state.</param>
-    public void ConsumeNode(Maneuver node, Vec3d flown, Vec3d position, Vec3d velocity)
+    /// <param name="mu">Of the body both states are relative to; zero in open space.</param>
+    public void Remeasure(Maneuver node, BurnTarget target, double mu)
     {
-        var (t, r, n) = Sublight.Frame(position, velocity);
-        node.Prograde -= flown.Dot(t);
-        node.Radial -= flown.Dot(r);
-        node.Normal -= flown.Dot(n);
+        Vec3d miss;
+        if (AbsoluteTime < target.Time)
+        {
+            var (p, v) = (SubPosition, SubVelocity);
+            Sublight.Propagate(mu, ref p, ref v, target.Time - AbsoluteTime);
+            miss = target.After - v;
+        }
+        else
+        {
+            var (p, v) = (target.Position, target.After);
+            Sublight.Propagate(mu, ref p, ref v, AbsoluteTime - target.Time);
+            miss = v - SubVelocity;
+        }
+        var (t, r, n) = Sublight.Frame(target.Position, target.Before);
+        node.Prograde = miss.Dot(t);
+        node.Radial = miss.Dot(r);
+        node.Normal = miss.Dot(n);
     }
 
     public static double ChartFactor(double closest) =>

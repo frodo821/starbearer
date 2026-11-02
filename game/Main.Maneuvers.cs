@@ -35,6 +35,7 @@ public partial class Main
     void Replan()
     {
         PlanFrozen = false;
+        _burnAim = null;   // measured afresh against the new plan
         _forecastDirty = true;
     }
 
@@ -250,21 +251,30 @@ public partial class Main
             }
         }
         var fuelBefore = v.Fuel;
-        v.AdvanceSublight(rate * delta, engine);
-        if (engine.LengthSq > 0 && v.Fuel < fuelBefore && NextNode is { } burning)
+        var firedOn = engine.LengthSq > 0 ? NextNode : null;
+        if (firedOn != null && _burnNode != firedOn)
         {
-            if (_burnNode != burning) { _burnNode = burning; _burnPlanned = _burnLeast = burning.DeltaV; }
+            _burnNode = firedOn;
+            _burnPlanned = _burnLeast = firedOn.DeltaV;
+            _burnAim = null;
+        }
+        if (_burnNode != null && _burnAim == null && PlanFrozen) AimBurn(_burnNode);   // the plan as frozen at ignition
+        v.AdvanceSublight(rate * delta, engine);
+        if (_burnNode is { } burning && v.Nodes.Contains(burning))
+        {
             var before = burning.DeltaV;
-            var flown = engine * (Tuning.SublightThrust * rate * delta);
-            if (SubForecast?.StageOf(burning) is { } stage)
-                v.ConsumeNode(burning, flown, stage.Position, stage.Velocity);
-            else
-                v.ConsumeNode(burning, flown);
-            _forecastDirty = true;
-            _burnLive = true;
-            NodeOvershot = burning.DeltaV > before;
-            _burnLeast = Math.Min(_burnLeast, burning.DeltaV);
-            if (v.AutoBurn && (NodeOvershot || burning.DeltaV < _burnPlanned * 1e-4)) CutEngine("自動噴射 完了");
+            var aimed = _burnAim is { } aim && AimStillHolds(aim);
+            if (aimed) v.Remeasure(burning, _burnAim!.Value.At, _burnAim.Value.Mu);
+            if (firedOn == burning && v.Fuel < fuelBefore)
+            {
+                if (!aimed) SpendOnNode(burning, engine * (Tuning.SublightThrust * rate * delta));
+                _forecastDirty = true;
+                _burnLive = true;
+                NodeOvershot = LeftOf(burning, aimed).Dot(engine) < 0;
+                _burnLeast = Math.Min(_burnLeast, burning.DeltaV);
+                if (v.AutoBurn && (NodeOvershot || burning.DeltaV >= before || burning.DeltaV < _burnPlanned * 1e-4))
+                    CutEngine("自動噴射 完了");
+            }
         }
         if (_burnLive && !EngineOn) EndBurn();
         if (v.Phase == Phase.Arrived) Dock();
@@ -277,6 +287,37 @@ public partial class Main
     Maneuver? _burnNode;
     double _burnPlanned, _burnLeast;
     bool _burnLive;
+    /// <summary>What the node being flown was planned to achieve, the body it is relative to, and that body.</summary>
+    (BurnTarget At, double Mu, int Body, bool Open)? _burnAim;
+
+    void AimBurn(Maneuver node)
+    {
+        if (SubForecast?.LegOf(node) is not { } leg || SubForecast.StageOf(node) is not { } st) return;
+        var aim = (new BurnTarget(leg.Track[st.TrackIndex].Time, st.Position, st.Velocity, st.Velocity + Sublight.Impulse(st.Position, st.Velocity, node)),
+            leg.IsDrift ? 0 : leg.Center?.Mu ?? 0, leg.IsDrift ? leg.Star : leg.Center?.Key ?? -1, leg.IsDrift);
+        if (AimStillHolds(aim)) _burnAim = aim;
+    }
+
+    /// <summary>The ship is still in the frame the plan was made in, so the two can be compared.</summary>
+    bool AimStillHolds((BurnTarget At, double Mu, int Body, bool Open) aim)
+    {
+        var v = V!;
+        return aim.Open ? v.Adrift && v.Primary.Star == aim.Body : !v.Adrift && v.Primary.Key == aim.Body;
+    }
+
+    /// <summary>What is left of the node, as a velocity change in space.</summary>
+    Vec3d LeftOf(Maneuver node, bool aimed) => aimed && _burnAim is { } aim
+        ? Sublight.Impulse(aim.At.Position, aim.At.Before, node)
+        : Sublight.Impulse(V!.SubPosition, V.SubVelocity, node);
+
+    /// <summary>Without a plan to compare against, as across a change of primary, just count off what was flown.</summary>
+    void SpendOnNode(Maneuver node, Vec3d flown)
+    {
+        var (t, r, n) = Sublight.Frame(V!.SubPosition, V.SubVelocity);
+        node.Prograde -= flown.Dot(t);
+        node.Radial -= flown.Dot(r);
+        node.Normal -= flown.Dot(n);
+    }
 
     /// <summary>The burn has gone past the node: what is left grows again, so now is the time to stop.</summary>
     public bool NodeOvershot { get; private set; }

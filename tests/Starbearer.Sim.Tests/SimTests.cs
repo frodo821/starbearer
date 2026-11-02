@@ -266,50 +266,58 @@ public class SimTests
         Assert.True((predicted - v.SubPosition).Length < 0.01, $"off by {(predicted - v.SubPosition).Length}");
     }
 
-    [Fact]
-    public void BurningAlongTheNodeSpendsIt()
+    static (Voyage V, Maneuver Node, BurnTarget Target, Vec3d T, Vec3d N) NodeHere(double prograde)
     {
         var g = Galaxy.Generate(3);
         var v = new Voyage(g, g.Ports[0], g.Ports[1], Box, Unseen(g), 1);
-        var node = new Maneuver { Time = 0, Prograde = 0.1 };
+        var (t, _, n) = Sublight.Frame(v.SubPosition, v.SubVelocity);
+        var node = new Maneuver { Time = v.AbsoluteTime, Prograde = prograde };
         v.Nodes.Add(node);
-        var along = Sublight.Frame(v.SubPosition, v.SubVelocity).T;
-        v.ConsumeNode(node, along * 0.05);
-        Assert.Equal(0.05, node.DeltaV, 9);
-        v.ConsumeNode(node, along * 0.05);
-        Assert.Equal(0, node.DeltaV, 9);
-        Assert.Single(v.Nodes);   // done only when the pilot stops
-        v.ConsumeNode(node, along * 0.01);
-        Assert.Equal(-0.01, node.Prograde, 9);   // past the node, the residual points back
+        return (v, node, new BurnTarget(node.Time, v.SubPosition, v.SubVelocity, v.SubVelocity + t * prograde), t, n);
     }
 
     [Fact]
-    public void BurningEarlyOnANodeStillSpendsIt()
+    public void BurningAlongTheNodeSpendsIt()
     {
-        // The node sits half an orbit ahead, so its axes differ from the ship's current ones.
-        var g = Galaxy.Generate(3);
-        var v = new Voyage(g, g.Ports[0], g.Ports[1], Box, Unseen(g), 1);
-        var el = Sublight.OrbitOf(v.Primary.Mu, v.SubPosition, v.SubVelocity);
-        var node = new Maneuver { Time = el.Period / 2, Prograde = 0.1 };
-        v.Nodes.Add(node);
-        var stage = Sublight.Predict(v.Primary, null, v.SubPosition, v.SubVelocity, 0, v.Nodes, 1).Stages[0];
-        var along = Sublight.Frame(stage.Position, stage.Velocity).T;
-        for (int i = 0; i < 10; i++) v.ConsumeNode(node, along * 0.01, stage.Position, stage.Velocity);
-        Assert.Equal(0, node.DeltaV, 9);
+        var (v, node, target, along, _) = NodeHere(0.01);
+        v.AdvanceSublight(0.005 / Tuning.SublightThrust, along);
+        v.Remeasure(node, target, v.Primary.Mu);
+        Assert.InRange(node.Prograde, 0.0045, 0.0055);
+        v.AdvanceSublight(0.006 / Tuning.SublightThrust, along);
+        v.Remeasure(node, target, v.Primary.Mu);
+        Assert.InRange(node.Prograde, -0.0015, -0.0005);   // past the node, what is left points back
+        Assert.Single(v.Nodes);                             // done only when the pilot says so
     }
 
     [Fact]
     public void BurningOffAxisLeavesTheNodeUnfinished()
     {
+        var (v, node, target, _, sideways) = NodeHere(0.01);
+        v.AdvanceSublight(0.005 / Tuning.SublightThrust, sideways);
+        v.Remeasure(node, target, v.Primary.Mu);
+        Assert.InRange(node.Prograde, 0.0095, 0.0105);
+        Assert.InRange(node.Normal, -0.0055, -0.0045);
+        Assert.True(node.DeltaV > 0.01);
+    }
+
+    [Fact]
+    public void CoastingDoesNotChangeWhatIsLeftOfANode()
+    {
+        // The node sits half an orbit ahead, so its axes differ from the ship's current ones.
         var g = Galaxy.Generate(3);
         var v = new Voyage(g, g.Ports[0], g.Ports[1], Box, Unseen(g), 1);
-        var node = new Maneuver { Time = 0, Prograde = 0.1 };
+        var el = Sublight.OrbitOf(v.Primary.Mu, v.SubPosition, v.SubVelocity);
+        var node = new Maneuver { Time = v.AbsoluteTime + el.Period / 2, Prograde = 0.01 };
         v.Nodes.Add(node);
-        var sideways = Sublight.Frame(v.SubPosition, v.SubVelocity).N;
-        v.ConsumeNode(node, sideways * 0.05);
-        Assert.Equal(0.1, node.Prograde, 9);
-        Assert.Equal(-0.05, node.Normal, 9);
-        Assert.True(node.DeltaV > 0.1);
+        var stage = Sublight.Predict(v.Primary, null, v.SubPosition, v.SubVelocity, v.AbsoluteTime, v.Nodes, 1).Stages[0];
+        var target = new BurnTarget(node.Time, stage.Position, stage.Velocity, stage.Velocity + Sublight.Impulse(stage.Position, stage.Velocity, node));
+        v.Remeasure(node, target, v.Primary.Mu);
+        Assert.Equal(0.01, node.Prograde, 6);
+        v.AdvanceSublight(el.Period / 4, Vec3d.Zero);
+        v.Remeasure(node, target, v.Primary.Mu);
+        Assert.Equal(0.01, node.Prograde, 6);
+        Assert.Equal(0, node.Radial, 6);
+        Assert.Equal(0, node.Normal, 6);
     }
 
     [Fact]
