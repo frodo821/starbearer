@@ -18,7 +18,8 @@ public sealed record ShipState(double Fuel, double Hull, double Life);
 public sealed class Voyage
 {
     public Galaxy G { get; }
-    public int OriginStar { get; }
+    /// <summary>The station the voyage set out from (a station id).</summary>
+    public int OriginStation { get; }
     /// <summary>The star the instruments steer for.</summary>
     public int TargetStar { get; set; }
     public List<Consignment> Hold { get; private set; }
@@ -76,15 +77,20 @@ public sealed class Voyage
     /// <summary>Applies each node as an instant impulse, so tests can check a plan apart from how it is flown.</summary>
     public bool IdealNodesForTest { get; set; }
     public Star System => G.Stars[SystemStar];
-    public Station? LocalStation => G.StationOrNull(SystemStar);
+    /// <summary>
+    /// The station the ship deals with in this system: the one picked as target, else the one it set out
+    /// from or came through, else the system's first. Null in a system without one.
+    /// </summary>
+    public Station? LocalStation => _station is int id && G.StarOf(id) == SystemStar ? G.StationAt(id) : G.MainStation(SystemStar);
+    int? _station;
 
-    /// <summary>A ship with one load, as the tools and tests fly it.</summary>
+    /// <summary>A ship with one load, as the tools and tests fly it. origin is a station id, target a star.</summary>
     public Voyage(Galaxy g, int origin, int target, Cargo cargo, double[] closestApproach, ulong rngSeed, double epoch = 0, ShipState? ship = null, ShipClass? shipClass = null)
         : this(g, origin, target, new[] { new Consignment { Mission = new Mission("", origin, target, cargo, cargo.Reward) } }, closestApproach, rngSeed, epoch, ship, shipClass) { }
 
     public Voyage(Galaxy g, int origin, int target, IEnumerable<Consignment> hold, double[] closestApproach, ulong rngSeed, double epoch = 0, ShipState? ship = null, ShipClass? shipClass = null)
     {
-        G = g; OriginStar = origin; TargetStar = target; Hold = hold.Select(c => c.Copy()).ToList();
+        G = g; OriginStation = origin; _station = origin; TargetStar = target; Hold = hold.Select(c => c.Copy()).ToList();
         Class = shipClass ?? Ships.Courier;
         Fuel = ship?.Fuel ?? Class.Tank;
         Hull = ship?.Hull ?? 1;
@@ -93,10 +99,9 @@ public sealed class Voyage
         _rng = new Rng(rngSeed);
         _truth = g.Stars.Select(s => s.Position).ToArray();
         _chart = new Vec3d[g.Stars.Length];
-        var o = g.Stars[origin];
         Epoch = epoch;
         var st = g.StationAt(origin);
-        Primary = st.Host ?? g.System(origin);
+        Primary = st.Host ?? g.System(st.Star);
         SubPosition = st.Position(epoch);
         SubVelocity = st.Velocity(epoch);
         SyncTruePosition();
@@ -126,6 +131,7 @@ public sealed class Voyage
     public void SetGoal(IOrbiter? target)
     {
         ChosenTarget = target is Station ? null : target;
+        if (target is Station st) _station = st.Id;
         _clearedIn = target == null ? SystemStar : -1;
     }
 
@@ -281,7 +287,7 @@ public sealed class Voyage
             {
                 var (sp, sv) = StationNow();
                 var near = (sp - p).Length < Tuning.DockRange;
-                if (near && GateBooked != null && G.GateLinks.TryGetValue(SystemStar, out var exit)) PassGate(ref p, ref v, sp, sv, exit);
+                if (near && GateBooked != null && G.GateLinks.TryGetValue(LocalStation.Id, out var exit)) PassGate(ref p, ref v, sp, sv, exit);
                 // Docking is the pilot's call (RequestDock): passing close and slow is not enough.
             }
         }
@@ -294,18 +300,18 @@ public sealed class Voyage
     double _toll;
 
     /// <summary>The toll of the passage booked through this system's gate, or null if none is.</summary>
-    public double? GateBooked => _bookedAt >= 0 && _bookedAt == SystemStar ? _toll : null;
+    public double? GateBooked => _bookedAt >= 0 && _bookedAt == LocalStation?.Id ? _toll : null;
     /// <summary>Tolls of passages made since the last dock; they are settled there.</summary>
     public double TollsDue { get; private set; }
     /// <summary>How many gates the ship has gone through, so the game can tell a passage happened.</summary>
     public int Passages { get; private set; }
-    public bool AtGate => G.GateLinks.ContainsKey(SystemStar);
+    public bool AtGate => LocalStation is { } st && G.GateLinks.ContainsKey(st.Id);
 
     /// <summary>Books the passage: from now, coming within docking range of the gate takes the ship through.</summary>
     public void BookGate(double toll)
     {
         if (!AtGate || Docked || !Class.Gates) return;
-        (_bookedAt, _toll) = (SystemStar, toll);
+        (_bookedAt, _toll) = (LocalStation!.Id, toll);
     }
 
     public void CancelGate() => _bookedAt = -1;
@@ -323,7 +329,8 @@ public sealed class Voyage
         var (t1, r1, n1) = Sublight.Frame(to.Position(t), to.Velocity(t));
         Vec3d Turn(Vec3d x) => t1 * x.Dot(t0) + r1 * x.Dot(r0) + n1 * x.Dot(n0);
         var (dp, dv) = (Turn(p - gateAt), Turn(v - gateSpeed));
-        Primary = to.Host ?? G.System(exit);
+        Primary = to.Host ?? G.System(to.Star);
+        _station = exit;
         p = to.Position(t) + dp;
         v = to.Velocity(t) + dv;
         TollsDue += _toll;

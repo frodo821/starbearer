@@ -10,7 +10,7 @@ public partial class SimTests
         var g = WithPorts();
         Voyage Fly(ShipClass c)
         {
-            var v = new Voyage(g, 0, 1, Array.Empty<Consignment>(), Unseen(g), 1, shipClass: c);
+            var v = new Voyage(g, From, 1, Array.Empty<Consignment>(), Unseen(g), 1, shipClass: c);
             v.EnterFtl();
             v.PlaceForTest(new Vec3d(4, 0, 0), new Vec3d(0.5, 0, 0));
             return v;
@@ -70,7 +70,7 @@ public partial class SimTests
     {
         var g = Galaxy.Generate(7);
         var gate = g.Gates[0];
-        var v = new Voyage(g, gate, gate, Array.Empty<Consignment>(), Unseen(g), 1, shipClass: Ships.Bulker);
+        var v = new Voyage(g, gate, g.StarOf(gate), Array.Empty<Consignment>(), Unseen(g), 1, shipClass: Ships.Bulker);
         v.Undock();
         v.BookGate(10);
         Assert.Null(v.GateBooked);
@@ -82,7 +82,7 @@ public partial class SimTests
         for (ulong seed = 1; seed <= 8; seed++)
         {
             var g = Galaxy.Generate(seed);
-            var yards = g.Ports.Where(p => Missions.KindOf(g, p) == StationKind.Shipyard).ToList();
+            var yards = g.Ports.Where(p => g.KindOf(p) == StationKind.Shipyard).ToList();
             Assert.All(yards, y => Assert.Contains(Ships.Courier, Ships.SoldAt(g, y)));
             Assert.All(Ships.All, c => Assert.Contains(yards, y => Ships.SoldAt(g, y).Contains(c)));
             Assert.Empty(Ships.SoldAt(g, g.Depots[0]));
@@ -92,9 +92,9 @@ public partial class SimTests
     static (SaveData S, Galaxy G, ShipClass Sold) AtAShipyard()
     {
         var g = Galaxy.Generate(5);
-        var yard = g.Ports.First(p => Missions.KindOf(g, p) == StationKind.Shipyard && Ships.SoldAt(g, p).Length > 1);
+        var yard = g.Ports.First(p => g.KindOf(p) == StationKind.Shipyard && Ships.SoldAt(g, p).Length > 1);
         var s = new SaveData { Seed = 5, Credits = 10000 };
-        s.PortStar = yard;
+        s.PortStation = yard;
         return (s, g, Ships.SoldAt(g, yard)[1]);
     }
 
@@ -102,12 +102,12 @@ public partial class SimTests
     public void ABoughtShipWaitsWhereItWasBuiltAndTheOneLeftKeepsItsCargo()
     {
         var (s, g, sold) = AtAShipyard();
-        var job = new Consignment { Mission = new Mission("a", s.PortStar, 0, Box, 100) };
+        var job = new Consignment { Mission = new Mission("a", s.PortStation, 0, Box, 100) };
         s.Hold.Add(job);
         Assert.True(Hangar.Buy(s, g, sold));
         Assert.Equal(10000 - sold.Price, s.Credits);
         var bought = s.Fleet.Single(x => x.Id != s.Flown);
-        Assert.Equal(s.PortStar, bought.Star);
+        Assert.Equal(s.PortStation, bought.Station);
         Assert.Equal(sold.Tank, bought.Fuel);
         Assert.True(Hangar.Board(s, bought.Id));
         Assert.Equal(sold, s.Ship.Type);
@@ -116,7 +116,7 @@ public partial class SimTests
         var back = SaveData.FromJson(s.ToJson())!;
         Assert.Equal(2, back.Fleet.Count);
         Assert.Equal(sold.Id, back.Ship.Class);
-        Assert.Equal(s.PortStar, back.PortStar);
+        Assert.Equal(s.PortStation, back.PortStation);
     }
 
     [Fact]
@@ -125,10 +125,10 @@ public partial class SimTests
         var (s, g, sold) = AtAShipyard();
         Hangar.Buy(s, g, sold);
         var other = s.Fleet.Single(x => x.Id != s.Flown);
-        other.Star = g.Depots[0];
+        other.Station = g.Depots[0];
         Assert.False(Hangar.Board(s, other.Id));
         Assert.False(Hangar.Sell(s, g, other.Id));
-        other.Star = s.PortStar;
+        other.Station = s.PortStation;
         other.Hold.Add(new Consignment { Mission = new Mission("a", 0, 1, Box, 100) });
         Assert.NotNull(Hangar.SaleRefusal(s, g, other));                // not with cargo aboard
         other.Hold.Clear();
@@ -145,10 +145,10 @@ public partial class SimTests
         var (s, g) = SaveData.NewGalaxy(5);
         (s.HeldFuel, s.Credits) = (0, 0);
         Assert.True(Supply.Bankrupt(s, g));
-        var spare = new OwnedShip { Id = 2, Star = g.Ports[1], Fuel = Ships.Courier.Tank };
+        var spare = new OwnedShip { Id = 2, Station = g.Ports[1], Fuel = Ships.Courier.Tank };
         s.Fleet.Add(spare);
         Assert.True(Supply.Bankrupt(s, g));    // out of reach
-        spare.Star = s.PortStar;
+        spare.Station = s.PortStation;
         Assert.False(Supply.Bankrupt(s, g));
     }
 }

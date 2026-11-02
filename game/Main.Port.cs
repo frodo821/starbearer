@@ -61,7 +61,7 @@ public partial class Main
     public void BuyFuel()
     {
         var s = Save!;
-        if (s.MarketIn(G!).StockOf(G!, s.PortStar, Wares.ShipFuel) < 1e-3) { Refuse("燃料が品切れ。待てば補充される"); return; }
+        if (s.MarketIn(G!).StockOf(G!, s.PortStation, Wares.ShipFuel) < 1e-3) { Refuse("燃料が品切れ。待てば補充される"); return; }
         Purchase(x => Trade.BuyFuel(x, G!, x.MarketIn(G!)));
     }
 
@@ -143,7 +143,8 @@ public partial class Main
     {
         var s = Save!;
         var v = V!;
-        var here = v.Hold.Where(c => c.Mission.Target == v.SystemStar).ToList();
+        var station = v.LocalStation!.Id;
+        var here = v.Hold.Where(c => c.Mission.Target == station).ToList();
         PortReport = here.Select(c => $"配達  {c.Mission.Cargo.Name}  健全度 {c.Integrity:P0}   報酬 {c.Payout:F0}").ToList();
         PortReport.Add($"所要 {v.Time:F1} 日   残燃料 {v.Fuel:F2}   船体 {v.Hull:P0}");
         Earned = here.Sum(c => c.Payout);
@@ -157,7 +158,7 @@ public partial class Main
         s.TotalDays += v.Time;
         s.MarketIn(G!);   // the galaxy's stock catches up with the days flown
         foreach (var c in here) Missions.Deliver(s, G!, c);
-        s.PortStar = v.SystemStar;
+        s.PortStation = station;
         s.ClosestApproach = v.ClosestApproach;
         WriteSave();
         VisitingPort = false;

@@ -8,7 +8,7 @@ public partial class SimTests
     public void VoyageStartsCoorbitingTheOriginStation()
     {
         var g = Galaxy.Generate(3);
-        var v = new Voyage(g, g.Ports[0], g.Ports[1], Box, Unseen(g), 1, epoch: 17);
+        var v = new Voyage(g, g.Ports[0], g.StarOf(g.Ports[1]), Box, Unseen(g), 1, epoch: 17);
         var st = g.StationAt(g.Ports[0]);
         Assert.Equal(Phase.Sublight, v.Phase);
         Assert.True((st.Position(17) - v.SubPosition).Length < 1e-9);
@@ -32,7 +32,7 @@ public partial class SimTests
     public void JumpAndDescentPreserveOrbitalEnergy()
     {
         var g = Galaxy.Generate(3);
-        var v = new Voyage(g, g.Ports[0], g.Ports[1], Box, Unseen(g), 1);
+        var v = new Voyage(g, g.Ports[0], g.StarOf(g.Ports[1]), Box, Unseen(g), 1);
         v.PlaceSublightForTest(new Vec3d(1, 0, 0), new Vec3d(0, 0, 0.2));
         var mu = v.Primary.Mu;
         var before = v.SubVelocity.LengthSq / 2 - mu / v.SubPosition.Length;
@@ -47,7 +47,7 @@ public partial class SimTests
     public void DescentNeedsAWell()
     {
         var g = TwoStars();
-        var v = new Voyage(g2(), 0, 1, Box, Unseen(g2()), 1);
+        var v = new Voyage(g2(), From, 1, Box, Unseen(g2()), 1);
         v.EnterFtl();
         v.PlaceForTest(new Vec3d(4, 0, 0), new Vec3d(0.5, 0, 0));
         Assert.False(v.Descend());
@@ -59,7 +59,7 @@ public partial class SimTests
     public void ManeuverPredictionMatchesActualFlight()
     {
         var g = Galaxy.Generate(3);
-        var v = new Voyage(g, g.Ports[0], g.Ports[1], Box, Unseen(g), 1);
+        var v = new Voyage(g, g.Ports[0], g.StarOf(g.Ports[1]), Box, Unseen(g), 1);
         var lap = 2 * Math.PI / g.StationAt(g.Ports[0]).Omega;
         var speed = v.SubVelocity.Length;
         var node = new Maneuver { Time = lap * 0.2, Prograde = speed * 0.08, Radial = -speed * 0.03, Normal = speed * 0.05 };
@@ -75,7 +75,7 @@ public partial class SimTests
     static (Voyage V, Maneuver Node, BurnTarget Target, Vec3d T, Vec3d N) NodeHere(double prograde)
     {
         var g = Galaxy.Generate(3);
-        var v = new Voyage(g, g.Ports[0], g.Ports[1], Box, Unseen(g), 1);
+        var v = new Voyage(g, g.Ports[0], g.StarOf(g.Ports[1]), Box, Unseen(g), 1);
         var (t, _, n) = Sublight.Frame(v.SubPosition, v.SubVelocity);
         var node = new Maneuver { Time = v.AbsoluteTime, Prograde = prograde };
         v.Nodes.Add(node);
@@ -134,7 +134,7 @@ public partial class SimTests
     {
         // The node sits half an orbit ahead, so its axes differ from the ship's current ones.
         var g = Galaxy.Generate(3);
-        var v = new Voyage(g, g.Ports[0], g.Ports[1], Box, Unseen(g), 1);
+        var v = new Voyage(g, g.Ports[0], g.StarOf(g.Ports[1]), Box, Unseen(g), 1);
         var el = Sublight.OrbitOf(v.Primary.Mu, v.SubPosition, v.SubVelocity);
         var node = new Maneuver { Time = v.AbsoluteTime + el.Period / 2, Prograde = 0.01 };
         v.Nodes.Add(node);
@@ -152,9 +152,9 @@ public partial class SimTests
     /// <summary>A ship dropped into the target system on an eccentric orbit, as a descent would leave it.</summary>
     static Voyage Arriving(Galaxy g)
     {
-        var v = new Voyage(g, g.Ports[0], g.Ports[1], Box, Unseen(g), 1);
+        var v = new Voyage(g, g.Ports[0], g.StarOf(g.Ports[1]), Box, Unseen(g), 1);
         v.EnterFtl();
-        var star = g.Stars[g.Ports[1]];
+        var star = g.StarAt(g.Ports[1]);
         var r = Sublight.SystemRadius(star) * 0.12;
         v.PlaceForTest(star.Position + new Vec3d(r * Sublight.Scale, 0, 0), new Vec3d(0, 0, Math.Sqrt(Sublight.Mu(star) / r) * 1.15));
         Assert.True(v.Descend());
@@ -267,7 +267,7 @@ public partial class SimTests
     {
         var star = new Star(0, "test", Vec3d.Zero, 1, 5800, Vec3d.Zero);
         var mu = Sublight.Mu(star);
-        var st = new Station(0, 1.1, 0.3, Math.Sqrt(mu / (1.1 * 1.1 * 1.1)), new Vec3d(1, 0, 0), new Vec3d(0, 0, 1));
+        var st = new Station(Galaxy.FirstStationId, 0, 1.1, 0.3, Math.Sqrt(mu / (1.1 * 1.1 * 1.1)), new Vec3d(1, 0, 0), new Vec3d(0, 0, 1));
         const double rp = 0.1, ra = 3;
         var p = new Vec3d(ra, 0, 0);
         var v = new Vec3d(0, 0, Math.Sqrt(mu * (2 / ra - 2 / (rp + ra))));
@@ -293,9 +293,9 @@ public partial class SimTests
     public void DescentKeepsTheFullThreeDimensionalState()
     {
         var g = Galaxy.Generate(3);
-        var v = new Voyage(g, g.Ports[0], g.Ports[1], Box, Unseen(g), 1);
+        var v = new Voyage(g, g.Ports[0], g.StarOf(g.Ports[1]), Box, Unseen(g), 1);
         v.EnterFtl();
-        var star = g.Stars[g.Ports[1]];
+        var star = g.StarAt(g.Ports[1]);
         v.PlaceForTest(star.Position + new Vec3d(0.2, 0.3, 0), new Vec3d(0.1, -0.1, 0.3));
         Assert.True(v.Descend());
         Assert.Equal(0.3 / Sublight.Scale, v.SubPosition.Y, 9);
@@ -423,9 +423,9 @@ public partial class SimTests
     public void GoingDownIntoABodyKeepsTheStarFrameState()
     {
         var g = Galaxy.Generate(5);
-        var v = new Voyage(g, g.Ports[0], g.Ports[1], Box, Unseen(g), 1);
+        var v = new Voyage(g, g.Ports[0], g.StarOf(g.Ports[1]), Box, Unseen(g), 1);
         v.Undock();
-        var planet = g.System(g.Ports[0]).Children[0];
+        var planet = g.System(g.StarOf(g.Ports[0])).Children[0];
         var t = v.AbsoluteTime;
         var offset = planet.Position(t) + new Vec3d(planet.Edge * 0.6, 0, 0);
         var velocity = planet.Velocity(t) + new Vec3d(0, 0, 0.05);
@@ -440,7 +440,7 @@ public partial class SimTests
     public void APathLeavingAPlanetCarriesOnAroundTheStar()
     {
         var g = Galaxy.Generate(5);
-        var planet = g.System(g.Ports[0]).Children[0];
+        var planet = g.System(g.StarOf(g.Ports[0])).Children[0];
         var p = new Vec3d(planet.Edge * 0.5, 0, 0);
         var v = new Vec3d(0, 0, Math.Sqrt(2 * planet.Mu / p.Length) * 1.3);
         var f = Sublight.PredictPath(g, planet, p, v, 0, Array.Empty<Maneuver>(), 30);
@@ -452,7 +452,7 @@ public partial class SimTests
     public void AnApproachToAPlanetEntersItsSphere()
     {
         var g = Galaxy.Generate(5);
-        var system = g.System(g.Ports[0]);
+        var system = g.System(g.StarOf(g.Ports[0]));
         var planet = system.Children[0];
         var at = planet.Position(10);
         var p = at + new Vec3d(planet.Edge * 1.2, 0, 0);
@@ -467,7 +467,7 @@ public partial class SimTests
     public void APlanetPickedAsTargetGetsNodesAndAClosestApproach()
     {
         var g = Galaxy.Generate(5);
-        var system = g.System(g.Ports[0]);
+        var system = g.System(g.StarOf(g.Ports[0]));
         var planet = system.Children.First(c => c.Children.Count > 0);
         var moon = planet.Children[0];
         // A circular orbit in the star's equator, inside the planet's: planets are tilted, so it crosses their plane.
@@ -524,12 +524,12 @@ public partial class SimTests
     public void TheTargetStaysWithItsSystem()
     {
         var g = Galaxy.Generate(5);
-        var v = new Voyage(g, g.Ports[0], g.Ports[1], new Cargo("t", 0.5, 0.8, 100), new double[g.Stars.Length], 1);
+        var v = new Voyage(g, g.Ports[0], g.StarOf(g.Ports[1]), new Cargo("t", 0.5, 0.8, 100), new double[g.Stars.Length], 1);
         Assert.Same(v.LocalStation, v.Goal);
-        var other = g.System(g.Ports[1]).Children[0];
+        var other = g.System(g.StarOf(g.Ports[1])).Children[0];
         v.SetGoal(other);
         Assert.Same(v.LocalStation, v.Goal);   // a body of another system can't be steered for from here
-        var here = g.System(g.Ports[0]).Children.First(c => c.Key != v.Primary.Key);
+        var here = g.System(g.StarOf(g.Ports[0])).Children.First(c => c.Key != v.Primary.Key);
         v.SetGoal(here);
         Assert.Same(here, v.Goal);
         v.SetGoal(null);

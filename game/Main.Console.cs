@@ -113,7 +113,7 @@ public partial class Main
             if (v.NearestWell(out var star) < double.MaxValue && star != null)
             {
                 if (star.Id == v.TargetStar) return (Key.D, "目的の星系。近日点の手前で降下する");
-                if (v.Hold.Any(c => c.Mission.Target == star.Id)) return (Key.D, "積荷の届け先の星系。寄るなら降下する");
+                if (v.Hold.Any(c => c.IsJob && G!.StarOf(c.Mission.Target) == star.Id)) return (Key.D, "積荷の届け先の星系。寄るなら降下する");
                 if (G!.HasStation(star.Id) && v.Fuel < Tuning.DepartureFuelFloor) return (Key.D, "港のある星系。寄港するなら降下する");
                 return (null, $"{star.Name} の井戸を通過中。降下しなければ軌道が曲がるだけ");
             }
@@ -127,7 +127,7 @@ public partial class Main
         if (v.Goal == null)
             return v.LocalStation == null ? (Key.J, "この星系に港はない。発進して次へ") : (Key.C, "目標なし。「目標」か天体のタップで選ぶ");
         if (v.GateBooked is { } toll && GateExit is var exit and >= 0)
-            return (null, $"ゲート通過を予約済み（{toll:F0}）。ゲートまで寄れば {G!.Stars[exit].Name} へ出る。速さはそのまま");
+            return (null, $"ゲート通過を予約済み（{toll:F0}）。ゲートまで寄れば {G!.StarAt(exit).Name} へ出る。速さはそのまま");
         if (Helm.EngineOn && NextNode != null)
             return v.AutoBurn ? (null, "自動噴射中。終わると自動で止まる")
                 : NodeOvershot ? (Key.E, "ノードを過ぎた。E で止める")

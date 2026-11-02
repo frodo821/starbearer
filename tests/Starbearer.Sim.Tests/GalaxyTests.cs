@@ -16,14 +16,14 @@ public partial class SimTests
             foreach (var region in g.Regions)
             {
                 Assert.InRange(g.Stars.Count(s => s.Region == region.Id), Tuning.StarsPerRegion / 3, Tuning.StarsPerRegion * 3);
-                var kinds = g.Ports.Concat(g.Depots).Where(p => g.Stars[p].Region == region.Id).Select(p => Missions.KindOf(g, p)).ToList();
+                var kinds = g.Ports.Concat(g.Depots).Where(p => g.StarAt(p).Region == region.Id).Select(p => g.KindOf(p)).ToList();
                 Assert.True(kinds.Count(k => k < StationKind.Depot) >= 2, "two production stations");
                 Assert.Contains(StationKind.Colony, kinds);
                 Assert.Contains(StationKind.Shipyard, kinds);
                 counts.Add(kinds.Count);
             }
-            Assert.All(g.Ports, p => Assert.NotEqual(StationKind.Depot, Missions.KindOf(g, p)));
-            Assert.All(g.Depots, p => Assert.Equal(StationKind.Depot, Missions.KindOf(g, p)));
+            Assert.All(g.Ports, p => Assert.NotEqual(StationKind.Depot, g.KindOf(p)));
+            Assert.All(g.Depots, p => Assert.Equal(StationKind.Depot, g.KindOf(p)));
         }
         Assert.True(counts.Count > 1, "the number of stations varies from region to region");
         var g7 = Galaxy.Generate(7);
@@ -41,11 +41,11 @@ public partial class SimTests
             {
                 var exit = g.GateLinks[gate];
                 Assert.Equal(gate, g.GateLinks[exit]);
-                Assert.NotEqual(g.Stars[gate].Region, g.Stars[exit].Region);
-                Assert.Equal(StationKind.Gate, Missions.KindOf(g, gate));
+                Assert.NotEqual(g.StarAt(gate).Region, g.StarAt(exit).Region);
+                Assert.Equal(StationKind.Gate, g.KindOf(gate));
                 Assert.Empty(Missions.Board(g, Market.Open(g), gate, 0, Array.Empty<Consignment>()));
                 Assert.DoesNotContain(gate, g.Ports.Concat(g.Depots));
-                Assert.True(g.HasStation(gate));
+                Assert.True(g.IsStation(gate) && g.HasStation(g.StarOf(gate)));
             });
             var seen = new HashSet<int> { 0 };
             var queue = new Queue<int>(seen);
@@ -97,7 +97,7 @@ public partial class SimTests
         var g = Galaxy.Generate(5);
         foreach (var star in g.Ports.Concat(g.Depots))
         {
-            var system = g.System(star);
+            var system = g.System(g.StarOf(star));
             Assert.NotEmpty(system.Children);
             Assert.All(system.Children, p => Assert.True(p.OrbitRadius + p.Edge < system.Edge));
             Assert.All(system.Children.SelectMany(p => p.Children), m => Assert.True(m.OrbitRadius + m.Edge < m.Parent!.Edge));
@@ -129,9 +129,40 @@ public partial class SimTests
             foreach (var port in g.Ports.Concat(g.Depots))
             {
                 var st = g.StationAt(port);
-                if (st.Host!.Kind == BodyKind.Star && g.System(port).Children.Any(c => Math.Abs(c.OrbitRadius - st.Radius) < c.Edge)) belts++;
+                if (st.Host!.Kind == BodyKind.Star && g.System(g.StarOf(port)).Children.Any(c => Math.Abs(c.OrbitRadius - st.Radius) < c.Edge)) belts++;
             }
         }
         Assert.True(stars + planets + moons + belts == 0, $"stars {stars} planets {planets} moons {moons} belts {belts}");
+    }
+}
+
+public partial class SimTests
+{
+    [Fact]
+    public void ASystemCanHoldSeveralStations()
+    {
+        const int Second = Galaxy.FirstStationId + 2;
+        var g = WithPorts();
+        g = new Galaxy
+        {
+            Seed = g.Seed, Stars = g.Stars, Nebulae = g.Nebulae, Ports = new[] { From, To, Second },
+            StationStars = new() { [From] = 0, [To] = 1, [Second] = 0 },
+            Kinds = new() { [From] = StationKind.City, [To] = StationKind.City, [Second] = StationKind.Shipyard },
+        };
+        Assert.Equal(new[] { From, Second }, g.StationsIn(0));
+        Assert.Equal(" ◆▲", Missions.Mark(g, 0));
+        Assert.NotEqual(g.SeedKey(From), g.SeedKey(Second));
+        Assert.Equal(0UL, g.SeedKey(From));                       // the first keeps its system's look
+        var (a, b) = (g.StationAt(From), g.StationAt(Second));
+        Assert.Equal(0, a.Star); Assert.Equal(0, b.Star);
+        Assert.True(a.Radius != b.Radius || a.Phase != b.Phase);
+        // A ship deals with the station it set out from, and with another once it picks it.
+        var v = new Voyage(g, Second, 1, Box, Unseen(g), 1);
+        Assert.Equal(Second, v.LocalStation!.Id);
+        v.SetGoal(a);
+        Assert.Equal(From, v.LocalStation!.Id);
+        Assert.Equal(StationKind.Shipyard, g.KindOf(Second));
+        Assert.NotEmpty(Ships.SoldAt(g, Second));
+        Assert.Empty(Ships.SoldAt(g, From));
     }
 }

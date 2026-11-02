@@ -20,31 +20,58 @@ public sealed class Galaxy
     public required Star[] Stars { get; init; }
     public required Nebula[] Nebulae { get; init; }
     public Region[] Regions { get; init; } = Array.Empty<Region>();
-    /// <summary>Star ids that host a port.</summary>
+    /// <summary>
+    /// Stations have ids of their own, from FirstStationId up, apart from star ids: a system can hold
+    /// several. Mistaking one for a star index fails at once, out of the star array's range.
+    /// </summary>
+    public const int FirstStationId = 1000;
+    /// <summary>The star each station is in, by station id.</summary>
+    public Dictionary<int, int> StationStars { get; init; } = new();
+    /// <summary>Station ids of the ports: everything but depots and gates.</summary>
     public required int[] Ports { get; init; }
-    /// <summary>What each station is, by star. Stars missing here fall back to a kind from the seed.</summary>
+    /// <summary>What each station is, by station id.</summary>
     public Dictionary<int, StationKind> Kinds { get; init; } = new();
-    /// <summary>Star ids with a small resupply station. Its board has only small jobs.</summary>
+    /// <summary>Station ids of the small resupply stations. Their boards have only small jobs.</summary>
     public int[] Depots { get; init; } = Array.Empty<int>();
-    /// <summary>Star ids with a gate. Gates post no jobs and take no deliveries.</summary>
+    /// <summary>Station ids of the gates. Gates post no jobs and take no deliveries.</summary>
     public int[] Gates { get; init; } = Array.Empty<int>();
-    /// <summary>Where each gate leads: the star of the gate it is paired with.</summary>
+    /// <summary>Where each gate leads: the station id of the gate it is paired with.</summary>
     public Dictionary<int, int> GateLinks { get; init; } = new();
+
+    public int StarOf(int station) => StationStars[station];
+    public StationKind KindOf(int station) => Kinds[station];
+    public bool IsStation(int id) => StationStars.ContainsKey(id);
+    /// <summary>Every station in a system, in id order.</summary>
+    public IEnumerable<int> StationsIn(int star) => (_byStar ??= StationStars.GroupBy(x => x.Value).ToDictionary(k => k.Key, k => k.Select(x => x.Key).OrderBy(x => x).ToArray()))
+        .TryGetValue(star, out var ids) ? ids : Array.Empty<int>();
+    Dictionary<int, int[]>? _byStar;
+    public bool HasStation(int star) => StationsIn(star).Any();
+
+    /// <summary>
+    /// What a station's seeded traits (its orbit, its lines, its board) are drawn from: its star for the
+    /// first station there, so a system keeps its look as stations are added, and a distinct key for the rest.
+    /// </summary>
+    public ulong SeedKey(int station)
+    {
+        var star = StarOf(station);
+        var index = Array.IndexOf(StationsIn(star).ToArray(), station);
+        return (ulong)star + (ulong)index * 1_000_003;
+    }
+    /// <summary>A system's gate, or -1.</summary>
+    public int GateIn(int star) => StationsIn(star).Where(GateLinks.ContainsKey).DefaultIfEmpty(-1).First();
+    public Star StarAt(int station) => Stars[StarOf(station)];
+    /// <summary>A system's first station, the one a path is measured against by default; null without one.</summary>
+    public Station? MainStation(int star) => StationsIn(star).Select(StationAt).FirstOrDefault();
 
     /// <summary>The regions a gate in this one leads to.</summary>
     public IEnumerable<int> LinkedRegions(int region) =>
-        Gates.Where(g => Stars[g].Region == region).Select(g => Stars[GateLinks[g]].Region).Distinct();
+        Gates.Where(g => StarAt(g).Region == region).Select(g => StarAt(GateLinks[g]).Region).Distinct();
 
-    HashSet<int>? _ports, _depots;
-    public bool IsPort(int star) => (_ports ??= Ports.ToHashSet()).Contains(star);
-    public bool IsDepot(int star) => (_depots ??= Depots.ToHashSet()).Contains(star);
-
-    /// <summary>Each port's station, derived from the seed so it never needs saving.</summary>
-    public bool HasStation(int star) => IsPort(star) || IsDepot(star) || GateLinks.ContainsKey(star);
-    public Station? StationOrNull(int star) => HasStation(star) ? StationAt(star) : null;
+    HashSet<int>? _depots;
+    public bool IsDepot(int station) => (_depots ??= Depots.ToHashSet()).Contains(station);
 
     Dictionary<int, StationEconomy>? _economies;
-    /// <summary>What each station makes and uses, by star. Gates and depots included: they keep fuel for ships.</summary>
+    /// <summary>What each station makes and uses, by station id. Gates and depots included: they keep fuel for ships.</summary>
     public IReadOnlyDictionary<int, StationEconomy> Economies => _economies ??=
         Ports.Concat(Depots).Concat(Gates).ToDictionary(s => s, s => Economy.Of(this, s));
 
@@ -54,8 +81,8 @@ public sealed class Galaxy
     /// and each pair of linked gates. Goods cross between regions only in ships' holds.
     /// </summary>
     public (int A, int B, double Closeness)[] Neighbours => _neighbours ??= Economies.Keys.OrderBy(s => s)
-        .SelectMany(a => Economies.Keys.Where(b => b > a && (Stars[a].Region == Stars[b].Region || GateLinks.TryGetValue(a, out var x) && x == b))
-            .Select(b => (a, b, GateLinks.TryGetValue(a, out var y) && y == b ? 1.0 : Math.Exp(-(Stars[a].Position - Stars[b].Position).Length / Economy.SpreadLy))))
+        .SelectMany(a => Economies.Keys.Where(b => b > a && (StarAt(a).Region == StarAt(b).Region || GateLinks.TryGetValue(a, out var x) && x == b))
+            .Select(b => (a, b, GateLinks.TryGetValue(a, out var y) && y == b ? 1.0 : Math.Exp(-(StarAt(a).Position - StarAt(b).Position).Length / Economy.SpreadLy))))
         .ToArray();
 
     double[,]? _lag;
@@ -80,7 +107,7 @@ public sealed class Galaxy
             foreach (var (a, b, _) in Neighbours)
             {
                 var days = GateLinks.TryGetValue(a, out var x) && x == b ? Economy.GateRelayDays
-                    : (Stars[a].Position - Stars[b].Position).Length / Economy.NewsLyPerDay;
+                    : (StarAt(a).Position - StarAt(b).Position).Length / Economy.NewsLyPerDay;
                 edges[index[a]].Add((index[b], days));
                 edges[index[b]].Add((index[a], days));
             }
@@ -148,27 +175,29 @@ public sealed class Galaxy
         };
     }
 
-    public Station StationAt(int star)
+    /// <summary>A station's orbit, by station id, derived from the seed so it never needs saving.</summary>
+    public Station StationAt(int id)
     {
         lock (_stations)
         {
-            if (!_stations.TryGetValue(star, out var st)) _stations[star] = st = PlaceStation(star);
+            if (!_stations.TryGetValue(id, out var st)) _stations[id] = st = PlaceStation(id);
             return st;
         }
     }
 
-    Station PlaceStation(int star)
+    Station PlaceStation(int id)
     {
-        var r = new Rng(Seed * 1000003 + (ulong)star);
+        var star = StarOf(id);
+        var r = new Rng(Seed * 1000003 + SeedKey(id));
         var system = System(star);
-        var host = HostFor(Missions.KindOf(this, star), system, r);
+        var host = HostFor(KindOf(id), system, r);
         var share = host.Kind == BodyKind.Moon ? r.Range(0.25, 0.4) : r.Range(0.22, Bodies.FreeInnerShare - 0.08);
         var radius = host == system ? Bodies.WidestGap(system) : host.Edge * share;
         var node = r.Range(0, 2 * Math.PI);
         var tilt = r.Range(5, 28) * Math.PI / 180 * (r.Unit() < 0.5 ? -1 : 1);
         var u = new Vec3d(Math.Cos(node), 0, Math.Sin(node));
         var w = new Vec3d(-Math.Sin(node), 0, Math.Cos(node)) * Math.Cos(tilt) + new Vec3d(0, Math.Sin(tilt), 0);
-        return new Station(star, radius, r.Range(0, 2 * Math.PI), Math.Sqrt(host.Mu / (radius * radius * radius)), u, w) { Host = host };
+        return new Station(id, star, radius, r.Range(0, 2 * Math.PI), Math.Sqrt(host.Mu / (radius * radius * radius)), u, w) { Host = host };
     }
 
     static readonly string[] Syllables = "ka ru mi to sa ne ra li on ve th al dor ys ean or tes mar qu ien sol vi ga".Split(' ');
@@ -228,14 +257,18 @@ public sealed class Galaxy
         for (int k = 0; k < regions.List.Length; k++)
             PlaceStations(r, stars, stars.Where(s => s.Region == k).ToList(), kinds, SystemOf);
         SpreadEveryKind(r, kinds, SystemOf);
-        var stations = kinds.Keys.ToList();   // in placement order: each region's guaranteed ones first
+        // Placement worked by star; each station now gets its own id, in placement order (each region's guaranteed ones first).
+        var id = kinds.Keys.Select((star, i) => (star, i)).ToDictionary(x => x.star, x => FirstStationId + x.i);
+        var byId = kinds.ToDictionary(k => id[k.Key], k => k.Value);
+        var stations = byId.Keys.ToList();
         var galaxy = new Galaxy
         {
-            Seed = seed, Stars = stars.ToArray(), Nebulae = nebulae, Regions = regions.List, Kinds = kinds,
-            Ports = stations.Where(s => kinds[s] is not (StationKind.Depot or StationKind.Gate)).ToArray(),
-            Depots = stations.Where(s => kinds[s] == StationKind.Depot).ToArray(),
-            Gates = stations.Where(s => kinds[s] == StationKind.Gate).ToArray(),
-            GateLinks = links,
+            Seed = seed, Stars = stars.ToArray(), Nebulae = nebulae, Regions = regions.List, Kinds = byId,
+            StationStars = kinds.Keys.ToDictionary(star => id[star], star => star),
+            Ports = stations.Where(s => byId[s] is not (StationKind.Depot or StationKind.Gate)).ToArray(),
+            Depots = stations.Where(s => byId[s] == StationKind.Depot).ToArray(),
+            Gates = stations.Where(s => byId[s] == StationKind.Gate).ToArray(),
+            GateLinks = links.ToDictionary(l => id[l.Key], l => id[l.Value]),
         };
         foreach (var (star, c) in systems) galaxy._systems[star] = c;   // built already, to fit the stations
         return galaxy;

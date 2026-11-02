@@ -12,7 +12,7 @@ public partial class SimTests
             var g = Galaxy.Generate(seed);
             foreach (var star in g.Economies.Keys)
             {
-                var kind = Missions.KindOf(g, star);
+                var kind = g.KindOf(star);
                 var host = g.StationAt(star).Host!;
                 if (kind == StationKind.GasHarvester) Assert.Equal(BodyKind.Giant, host.Kind);
                 if (kind is StationKind.Mine or StationKind.Gate) Assert.Equal(BodyKind.Star, host.Kind);
@@ -49,7 +49,7 @@ public partial class SimTests
     static (Galaxy G, Market M, int Star, StationEconomy E) StationOf(StationKind kind)
     {
         var g = Galaxy.Generate(5);
-        var star = g.Economies.Keys.First(s => Missions.KindOf(g, s) == kind);
+        var star = g.Economies.Keys.First(s => g.KindOf(s) == kind);
         return (g, Market.Open(g), star, g.Economies[star]);
     }
 
@@ -59,7 +59,7 @@ public partial class SimTests
         var (g, m, star, e) = StationOf(StationKind.Factory);
         // Cut it off from its neighbours: an economy of one.
         var alone = new Market { Stock = { [star] = (double[])m.Stock[star].Clone() } };
-        var solo = new Galaxy { Seed = g.Seed, Stars = g.Stars, Nebulae = g.Nebulae, Ports = new[] { star }, Kinds = g.Kinds };
+        var solo = new Galaxy { Seed = g.Seed, Stars = g.Stars, Nebulae = g.Nebulae, Ports = new[] { star }, Kinds = g.Kinds, StationStars = g.StationStars };
         double S(string w) => alone.StockOf(solo, star, w);
         foreach (var w in e.Wares) alone.Take(solo, star, w, 1e9);
         alone.Put(solo, star, "fission_fuel", 10);
@@ -86,7 +86,7 @@ public partial class SimTests
     public void NeighboursEvenOutWhatTheyBothHold()
     {
         var g = Galaxy.Generate(5);
-        var (a, b, _) = g.Neighbours.First(n => g.Stars[n.A].Region == g.Stars[n.B].Region);
+        var (a, b, _) = g.Neighbours.First(n => g.StarAt(n.A).Region == g.StarAt(n.B).Region);
         var m = Market.Open(g);
         var fuel = Wares.ShipFuel;
         m.Take(g, a, fuel, 1e9);
@@ -130,7 +130,7 @@ public partial class SimTests
     static (SaveData S, Galaxy G, Market M) DockedWhereMade(string ware, double credits = 5000)
     {
         var (s, g) = SaveData.NewGalaxy(5);
-        s.PortStar = g.Economies.First(e => e.Value.Makes(ware)).Key;
+        s.PortStation = g.Economies.First(e => e.Value.Makes(ware)).Key;
         s.Credits = credits;
         return (s, g, s.MarketIn(g));
     }
@@ -139,7 +139,7 @@ public partial class SimTests
     public void BuyingTakesStockAndRaisesThePriceUnitByUnit()
     {
         var (s, g, m) = DockedWhereMade("food");
-        var star = s.PortStar;
+        var star = s.PortStation;
         var price = m.Price(g, star, "food")!.Value;
         var one = Trade.Cost(g, m, star, "food", 1, true);
         Assert.True(one > price);                                         // the spread
@@ -162,24 +162,24 @@ public partial class SimTests
     public void AStationSellsWhatItMakesAndBuysWhatItUses()
     {
         var (s, g, m) = DockedWhereMade("steel");
-        Assert.True(Trade.Sells(g, s.PortStar, "steel"));
-        Assert.True(Trade.Sells(g, s.PortStar, Wares.ShipFuel));   // fuel everywhere
-        Assert.False(Trade.Buys(g, s.PortStar, "steel"));
+        Assert.True(Trade.Sells(g, s.PortStation, "steel"));
+        Assert.True(Trade.Sells(g, s.PortStation, Wares.ShipFuel));   // fuel everywhere
+        Assert.False(Trade.Buys(g, s.PortStation, "steel"));
         Assert.Equal(0, Trade.MaxBuy(s, g, m, "food"));             // not made here
         // The courier's bays take containers only: steel is bulk.
         Assert.Equal(0, Trade.MaxBuy(s, g, m, "steel"));
-        s.Fleet.Add(OwnedShip.Build(Ships.Bulker, 2, s.PortStar));
+        s.Fleet.Add(OwnedShip.Build(Ships.Bulker, 2, s.PortStation));
         Hangar.Board(s, 2);
         var most = Trade.MaxBuy(s, g, m, "steel");
-        Assert.True(most > 0 && most <= m.StockOf(g, s.PortStar, "steel"));
+        Assert.True(most > 0 && most <= m.StockOf(g, s.PortStation, "steel"));
         Assert.True(Trade.Buy(s, g, m, "steel", most));
         Assert.Equal(0, Trade.MaxBuy(s, g, m, "steel"));               // the bays, the stock or the credits ran out
         Assert.False(Trade.Buy(s, g, m, "steel", 1));
         // Sold where it is used, at that station's price.
         var lot = s.Hold.Single();
-        Assert.Null(Trade.Offer(g, m, s.PortStar, lot));
+        Assert.Null(Trade.Offer(g, m, s.PortStation, lot));
         var user = g.Economies.First(e => e.Value.Uses("steel")).Key;
-        s.PortStar = user;   // as if flown there (test only)
+        s.PortStation = user;   // as if flown there (test only)
         var userStock = m.StockOf(g, user, "steel");
         var offer = Trade.Offer(g, m, user, lot)!.Value;
         var credits = s.Credits;
@@ -234,8 +234,8 @@ public partial class SimTests
             Assert.Equal(g.InfoLag(a, b), g.InfoLag(b, a), 9);
             Assert.True(double.IsFinite(g.InfoLag(a, b)));   // gates link every region
         }
-        var near = stations.Where(b => b != a && g.Stars[b].Region == g.Stars[a].Region).Min(b => g.InfoLag(a, b));
-        var far = stations.Where(b => g.Stars[b].Region != g.Stars[a].Region).Max(b => g.InfoLag(a, b));
+        var near = stations.Where(b => b != a && g.StarAt(b).Region == g.StarAt(a).Region).Min(b => g.InfoLag(a, b));
+        var far = stations.Where(b => g.StarAt(b).Region != g.StarAt(a).Region).Max(b => g.InfoLag(a, b));
         Assert.True(far > near * 2);
     }
 
@@ -271,7 +271,7 @@ public partial class SimTests
         var g = Galaxy.Generate(5);
         var m = Market.Open(g);
         var here = g.EconomyOrder[0];
-        var there = g.EconomyOrder.First(s => s != here && Missions.KindOf(g, s) != StationKind.Gate && g.InfoLag(here, s) is > 5 and < 60);
+        var there = g.EconomyOrder.First(s => s != here && g.KindOf(s) != StationKind.Gate && g.InfoLag(here, s) is > 5 and < 60);
         var then = m.Copy();
         m.AdvanceTo(g, 150);
         Assert.Same(m, m.KnownAs(g, here, here));
@@ -294,14 +294,14 @@ public partial class SimTests
         Trade.Buy(s, g, m, "food", 6);
         var lot = s.Hold.Single();
         var cost = lot.Cost;
-        s.PortStar = g.Economies.First(e => e.Value.Uses("food")).Key;   // as if flown there (test only)
+        s.PortStation = g.Economies.First(e => e.Value.Uses("food")).Key;   // as if flown there (test only)
         var quote = Trade.SaleQuote(s, g, m, "food", 4)!.Value;
-        var stock = m.StockOf(g, s.PortStar, "food");
+        var stock = m.StockOf(g, s.PortStation, "food");
         var credits = s.Credits;
-        Assert.Equal(stock, m.StockOf(g, s.PortStar, "food"));            // a quote moves nothing
+        Assert.Equal(stock, m.StockOf(g, s.PortStation, "food"));            // a quote moves nothing
         Assert.Equal(quote, Trade.SellUnits(s, g, m, "food", 4)!.Value, 9);
         Assert.Equal(credits + quote, s.Credits, 9);
-        Assert.Equal(stock + 4, m.StockOf(g, s.PortStar, "food"), 9);
+        Assert.Equal(stock + 4, m.StockOf(g, s.PortStation, "food"), 9);
         var rest = s.Hold.Single();
         Assert.Equal(2, rest.Mission.Cargo.Volume);
         Assert.Equal(cost / 3, rest.Cost, 9);

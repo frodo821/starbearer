@@ -25,14 +25,14 @@ public partial class Hud
         // Gate links, faint, under the stars.
         foreach (var (gate, exit) in g.GateLinks)
             if (gate < exit)
-                DrawDashedLine(MapPoint(v.ChartPositions[gate]), MapPoint(v.ChartPositions[exit]), new Color(0.8f, 0.6f, 1f, 0.45f), 1.5f, 8, true);
+                DrawDashedLine(MapPoint(v.ChartPositions[g.StarOf(gate)]), MapPoint(v.ChartPositions[g.StarOf(exit)]), new Color(0.8f, 0.6f, 1f, 0.45f), 1.5f, 8, true);
         var current = CurrentStar();
         var zoom = Game.Chart.Zoom;
         var view = new Rect2(Vector2.Zero, Size).Grow(60);
-        var bound = v.Hold.Where(c => c.IsJob).Select(c => c.Mission.Target).ToHashSet();
+        var bound = v.Hold.Where(c => c.IsJob).Select(c => g.StarOf(c.Mission.Target)).ToHashSet();
         // The company's other ships, where they wait.
         var save = Game.Save!;
-        var parked = save.Fleet.Where(x => x.Id != save.Flown).GroupBy(x => x.Star).ToDictionary(k => k.Key, k => k.Count());
+        var parked = save.Fleet.Where(x => x.Id != save.Flown).GroupBy(x => g.StarOf(x.Station)).ToDictionary(k => k.Key, k => k.Count());
         for (int i = 0; i < g.Stars.Length; i++)
         {
             var s = g.Stars[i];
@@ -112,14 +112,15 @@ public partial class Hud
 
     public Vector2 SystemPoint(int star, Vec3d p) => MapPoint(Game.V!.ChartPositions[star] + p * Sublight.Scale);
 
-    /// <summary>Close enough to a system, its station's orbit comes into view.</summary>
+    /// <summary>Close enough to a system, its stations' orbits come into view.</summary>
     void DrawStations()
     {
         if (Game.Chart.Zoom < 40) return;
         var g = Game.G!; var v = Game.V!;
-        foreach (var star in g.Ports.Concat(g.Depots))
+        foreach (var id in g.Ports.Concat(g.Depots))
         {
-            var st = g.StationAt(star);
+            var star = g.StarOf(id);
+            var st = g.StationAt(id);
             var host = (st.Host ?? g.System(star)).StarPosition(v.AbsoluteTime);
             if (!new Rect2(Vector2.Zero, Size).Grow(200).HasPoint(MapPoint(v.ChartPositions[star]))) continue;
             Vector2? last = null;
@@ -132,7 +133,7 @@ public partial class Hud
             }
             var at = SystemPoint(star, host + st.Position(v.AbsoluteTime));
             DrawRect(new Rect2(at - new Vector2(3, 3), 6, 6), Good);
-            Text(at + new Vector2(7, -5), Missions.ShortName(Missions.KindOf(g, star)) + (star == v.TargetStar ? "（目的地）" : ""), Good, 12);
+            Text(at + new Vector2(7, -5), Missions.ShortName(g.KindOf(id)) + (star == v.TargetStar ? "（目的地）" : ""), Good, 12);
         }
     }
 

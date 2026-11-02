@@ -31,7 +31,7 @@ public partial class Main
         var st = G.StationAt(depot);
         v.EnterFtl();
         var host = st.Host!;
-        v.PlaceForTest(G.Stars[depot].Position + (host.StarPosition(v.AbsoluteTime) + st.Position(v.AbsoluteTime)) * Sublight.Scale, host.StarVelocity(v.AbsoluteTime) + st.Velocity(v.AbsoluteTime));
+        v.PlaceForTest(G.StarAt(depot).Position + (host.StarPosition(v.AbsoluteTime) + st.Position(v.AbsoluteTime)) * Sublight.Scale, host.StarVelocity(v.AbsoluteTime) + st.Velocity(v.AbsoluteTime));
         v.Descend();
         v.AdvanceSublight(0.01, Vec3d.Zero);
         Dock();

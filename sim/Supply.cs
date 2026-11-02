@@ -19,5 +19,5 @@ public static class Supply
     /// stock comes back with time.
     /// </summary>
     public static bool Bankrupt(SaveData s, Galaxy g) =>
-        s.Fleet.Where(x => x.Star == s.PortStar).All(x => x.Fuel + s.Credits / Trade.FuelPricePerMass(g, s.MarketIn(g), s.PortStar) < Tuning.DepartureFuelFloor);
+        s.Fleet.Where(x => x.Station == s.PortStation).All(x => x.Fuel + s.Credits / Trade.FuelPricePerMass(g, s.MarketIn(g), s.PortStation) < Tuning.DepartureFuelFloor);
 }

@@ -69,8 +69,8 @@ public partial class PortWindow : PanelContainer
         Ui.Clear(_root);
         var s = _game.Save!;
         var g = _game.G!;
-        var star = _game.V!.SystemStar;
-        _root.AddChild(Text($"{g.Stars[star].Name}   {Missions.Name(Missions.KindOf(g, star))}   {g.Regions[g.Stars[star].Region].Name} 宙域", 28, Good));
+        var station = s.PortStation;
+        _root.AddChild(Text($"{g.StarAt(station).Name}   {Missions.Name(g.KindOf(station))}   {g.Regions[g.StarAt(station).Region].Name} 宙域", 28, Good));
         _root.AddChild(Text($"資金 {s.Credits:F0}   配達 {s.Deliveries} 件   {_game.GalaxyDayText}   ここがチェックポイント", 15, Dim));
         foreach (var line in _game.PortReport) _root.AddChild(Text(line, 16));
         var tabs = new TabContainer { SizeFlagsVertical = SizeFlags.ExpandFill };
@@ -92,7 +92,7 @@ public partial class PortWindow : PanelContainer
         box.AddChild(Text("ミッションボード", 20, Good));
         if (_game.GateExit is var exit and >= 0)
         {
-            box.AddChild(Text($"ゲートの行き先: {g.Stars[exit].Name}（{g.Regions[g.Stars[exit].Region].Name} 宙域）", 17));
+            box.AddChild(Text($"ゲートの行き先: {g.StarAt(exit).Name}（{g.Regions[g.StarAt(exit).Region].Name} 宙域）", 17));
             box.AddChild(Text($"出港してから「ゲート通過」で予約し、ゲートまで寄ると向こうへ出る。速さはそのまま\n通行税は船・モジュール・積荷の価値の {Tuning.GateTollRate:P0}（今なら {_game.GateToll:F0}）、次の入港で精算", 14, Dim));
             box.AddChild(Text("ゲートは仕事を出さない", 15, Dim));
             TakeButtons = Array.Empty<Button>();
@@ -104,10 +104,10 @@ public partial class PortWindow : PanelContainer
         TakeButtons = offers.Select(m =>
         {
             var c = m.Cargo;
-            var far = (g.Stars[m.Target].Position - g.Stars[m.Origin].Position).Length;
+            var far = (g.StarAt(m.Target).Position - g.StarAt(m.Origin).Position).Length;
             var refusal = bays.Refusal(s.Hold, c);
             var info = new VBoxContainer();
-            info.AddChild(Text($"{c.Name}  →  {g.Stars[m.Target].Name}（{Missions.Name(Missions.KindOf(g, m.Target))}）", 17));
+            info.AddChild(Text($"{c.Name}  →  {g.StarAt(m.Target).Name}（{Missions.Name(g.KindOf(m.Target))}）", 17));
             info.AddChild(Text($"{Cargos.Name(c.Kind)}   直線 {far:F1} ly   容積 {Missions.Cubic(c.Volume)}   質量 {c.Mass:F1}   耐熱 {c.HeatTolerance:F2}", 14, Dim));
             if (refusal != null) info.AddChild(Text($"積めない: {refusal}", 13, Warn));
             var take = Press("請ける", () => _game.TakeMission(m), refusal == null);
@@ -129,7 +129,7 @@ public partial class PortWindow : PanelContainer
     Control HangarColumn(Galaxy g, SaveData s)
     {
         var box = Column(680);
-        var star = s.PortStar;
+        var star = s.PortStation;
         box.AddChild(Text("格納庫", 20, Good));
         foreach (var ship in s.ShipsAt(star))
         {
@@ -141,9 +141,9 @@ public partial class PortWindow : PanelContainer
             box.AddChild(Row(info, Press("乗り換え", () => _game.BoardShip(ship.Id)),
                 Press($"売却 {Ships.SaleValue(ship):F0}", () => _game.SellShip(ship.Id), sale == null)));
         }
-        var away = s.Fleet.Where(x => x.Star != star).ToList();
+        var away = s.Fleet.Where(x => x.Station != star).ToList();
         if (away.Count > 0)
-            box.AddChild(Text("ほかの港: " + string.Join("、", away.Select(x => $"{x.Type.Name}（{g.Stars[x.Star].Name}）")), 13, Dim));
+            box.AddChild(Text("ほかの港: " + string.Join("、", away.Select(x => $"{x.Type.Name}（{Missions.Label(g, x.Station)}）")), 13, Dim));
         var sold = Ships.SoldAt(g, star);
         if (sold.Length == 0) return box;
         box.AddChild(Text("造船", 18, Good));
@@ -176,8 +176,8 @@ public partial class PortWindow : PanelContainer
                 box.AddChild(Row(info, Press("投棄", () => _game.DropCargo(c))));
                 continue;
             }
-            var target = c.Mission.Target;
-            info.AddChild(Text($"{cargo.Name}  →  {g.Stars[target].Name}", 16));
+            var target = g.StarOf(c.Mission.Target);
+            info.AddChild(Text($"{cargo.Name}  →  {Missions.Label(g, c.Mission.Target)}", 16));
             info.AddChild(Text($"{Cargos.Name(cargo.Kind)}   健全度 {c.Integrity:P0}   報酬 {c.Payout:F0}   容積 {Missions.Cubic(cargo.Volume)}", 13, Dim));
             var course = _game.Course == target ? Text("針路", 14, Good) as Control : Press("針路に", () => _game.SetCourse(target));
             box.AddChild(Row(info, course, Press($"破棄 -{Missions.DropFee(c):F0}", () => _game.DropCargo(c))));
@@ -185,7 +185,7 @@ public partial class PortWindow : PanelContainer
         box.AddChild(new HSeparator());
         box.AddChild(Text("補給", 20, Good));
         var (fuelMass, fuelCost) = Trade.FuelQuote(s, g, s.MarketIn(g));
-        var fuelStock = s.MarketIn(g).StockOf(g, s.PortStar, Wares.ShipFuel);
+        var fuelStock = s.MarketIn(g).StockOf(g, s.PortStation, Wares.ShipFuel);
         var tank = s.Ship.Type.Tank;
         var fuelLabel = $"燃料 {s.HeldFuel:F2} / {tank:F1}   在庫 {fuelStock:F0} 単位" + (fuelStock < 0.05 ? "  品切れ" : fuelMass < tank - s.HeldFuel - 1e-6 ? "  在庫の分だけ" : "");
         box.AddChild(Row(Text(fuelLabel, 15, fuelStock < 0.05 ? Warn : null), Press($"{fuelCost:F0}", _game.BuyFuel, fuelMass > 1e-4, "3")));
@@ -202,7 +202,7 @@ public partial class PortWindow : PanelContainer
     {
         var box = Column(1180);
         var m = s.MarketIn(g);
-        var star = s.PortStar;
+        var star = s.PortStation;
         var e = g.Economies[star];
         box.AddChild(Text("市場", 20, Good));
         box.AddChild(Text("ここで作る物を買い、ここで使う物を売れる。燃料はどこでも買える。価格は在庫しだいで、目標量ちょうどで基準価格。売り買いするほど値が動く", 13, Dim));
@@ -287,7 +287,7 @@ public partial class PortWindow : PanelContainer
     /// </summary>
     void Quotes(VBoxContainer box, Galaxy g, SaveData s, Market m)
     {
-        var here = s.PortStar;
+        var here = s.PortStation;
         var held = s.Hold.Where(c => c.Mission.Cargo.Ware != null).Select(c => c.Mission.Cargo.Ware!);
         var ware = _lookup ?? held.FirstOrDefault() ?? g.Economies[here].Wares[0];
         var pick = new OptionButton { FocusMode = FocusModeEnum.None };
@@ -300,10 +300,10 @@ public partial class PortWindow : PanelContainer
             star != here && m.Known(g, here, star, ware) is { } k ? (star, Economy.Price(w, k.Fill), k.Fill, m.Day - k.Day) : null;
         string Line((int Star, double Price, double Fill, double Age) q)
         {
-            var st = g.Stars[q.Star];
-            var far = (st.Position - g.Stars[here].Position).Length;
+            var st = g.StarAt(q.Star);
+            var far = (st.Position - g.StarAt(here).Position).Length;
             var stock = q.Fill < 0.1 ? "品切れ近い" : q.Fill < 0.6 ? "少ない" : q.Fill < 1.3 ? "普通" : "多い";
-            return $"{st.Name}{Missions.Mark(g, q.Star)}  {g.Regions[st.Region].Name}  {far:F0} ly   {q.Price:F0}   在庫{stock}   {q.Age:F0} 日前";
+            return $"{Missions.Label(g, q.Star)}  {g.Regions[st.Region].Name}  {far:F0} ly   {q.Price:F0}   在庫{stock}   {q.Age:F0} 日前";
         }
         var sellers = g.EconomyOrder.Where(x => Trade.Sells(g, x, ware)).Select(Quote).OfType<(int, double, double, double)>().OrderBy(q => q.Item2).Take(6).ToList();
         var buyers = g.EconomyOrder.Where(x => Trade.Buys(g, x, ware)).Select(Quote).OfType<(int, double, double, double)>().OrderByDescending(q => q.Item2).Take(6).ToList();
@@ -344,7 +344,7 @@ public partial class PortWindow : PanelContainer
             box.AddChild(Row(Text(label, 15), buy));
         }
         if (!_game.AtShipyard)
-            box.AddChild(Text(_game.NearestShipyard() is var yard and >= 0 ? $"買えるのは造船所だけ。最寄りは {g.Stars[yard].Name} ▲" : "買えるのは造船所だけ", 13, Dim));
+            box.AddChild(Text(_game.NearestShipyard() is var yard and >= 0 ? $"買えるのは造船所だけ。最寄りは {g.StarAt(yard).Name} ▲" : "買えるのは造船所だけ", 13, Dim));
         return box;
     }
 }

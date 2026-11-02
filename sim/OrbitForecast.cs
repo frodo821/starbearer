@@ -1,7 +1,8 @@
 namespace Starbearer.Sim;
 
 /// <summary>A station on a circular orbit. U and W span its orbital plane.</summary>
-public sealed record Station(int Star, double Radius, double Phase, double Omega, Vec3d U, Vec3d W) : IOrbiter
+/// <param name="Id">The station's own id (see Galaxy.FirstStationId); Star is the system it is in.</param>
+public sealed record Station(int Id, int Star, double Radius, double Phase, double Omega, Vec3d U, Vec3d W) : IOrbiter
 {
     /// <summary>The body it circles. Null only for stations built by hand around a bare star.</summary>
     public Center? Host { get; init; }

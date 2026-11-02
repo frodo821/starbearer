@@ -33,7 +33,7 @@ public partial class Hud : Control
             if (manifest) Manifest.Rebuild();
             Manifest.Visible = manifest;
         }
-        StationInfo.Visible = StationInfo.Star >= 0 && Game.Screen is Screen.Orbit or Screen.Plan or Screen.Flight && Game.V != null;
+        StationInfo.Visible = StationInfo.StationId >= 0 && Game.Screen is Screen.Orbit or Screen.Plan or Screen.Flight && Game.V != null;
         var open = Game.Screen == Screen.Port;
         if (open == Port.Visible) return;
         if (open) Port.Rebuild();

@@ -77,7 +77,7 @@ public partial class Hud
         var v = Game.V!;
         yield return o == v.Goal ? new("目標を解除", () => Game.SetTarget(null)) : new("目標にする", () => Game.SetTarget(o));
         yield return new("遷移案", () => Game.PlanFor(o, Key.H));
-        if (o is Station here) yield return new("港の情報（市場・仕事）", () => Game.ShowStationInfo(here.Star));
+        if (o is Station here) yield return new("港の情報（市場・仕事）", () => Game.ShowStationInfo(here.Id));
         if (o is Station) yield return new("合流案", () => Game.PlanFor(o, Key.M));
         if (Game.Owns(Modules.Transfer)) yield return new("計算機で計画", () => Game.PlanFor(o, Key.T));
         if (o is Station && v.AtGate && !v.Docked && !v.Class.Gates)
@@ -90,8 +90,12 @@ public partial class Hud
     IEnumerable<MenuItem> StarMenu(int star)
     {
         var v = Game.V!;
-        if (Game.FuelNews(star) is { } news) yield return new(news, null);
-        if (Game.G!.Economies.ContainsKey(star)) yield return new("港の情報（市場・仕事）", () => Game.ShowStationInfo(star));
+        var g = Game.G!;
+        foreach (var id in g.StationsIn(star))
+        {
+            if (Game.FuelNews(id) is { } news) yield return new($"{Missions.Label(g, id)}  {news}", null);
+            yield return new($"港の情報: {Missions.Label(g, id)}", () => Game.ShowStationInfo(id));
+        }
         if (star == v.TargetStar && Game.FreeCourse) yield return new("目的地を解除", Game.ClearCourse);
         else if (star != v.TargetStar) yield return new("目的地にする", () => Game.SetCourse(star));
         if (Game.Screen == Screen.Plan) yield return new("この星へ方位を合わせる", () => Game.SetPlanDir(v.ChartPositions[star] - v.EstimatedPosition));
@@ -101,7 +105,7 @@ public partial class Hud
     {
         var g = Game.G!;
         return g.Stars[star].Name + Missions.Mark(g, star)
-            + (g.GateLinks.TryGetValue(star, out var exit) ? $" → {g.Stars[exit].Name}" : "")
+            + (g.GateIn(star) is var gate and >= 0 ? $" → {g.StarAt(g.GateLinks[gate]).Name}" : "")
             + (star == Game.V!.TargetStar ? "  目的地" : "");
     }
 
@@ -117,7 +121,7 @@ public partial class Hud
     {
         var v = Game.V!;
         if (v.LocalStation is { } st && StationPoint() is { } sp && sp.DistanceTo(at) < 14)
-            OpenMenu(at, Missions.ShortName(Missions.KindOf(Game.G!, v.SystemStar)) + (v.SystemStar == v.TargetStar ? "（目的地）" : ""), OrbiterMenu(st));
+            OpenMenu(at, Missions.ShortName(Game.G!.KindOf(st.Id)) + (v.SystemStar == v.TargetStar ? "（目的地）" : ""), OrbiterMenu(st));
         else if (OrbiterAt(at) is Center body)
             OpenMenu(at, body.Name, OrbiterMenu(body));
         else if (Game.Chart.PixelsPerAu < 35 && PickStar(at) is int star && star != v.SystemStar)

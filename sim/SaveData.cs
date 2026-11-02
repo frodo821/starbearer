@@ -33,7 +33,7 @@ public sealed class SaveData
 
     [JsonIgnore] public OwnedShip Ship => Fleet.First(x => x.Id == Flown);
     // The ship flown, as the rest of the game reads it.
-    [JsonIgnore] public int PortStar { get => Ship.Star; set => Ship.Star = value; }
+    [JsonIgnore] public int PortStation { get => Ship.Station; set => Ship.Station = value; }
     [JsonIgnore] public List<string> Modules { get => Ship.Modules; set => Ship.Modules = value; }
     [JsonIgnore] public List<int> Pressurized { get => Ship.Pressurized; set => Ship.Pressurized = value; }
     /// <summary>Jobs in the bays of the ship flown, as of the last dock.</summary>
@@ -43,7 +43,7 @@ public sealed class SaveData
     [JsonIgnore] public double HeldLife { get => Ship.Life; set => Ship.Life = value; }
 
     /// <summary>The ships docked at a station, the one flown first.</summary>
-    public IEnumerable<OwnedShip> ShipsAt(int star) => Fleet.Where(x => x.Star == star).OrderBy(x => x.Id != Flown).ThenBy(x => x.Id);
+    public IEnumerable<OwnedShip> ShipsAt(int station) => Fleet.Where(x => x.Station == station).OrderBy(x => x.Id != Flown).ThenBy(x => x.Id);
 
     static readonly JsonSerializerOptions Options = new() { NumberHandling = System.Text.Json.Serialization.JsonNumberHandling.AllowNamedFloatingPointLiterals };
     public string ToJson() => JsonSerializer.Serialize(this, Options);
@@ -54,7 +54,7 @@ public sealed class SaveData
         var g = Galaxy.Generate(seed);
         return (new SaveData
         {
-            Seed = seed, Fleet = new() { new OwnedShip { Id = 1, Star = g.Ports[0] } },
+            Seed = seed, Fleet = new() { new OwnedShip { Id = 1, Station = g.Ports[0] } },
             ClosestApproach = Enumerable.Repeat(double.MaxValue, g.Stars.Length).ToArray(),
             Market = Market.Open(g),
         }, g);

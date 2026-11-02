@@ -78,12 +78,12 @@ public partial class ManifestWindow : PanelContainer
         CourseButtons = v.Hold.Where(c => c.IsJob).Select(c =>
         {
             var m = c.Mission;
-            var target = m.Target;
+            var target = g.StarOf(m.Target);
             var star = g.Stars[target];
             var far = (v.ChartPositions[target] - here).Length;
             var info = new VBoxContainer();
             info.AddThemeConstantOverride("separation", 0);
-            info.AddChild(Text($"{m.Cargo.Name}  →  {star.Name}{Missions.Mark(g, target)}（{g.Regions[star.Region].Name} 宙域）", 15, target == v.TargetStar ? Good : null));
+            info.AddChild(Text($"{m.Cargo.Name}  →  {Missions.Label(g, m.Target)}（{g.Regions[star.Region].Name} 宙域）", 15, target == v.TargetStar ? Good : null));
             info.AddChild(Text($"{Cargos.Name(m.Cargo.Kind)}  {Missions.Cubic(m.Cargo.Volume)}  質量 {m.Cargo.Mass:F1}   あと {far:F1} ly", 13, Dim));
             var hot = v.Heat > m.Cargo.HeatTolerance;
             info.AddChild(Text($"報酬 {c.Payout:F0} / {m.Pay:F0}   健全度 {c.Integrity:P0}   耐熱 {m.Cargo.HeatTolerance:F2}" + (hot ? "  熱で傷んでいる" : ""), 13, hot || c.Integrity < 0.999 ? Warn : Dim));
@@ -98,7 +98,7 @@ public partial class ManifestWindow : PanelContainer
             _root.AddChild(new HSeparator());
             _root.AddChild(Text("ほかの船", 15, Good));
             foreach (var x in away)
-                _root.AddChild(Text($"{x.Type.Name}  {g.Stars[x.Star].Name}{Missions.Mark(g, x.Star)}   積荷 {x.Hold.Count} 件   燃料 {x.Fuel:F2}/{x.Type.Tank:F2}", 13, Dim));
+                _root.AddChild(Text($"{x.Type.Name}  {Missions.Label(g, x.Station)}   積荷 {x.Hold.Count} 件   燃料 {x.Fuel:F2}/{x.Type.Tank:F2}", 13, Dim));
         }
     }
 }

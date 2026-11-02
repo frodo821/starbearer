@@ -19,11 +19,11 @@ public partial class SimTests
     public void AnyStationTakesAShipThatMatchesIt()
     {
         var g = Galaxy.Generate(5);
-        var v = new Voyage(g, g.Ports[0], g.Ports[1], Box, Unseen(g), 1);
+        var v = new Voyage(g, g.Ports[0], g.StarOf(g.Ports[1]), Box, Unseen(g), 1);
         var depot = g.Depots[0];
         var st = g.StationAt(depot);
         v.EnterFtl();
-        v.PlaceForTest(g.Stars[depot].Position + (st.Host!.StarPosition(v.AbsoluteTime) + st.Position(v.AbsoluteTime)) * Sublight.Scale, st.Host.StarVelocity(v.AbsoluteTime) + st.Velocity(v.AbsoluteTime));
+        v.PlaceForTest(g.StarAt(depot).Position + (st.Host!.StarPosition(v.AbsoluteTime) + st.Position(v.AbsoluteTime)) * Sublight.Scale, st.Host.StarVelocity(v.AbsoluteTime) + st.Velocity(v.AbsoluteTime));
         Assert.True(v.Descend());
         v.AdvanceSublight(0.01, Vec3d.Zero);
         Assert.Equal(Phase.Sublight, v.Phase);   // close, but docking is the pilot's call
@@ -38,7 +38,7 @@ public partial class SimTests
     public void LeavingAStationDoesNotDockStraightBack()
     {
         var g = Galaxy.Generate(5);
-        var v = new Voyage(g, g.Ports[0], g.Ports[1], Box, Unseen(g), 1);
+        var v = new Voyage(g, g.Ports[0], g.StarOf(g.Ports[1]), Box, Unseen(g), 1);
         v.AdvanceSublight(5, Vec3d.Zero);
         Assert.Equal(Phase.Sublight, v.Phase);
     }
@@ -66,21 +66,21 @@ public partial class SimTests
         var (s, g) = SaveData.NewGalaxy(5);
         var m = s.MarketIn(g);
         var fuel = Wares.ShipFuel;
-        var stock = m.StockOf(g, s.PortStar, fuel);
+        var stock = m.StockOf(g, s.PortStation, fuel);
         s.HeldFuel = 0.5; s.Credits = 1000;
         var (mass, cost) = Trade.FuelQuote(s, g, m);
         Assert.Equal(Ships.Courier.Tank - 0.5, mass, 9);
         Trade.BuyFuel(s, g, m);
         Assert.Equal(Ships.Courier.Tank, s.HeldFuel, 9);
         Assert.Equal(1000 - cost, s.Credits, 9);
-        Assert.Equal(stock - Trade.FuelUnits(mass), m.StockOf(g, s.PortStar, fuel), 9);
+        Assert.Equal(stock - Trade.FuelUnits(mass), m.StockOf(g, s.PortStation, fuel), 9);
         // Short of credits: as much as they pay for.
         s.HeldFuel = 0.5; s.Credits = 10;
         Trade.BuyFuel(s, g, m);
         Assert.InRange(s.HeldFuel, 0.5 + 1e-6, Ships.Courier.Tank - 1e-6);
         Assert.Equal(0, s.Credits, 6);
         // Out of stock: nothing to buy, whatever the credits.
-        m.Take(g, s.PortStar, fuel, 1e9);
+        m.Take(g, s.PortStation, fuel, 1e9);
         s.HeldFuel = 0.5; s.Credits = 1000;
         Trade.BuyFuel(s, g, m);
         Assert.Equal(0.5, s.HeldFuel, 9);
@@ -112,7 +112,7 @@ public partial class SimTests
     public void WaitingAtThePortCostsNoLifeSupport()
     {
         var g = Galaxy.Generate(5);
-        var v = new Voyage(g, g.Ports[0], g.Ports[1], Box, Unseen(g), 1, 0, new ShipState(Ships.Courier.Tank, 1, 100));
+        var v = new Voyage(g, g.Ports[0], g.StarOf(g.Ports[1]), Box, Unseen(g), 1, 0, new ShipState(Ships.Courier.Tank, 1, 100));
         v.AdvanceSublight(300, Vec3d.Zero);
         Assert.True(v.Docked);
         Assert.Equal(100, v.LifeRemaining, 6);
@@ -129,7 +129,7 @@ public partial class SimTests
     public void LeavingByFtlEndsTheDockedState()
     {
         var g = Galaxy.Generate(5);
-        var v = new Voyage(g, g.Ports[0], g.Ports[1], Box, Unseen(g), 1);
+        var v = new Voyage(g, g.Ports[0], g.StarOf(g.Ports[1]), Box, Unseen(g), 1);
         v.AdvanceSublight(20, Vec3d.Zero);
         v.EnterFtl();
         v.Burn(new Vec3d(0, 1, 0), 0.5);
@@ -142,7 +142,7 @@ public partial class SimTests
     public void UndockingStartsLifeSupportAndTheShipCanTieBackUp()
     {
         var g = Galaxy.Generate(5);
-        var v = new Voyage(g, g.Ports[0], g.Ports[1], Box, Unseen(g), 1, 0, new ShipState(Ships.Courier.Tank, 1, 100));
+        var v = new Voyage(g, g.Ports[0], g.StarOf(g.Ports[1]), Box, Unseen(g), 1, 0, new ShipState(Ships.Courier.Tank, 1, 100));
         Assert.False(v.RequestDock());              // already docked
         v.Undock();
         Assert.True(v.CanDock);
@@ -157,7 +157,7 @@ public partial class SimTests
     public void RestockOnlyWorksDockedAndKeepsLifeAccounting()
     {
         var g = Galaxy.Generate(5);
-        var v = new Voyage(g, g.Ports[0], g.Ports[1], Box, Unseen(g), 1, 0, new ShipState(0.5, 0.5, 100));
+        var v = new Voyage(g, g.Ports[0], g.StarOf(g.Ports[1]), Box, Unseen(g), 1, 0, new ShipState(0.5, 0.5, 100));
         v.AdvanceSublight(20, Vec3d.Zero);
         v.Restock(new ShipState(1.5, 1, 600), v.Hold);
         Assert.Equal(1.5, v.Fuel);
@@ -174,7 +174,7 @@ public partial class SimTests
     public void DistantStationDoesNotDock()
     {
         var g = Galaxy.Generate(5);
-        var v = new Voyage(g, g.Ports[0], g.Ports[1], Box, Unseen(g), 1);
+        var v = new Voyage(g, g.Ports[0], g.StarOf(g.Ports[1]), Box, Unseen(g), 1);
         v.AdvanceSublight(10, Vec3d.Zero);
         Assert.Equal(Phase.Sublight, v.Phase);
     }

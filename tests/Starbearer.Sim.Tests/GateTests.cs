@@ -8,7 +8,7 @@ public partial class SimTests
     {
         var g = Galaxy.Generate(7);
         var gate = g.Gates[0];
-        var v = new Voyage(g, gate, gate, Array.Empty<Consignment>(), Unseen(g), 1);
+        var v = new Voyage(g, gate, g.StarOf(gate), Array.Empty<Consignment>(), Unseen(g), 1);
         v.Undock();
         return (v, g.StationAt(gate), g.StationAt(g.GateLinks[gate]));
     }
@@ -68,13 +68,13 @@ public partial class SimTests
         var crossing = 0;
         foreach (var port in g.Ports)
         {
-            var region = g.Stars[port].Region;
+            var region = g.StarAt(port).Region;
             var reach = g.LinkedRegions(region).Append(region).ToHashSet();
             foreach (var m in Missions.Board(g, Market.Open(g), port, 0, Array.Empty<Consignment>()))
             {
-                Assert.Contains(g.Stars[m.Target].Region, reach);
+                Assert.Contains(g.StarAt(m.Target).Region, reach);
                 Assert.False(g.Gates.Contains(m.Target));
-                if (g.Stars[m.Target].Region != region) crossing++;
+                if (g.StarAt(m.Target).Region != region) crossing++;
             }
         }
         Assert.True(crossing > 0, "some jobs cross to another region");

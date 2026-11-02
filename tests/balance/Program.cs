@@ -20,14 +20,14 @@ foreach (var ship in classes)
         for (int a = 0; a + 1 < g.Ports.Length; a++)
         {
             int o = g.Ports[a], t = g.Ports[a + 1];
-            if (g.Stars[o].Region != g.Stars[t].Region) continue;   // jobs stay in their region
+            if (g.StarAt(o).Region != g.StarAt(t).Region) continue;   // jobs stay in their region
             n++;
-            var r = Autopilot.Fly(g, o, t, cargo, ship: ship);
+            var r = Autopilot.Fly(g, o, g.StarOf(t), cargo, ship: ship);
             var key = r.Delivered ? "delivered" : $"{r.Death}/{(r.Note.StartsWith("overshot") ? "overshot" : r.Note)}";
             notes[key] = notes.GetValueOrDefault(key) + 1;
             if (r.Delivered) { ok++; fuel.Add(r.FuelLeft / ship.Tank); days.Add(r.Days); legs.Add(r.Legs); }
 
-            var direct = Autopilot.SpeedForLeg(g, g.Stars[o].Position, g.Stars[t].Position, 1.1, ship.Drag);
+            var direct = Autopilot.SpeedForLeg(g, g.StarAt(o).Position, g.StarAt(t).Position, 1.1, ship.Drag);
             var budget = Tuning.ExhaustVelocity * Math.Log((ship.DryMass + cargo.Mass + ship.Tank) / (ship.DryMass + cargo.Mass));
             ratios.Add(direct / budget);
             if (direct > budget) directImpossible++;

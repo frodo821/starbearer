@@ -16,7 +16,7 @@ public partial class SimTests
             {
                 Assert.Equal(port, job.Origin);
                 Assert.NotEqual(job.Origin, job.Target);
-                Assert.True(g.HasStation(job.Target));
+                Assert.True(g.IsStation(job.Target));
                 Assert.True(job.Pay > 0);
                 if (job.Cargo.Ware is not { } ware) continue;
                 wareJobs++;
@@ -41,7 +41,7 @@ public partial class SimTests
         s.TotalDays = 120;
         foreach (var port in g.Ports)
         {
-            s.PortStar = port;
+            s.PortStation = port;
             if (Missions.OffersFor(s, g).FirstOrDefault(j => j.Cargo.Ware != null && Missions.Fits(s, j)) is { } job) return (s, g, job);
         }
         throw new InvalidOperationException("no ware job a courier can take");
@@ -153,8 +153,8 @@ public partial class SimTests
     {
         var g = Galaxy.Generate(5);
         Consignment Load(string id, double heat) => new() { Mission = new Mission(id, g.Ports[0], g.Ports[1], new Cargo(id, 0.5, heat, 100), 100) };
-        var one = new Voyage(g, g.Ports[0], g.Ports[1], new[] { Load("a", 0.4) }, Unseen(g), 1);
-        var two = new Voyage(g, g.Ports[0], g.Ports[1], new[] { Load("a", 0.4), Load("b", 0.9) }, Unseen(g), 1);
+        var one = new Voyage(g, g.Ports[0], g.StarOf(g.Ports[1]), new[] { Load("a", 0.4) }, Unseen(g), 1);
+        var two = new Voyage(g, g.Ports[0], g.StarOf(g.Ports[1]), new[] { Load("a", 0.4), Load("b", 0.9) }, Unseen(g), 1);
         Assert.Equal(one.Mass + 0.5, two.Mass, 9);
         Assert.True(two.DeltaVRemaining < one.DeltaVRemaining);
         Assert.Equal(0.4, two.HeatTolerance);

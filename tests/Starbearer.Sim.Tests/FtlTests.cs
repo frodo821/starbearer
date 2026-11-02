@@ -83,7 +83,7 @@ public partial class SimTests
     public void BurnFollowsRocketEquation()
     {
         var g = Galaxy.Generate(3);
-        var v = new Voyage(g, g.Ports[0], g.Ports[1], Box, Unseen(g), 1);
+        var v = new Voyage(g, g.Ports[0], g.StarOf(g.Ports[1]), Box, Unseen(g), 1);
         var m0 = v.Mass;
         v.EnterFtl();
         v.Burn(new Vec3d(1, 0, 0), 0.4);
@@ -95,7 +95,7 @@ public partial class SimTests
     public void BurnCannotExceedFuel()
     {
         var g = Galaxy.Generate(3);
-        var v = new Voyage(g, g.Ports[0], g.Ports[1], Box, Unseen(g), 1);
+        var v = new Voyage(g, g.Ports[0], g.StarOf(g.Ports[1]), Box, Unseen(g), 1);
         v.EnterFtl();
         v.Burn(new Vec3d(1, 0, 0), 100);
         Assert.Equal(0, v.Fuel, 9);
@@ -106,8 +106,8 @@ public partial class SimTests
     public void RunningOutOfFuelInOpenSpaceIsDeath()
     {
         var g = Galaxy.Generate(3);
-        var v = new Voyage(g, g.Ports[0], g.Ports[1], Box, Unseen(g), 1);
-        var away = (v.TruePosition - g.Stars[g.Ports[1]].Position).Normalized();
+        var v = new Voyage(g, g.Ports[0], g.StarOf(g.Ports[1]), Box, Unseen(g), 1);
+        var away = (v.TruePosition - g.StarAt(g.Ports[1]).Position).Normalized();
         v.EnterFtl();
         v.Burn(away, 100);
         for (int i = 0; i < 4000 && v.Phase is Phase.Flight or Phase.Stalled; i++) v.Advance(0.5, 0, false);
@@ -120,8 +120,8 @@ public partial class SimTests
         Assert.Equal(1, Voyage.ChartFactor(double.MaxValue));
         Assert.True(Voyage.ChartFactor(2) < 0.1);
         var g = Galaxy.Generate(3);
-        var v = new Voyage(g, g.Ports[0], g.Ports[1], Box, Unseen(g), 1);
-        var i = g.Ports[0];
+        var v = new Voyage(g, g.Ports[0], g.StarOf(g.Ports[1]), Box, Unseen(g), 1);
+        var i = g.StarOf(g.Ports[0]);
         Assert.True((v.ChartPositions[i] - v.TruePositions[i]).Length < 0.03);
     }
 
@@ -129,7 +129,7 @@ public partial class SimTests
     public void SightResetsNavigationError()
     {
         var g = Galaxy.Generate(3);
-        var v = new Voyage(g, g.Ports[0], g.Ports[1], Box, Unseen(g), 1);
+        var v = new Voyage(g, g.Ports[0], g.StarOf(g.Ports[1]), Box, Unseen(g), 1);
         v.EnterFtl();
         v.Burn(new Vec3d(0, 1, 0), 0.5);
         for (int i = 0; i < 20; i++) v.Advance(0.5, 0, false);
@@ -142,7 +142,7 @@ public partial class SimTests
     public void FtlThrustFollowsTheGivenDirection()
     {
         var g = WithPorts();
-        var v = new Voyage(g, 0, 1, Box, Unseen(g), 1);
+        var v = new Voyage(g, From, 1, Box, Unseen(g), 1);
         v.EnterFtl();
         v.PlaceForTest(new Vec3d(4, 0, 0), new Vec3d(0.5, 0, 0));
         v.Advance(0.1, new Vec3d(0, 1, 0), false);
@@ -156,7 +156,7 @@ public partial class SimTests
     public void StallingWithTooLittleFuelToRestartIsDeath()
     {
         var g = WithPorts();
-        var v = new Voyage(g, 0, 1, Box, Unseen(g), 1);
+        var v = new Voyage(g, From, 1, Box, Unseen(g), 1);
         v.EnterFtl();
         v.Burn(new Vec3d(0, 1, 0), v.DeltaVRemaining - 0.02);   // tiny reserve, not enough to restart
         v.PlaceForTest(new Vec3d(4, 30, 0), new Vec3d(0, 0.05, 0));
@@ -169,8 +169,8 @@ public partial class SimTests
     public void AShipCoastingBetweenStarsChangesPrimary()
     {
         var g = Galaxy.Generate(5);
-        var (from, to) = (g.Stars[g.Ports[0]], g.Stars[g.Ports[1]]);
-        var v = new Voyage(g, from.Id, to.Id, Box, Unseen(g), 1);
+        var (from, to) = (g.StarAt(g.Ports[0]), g.StarAt(g.Ports[1]));
+        var v = new Voyage(g, g.Ports[0], to.Id, Box, Unseen(g), 1);
         v.Undock();
         var way = (to.Position - from.Position).Normalized();
         var start = from.Position + way * (from.Soi * 1.01);
@@ -189,9 +189,9 @@ public partial class SimTests
     {
         var g = Galaxy.Generate(5);
         // The nearest star, so nothing else lies on the way.
-        var from = g.Stars[g.Ports[0]];
+        var from = g.StarAt(g.Ports[0]);
         var to = g.Stars.Where(s => s != from).MinBy(s => (s.Position - from.Position).Length)!;
-        var v = new Voyage(g, from.Id, to.Id, Box, Unseen(g), 1);
+        var v = new Voyage(g, g.Ports[0], to.Id, Box, Unseen(g), 1);
         v.Undock();
         var way = (to.Position - from.Position).Normalized();
         var start = from.Position + way * (from.Soi * 1.01);
@@ -230,10 +230,10 @@ public partial class SimTests
         var (_, f, _) = Flyby(0.5);
         Assert.NotNull(f.Beyond);
         var once = new OrbitForecast { Exit = f.Exit };
-        Sublight.FollowOn(g, g.Ports[0], once, legs: 1);
+        Sublight.FollowOn(g, g.StarOf(g.Ports[0]), once, legs: 1);
         Assert.Null(once.Beyond?.Beyond);
         var none = new OrbitForecast { Exit = f.Exit };
-        Sublight.FollowOn(g, g.Ports[0], none, legs: 0);
+        Sublight.FollowOn(g, g.StarOf(g.Ports[0]), none, legs: 0);
         Assert.NotNull(none.Next);
         Assert.Null(none.Beyond);
     }
@@ -279,9 +279,9 @@ public partial class SimTests
     public void LeavingIntoAnOverlappingSphereHandsOverAtOnce()
     {
         var g = Galaxy.Generate(5);
-        var inside = g.Stars[g.Ports[1]];
+        var inside = g.StarAt(g.Ports[1]);
         var at = inside.Position + new Vec3d(inside.Soi * 0.5, 0, 0);
-        var n = Sublight.NextPrimary(g, g.Ports[0], at, new Vec3d(1, 0, 0), 7);
+        var n = Sublight.NextPrimary(g, g.StarOf(g.Ports[0]), at, new Vec3d(1, 0, 0), 7);
         Assert.Equal(inside.Id, n!.Value.Star);
         Assert.Equal(7, n.Value.Time, 9);
     }

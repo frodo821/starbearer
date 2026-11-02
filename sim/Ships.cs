@@ -66,12 +66,12 @@ public static class Ships
     /// What a shipyard builds, from the seed. Every one builds the small container ship; each of the others
     /// is built at about a third of them, and at least at one, so somewhere a long way off always has it.
     /// </summary>
-    public static ShipClass[] SoldAt(Galaxy g, int star)
+    public static ShipClass[] SoldAt(Galaxy g, int station)
     {
-        if (Missions.KindOf(g, star) != StationKind.Shipyard) return Array.Empty<ShipClass>();
-        var yards = g.Ports.Where(p => Missions.KindOf(g, p) == StationKind.Shipyard).OrderBy(p => p).ToList();
-        var index = yards.IndexOf(star);
-        var r = new Rng(g.Seed * 2654435761 + (ulong)star);
+        if (!g.IsStation(station) || g.KindOf(station) != StationKind.Shipyard) return Array.Empty<ShipClass>();
+        var yards = g.Ports.Where(p => g.KindOf(p) == StationKind.Shipyard).OrderBy(p => p).ToList();
+        var index = yards.IndexOf(station);
+        var r = new Rng(g.Seed * 2654435761 + g.SeedKey(station));
         return All.Where((c, i) => i == 0 || (i - 1) % yards.Count == index || r.Unit() < 0.3).ToArray();
     }
 
@@ -84,8 +84,8 @@ public sealed class OwnedShip
 {
     public int Id { get; set; }
     public string Class { get; set; } = Ships.Courier.Id;
-    /// <summary>The station it is docked at.</summary>
-    public int Star { get; set; }
+    /// <summary>The station it is docked at, by station id.</summary>
+    public int Station { get; set; }
     public double Fuel { get; set; } = Ships.Courier.Tank;
     public double Hull { get; set; } = 1;
     public double Life { get; set; } = Tuning.LifeSupportDays;
@@ -101,7 +101,7 @@ public sealed class OwnedShip
     public ShipState State => new(Fuel, Hull, Life);
 
     /// <summary>A new ship as a shipyard hands it over: full tank and supplies, empty bays.</summary>
-    public static OwnedShip Build(ShipClass c, int id, int star) => new() { Id = id, Class = c.Id, Star = star, Fuel = c.Tank };
+    public static OwnedShip Build(ShipClass c, int id, int station) => new() { Id = id, Class = c.Id, Station = station, Fuel = c.Tank };
 }
 
 /// <summary>Buying, boarding and selling ships, at the station the flown ship is docked at.</summary>
@@ -109,16 +109,16 @@ public static class Hangar
 {
     public static bool Buy(SaveData s, Galaxy g, ShipClass c)
     {
-        if (!Ships.SoldAt(g, s.PortStar).Contains(c) || s.Credits < c.Price) return false;
+        if (!Ships.SoldAt(g, s.PortStation).Contains(c) || s.Credits < c.Price) return false;
         s.Credits -= c.Price;
-        s.Fleet.Add(OwnedShip.Build(c, s.Fleet.Max(x => x.Id) + 1, s.PortStar));
+        s.Fleet.Add(OwnedShip.Build(c, s.Fleet.Max(x => x.Id) + 1, s.PortStation));
         return true;
     }
 
     /// <summary>Changes ships. The one left keeps its cargo, fuel and modules where it lies.</summary>
     public static bool Board(SaveData s, int id)
     {
-        if (s.Fleet.FirstOrDefault(x => x.Id == id) is not { } ship || ship.Star != s.PortStar) return false;
+        if (s.Fleet.FirstOrDefault(x => x.Id == id) is not { } ship || ship.Station != s.PortStation) return false;
         s.Flown = id;
         return true;
     }
@@ -126,8 +126,8 @@ public static class Hangar
     /// <summary>Why a ship can't be sold here, or null if it can.</summary>
     public static string? SaleRefusal(SaveData s, Galaxy g, OwnedShip ship) =>
         ship.Id == s.Flown ? "乗っている船は売れない"
-        : ship.Star != s.PortStar ? "ここにない"
-        : Missions.KindOf(g, s.PortStar) != StationKind.Shipyard ? "売れるのは造船所だけ"
+        : ship.Station != s.PortStation ? "ここにない"
+        : g.KindOf(s.PortStation) != StationKind.Shipyard ? "売れるのは造船所だけ"
         : ship.Hold.Count > 0 ? "積荷がある"
         : null;
 

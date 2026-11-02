@@ -129,16 +129,18 @@ public static class Autopilot
 
     public sealed record Result(bool Delivered, DeathCause Death, double FuelLeft, double Days, double CargoIntegrity, int Legs, string Note, Voyage Final);
 
+    /// <param name="origin">The station set out from.</param>
+    /// <param name="target">The star flown to.</param>
     public static Result Fly(Galaxy g, int origin, int target, Cargo cargo, ulong rngSeed = 1, double epoch = 0, ShipClass? ship = null)
     {
         var v = new Voyage(g, origin, target, cargo, Enumerable.Repeat(double.MaxValue, g.Stars.Length).ToArray(), rngSeed, epoch, shipClass: ship);
-        var route = Route(g, origin, target, v.Class.Drag);
+        var route = Route(g, g.StarOf(origin), target, v.Class.Drag);
         const double margin = 1.5;
 
         // Jump from the station's orbit toward the first waypoint.
         var next = 1;
         v.EnterFtl();
-        var home = g.Stars[origin];
+        var home = g.StarAt(origin);
         var legSpeed = SpeedForLeg(g, v.TruePosition, g.Stars[route[next]].Position, margin, v.Class.Drag);
         var startR = (v.TruePosition - home.Position).Length;
         var startSpeed = Math.Sqrt(legSpeed * legSpeed + 2 * home.Mu * (1 / startR - 1 / home.Soi)); // what is left after climbing out

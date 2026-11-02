@@ -79,7 +79,7 @@ public partial class Autotest : Node
     (Vec3d, float) _chartBefore;
     int _parkedAt;
     bool _sawDockable;
-    int _infoStar = -1;
+    int _infoStar = -1, _infoStation = -1;
     double _toll;
     double _credits, _heldFuel;
     int _retries;
@@ -169,7 +169,7 @@ public partial class Autotest : Node
         Do(() =>
         {
             Check("the board's button takes the job", _g.Save!.Hold.Count == 1);
-            _target = _g.Save.Hold[0].Mission.Target;
+            _target = _g.G!.StarOf(_g.Save.Hold[0].Mission.Target);
             Shot("01c_mission_taken");
             Press(Key.Enter);
         });
@@ -400,19 +400,20 @@ public partial class Autotest : Node
             var v = _g.V!;
             var screen = new Rect2(200, 150, Size().X - 400, Size().Y - 350);
             var points = Enumerable.Range(0, _g.G!.Stars.Length).Select(i => _g.HudForTest.SystemPoint(i, Vec3d.Zero)).ToList();
-            _infoStar = Enumerable.Range(0, points.Count).FirstOrDefault(i => i != v.SystemStar && _g.G.Economies.ContainsKey(i) && screen.HasPoint(points[i])
+            _infoStar = Enumerable.Range(0, points.Count).FirstOrDefault(i => i != v.SystemStar && _g.G.HasStation(i) && screen.HasPoint(points[i])
                 && points.Where((q, j) => j != i).All(q => q.DistanceTo(points[i]) > 40), -1);
             if (_infoStar >= 0) Click(MouseButton.Right, points[_infoStar]);
         });
         Do(() =>
         {
-            var item = _g.HudForTest.MenuItemForTest("港の情報（市場・仕事）");
+            _infoStation = _infoStar >= 0 ? _g.G!.StationsIn(_infoStar).First() : -1;
+            var item = _infoStation >= 0 ? _g.HudForTest.MenuItemForTest($"港の情報: {Missions.Label(_g.G!, _infoStation)}") : null;
             Check("a station's menu offers what the news says of it", _infoStar >= 0 && item != null);
             if (item is { } at) Click(MouseButton.Left, at);
         });
         Do(() =>
         {
-            Check("the station's market and jobs open as news", _g.HudForTest.StationInfo.Visible && _g.HudForTest.StationInfo.Star == _infoStar);
+            Check("the station's market and jobs open as news", _g.HudForTest.StationInfo.Visible && _g.HudForTest.StationInfo.StationId == _infoStation);
             Shot("03d_station_info");
             Press(Key.Escape);
         });
@@ -557,7 +558,7 @@ public partial class Autotest : Node
         {
             Shot("06a_star_on_arrival");
             _g.OrbitSky = false;
-            _port = _g.Save!.PortStar;
+            _port = _g.Save!.PortStation;
             _g.CommandForTest(Key.H);
         });
         Do(() => { _count = _g.V!.Nodes.Count; Check("the transfer button places a draft", _count >= 1); _g.CommandForTest(Key.M); });
@@ -700,7 +701,7 @@ public partial class Autotest : Node
             Key_(Key.X, false);
             Shot("09_delivered");
             Check("docking delivers the cargo", _g.Screen == Screen.Port);
-            Check("checkpoint moved to the target", _g.Save!.PortStar != _port && _g.Save.Deliveries == 1);
+            Check("checkpoint moved to the target", _g.Save!.PortStation != _port && _g.Save.Deliveries == 1);
             _g.Purchase(s => { s.Modules.Clear(); s.Credits = 200; });   // saved, so a reload sees it
             Press(Key.Key1);
         });
@@ -712,7 +713,7 @@ public partial class Autotest : Node
         });
         Do(() =>
         {
-            Check("the ship goes on from the new port", _g.V!.SystemStar == _g.Save!.PortStar && _g.V.Hold.Count == 0);
+            Check("the ship goes on from the new port", _g.V!.SystemStar == _g.G!.StarOf(_g.Save!.PortStation) && _g.V.Hold.Count == 0);
             _g.ReloadForTest();
         });
         Do(() =>
@@ -721,8 +722,8 @@ public partial class Autotest : Node
             // A stop at the region's shipyard on the way somewhere else.
             var g = _g.G!;
             var here = _g.V!.SystemStar;
-            var region = g.Ports.Concat(g.Depots).Where(s => s != here && g.Stars[s].Region == g.Stars[here].Region).ToList();
-            _stop = region.FirstOrDefault(s => Missions.KindOf(g, s) == StationKind.Shipyard, region[0]);
+            var region = g.Ports.Concat(g.Depots).Where(s => g.StarOf(s) != here && g.StarAt(s).Region == g.Stars[here].Region).ToList();
+            _stop = region.FirstOrDefault(s => g.KindOf(s) == StationKind.Shipyard, region[0]);
             _g.TakeMissionForTest(_stop);
             _heldTarget = _g.V!.TargetStar;
             _heldJob = _g.Save!.Hold[0].Mission.Id;
@@ -756,12 +757,12 @@ public partial class Autotest : Node
         Do(() =>
         {
             var v = _g.V!;
-            Check("the stop keeps what was bought and the contract", Math.Abs(v.Fuel - _heldFuel) < 1e-9 && v.Time == 0 && v.TargetStar == _heldTarget && v.Hold.Single().Mission.Id == _heldJob && v.SystemStar == _stop);
+            Check("the stop keeps what was bought and the contract", Math.Abs(v.Fuel - _heldFuel) < 1e-9 && v.Time == 0 && v.TargetStar == _heldTarget && v.Hold.Single().Mission.Id == _heldJob && v.SystemStar == _g.G!.StarOf(_stop));
             _g.ReloadForTest();
         });
         Do(() =>
         {
-            Check("a stop survives a reload", _g.V!.TargetStar == _heldTarget && _g.V.SystemStar == _stop);
+            Check("a stop survives a reload", _g.V!.TargetStar == _heldTarget && _g.V.SystemStar == _g.G!.StarOf(_stop));
             // Buy a ship here and change into it; the job stays in the ship left behind.
             var s = _g.Save!;
             s.Credits = 100000;
@@ -777,7 +778,7 @@ public partial class Autotest : Node
             if (_boughtClass == null) return;
             var s = _g.Save!;
             Check("a bought ship can be boarded where it was built", _g.V!.Class == _boughtClass && _g.V.Hold.Count == 0 && _g.V.Docked
-                && s.Fleet.Single(x => x.Id == _firstShip).Hold.Single().Mission.Id == _heldJob && s.Fleet.All(x => x.Star == _stop));
+                && s.Fleet.Single(x => x.Id == _firstShip).Hold.Single().Mission.Id == _heldJob && s.Fleet.All(x => x.Station == _stop));
             Press(Key.Enter);
         });
         Do(() => { if (_boughtClass != null) _g.HudForTest.Port.ShowTab(2); });
@@ -794,17 +795,17 @@ public partial class Autotest : Node
             if (_boughtClass != null)
                 Check("changing back finds the job where it was left", _g.V!.Class == Ships.Courier && _g.V.Hold.Single().Mission.Id == _heldJob);
             _chartBefore = (_g.Chart.Center, _g.Chart.Zoom);
-            (_g.Chart.Center, _g.Chart.Zoom) = (_g.V!.ChartPositions[_stop], 12);   // out to where stars are points
+            (_g.Chart.Center, _g.Chart.Zoom) = (_g.V!.ChartPositions[_g.G!.StarOf(_stop)], 12);   // out to where stars are points
             // Shown as if the bought ship waited at the nearest other station, where the chart marks it.
             var g = _g.G!;
-            _parkedAt = g.Ports.Concat(g.Depots).Where(p => p != _stop).OrderBy(p => (g.Stars[p].Position - g.Stars[_stop].Position).Length).First();
-            if (_boughtClass != null) _g.Save!.Fleet.Single(x => x.Id != _firstShip).Star = _parkedAt;
+            _parkedAt = g.Ports.Concat(g.Depots).Where(p => g.StarOf(p) != g.StarOf(_stop)).OrderBy(p => (g.StarAt(p).Position - g.StarAt(_stop).Position).Length).First();
+            if (_boughtClass != null) _g.Save!.Fleet.Single(x => x.Id != _firstShip).Station = _parkedAt;
         });
         Do(() =>
         {
             if (_boughtClass != null) Shot("10g_parked_ship_on_map");
             (_g.Chart.Center, _g.Chart.Zoom) = _chartBefore;
-            if (_boughtClass != null) _g.Save!.Fleet.Single(x => x.Id != _firstShip).Star = _stop;
+            if (_boughtClass != null) _g.Save!.Fleet.Single(x => x.Id != _firstShip).Station = _stop;
             _g.Save!.Credits = 100000;
             _voyage = _g.V;
             Press(Key.Enter);
@@ -900,7 +901,7 @@ public partial class Autotest : Node
             _g.ViewFromForTest(-1, Vec3d.Zero);
             var g = _g.G!;
             var region = g.Stars[_g.V!.SystemStar].Region;
-            _gate = g.Gates.FirstOrDefault(x => g.Stars[x].Region == region, g.Gates[0]);
+            _gate = g.Gates.FirstOrDefault(x => g.StarAt(x).Region == region, g.Gates[0]);
             _exit = g.GateLinks[_gate];
             _g.Purchase(s => s.Credits = 1000);
             _g.DockAtForTest(_gate);
@@ -926,11 +927,11 @@ public partial class Autotest : Node
             if (_g.Paused) Press(Key.Space);
             _clock = Time.GetTicksMsec();
         });
-        Until(() => _g.V!.SystemStar == _exit || Time.GetTicksMsec() - _clock > 5000);
+        Until(() => _g.V!.SystemStar == _g.G!.StarOf(_exit) || Time.GetTicksMsec() - _clock > 5000);
         Do(() =>
         {
             var v = _g.V!;
-            Check("booked, the gate takes the ship through", v.SystemStar == _exit && v.Passages == 1 && v.TollsDue == _toll && _g.Screen == Screen.Orbit && v.Phase == Phase.Sublight);
+            Check("booked, the gate takes the ship through", v.SystemStar == _g.G!.StarOf(_exit) && v.Passages == 1 && v.TollsDue == _toll && _g.Screen == Screen.Orbit && v.Phase == Phase.Sublight);
             Check("the ship comes out at the speed it went in", Math.Abs((v.SubVelocity - v.StationNow().Velocity).Length - 0.02) < 2e-3);
             Shot("13a_gate_passed");
             _g.DockAtForTest(_exit);

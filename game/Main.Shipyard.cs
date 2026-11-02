@@ -10,14 +10,14 @@ namespace Starbearer;
 public partial class Main
 {
     /// <summary>The port the ship is at builds modules: only a shipyard does.</summary>
-    public bool AtShipyard => V != null && Missions.KindOf(G!, V.SystemStar) == StationKind.Shipyard;
+    public bool AtShipyard => V?.LocalStation is { } st && G!.KindOf(st.Id) == StationKind.Shipyard;
 
     /// <summary>The nearest shipyard in the region, for pointing the way to one; -1 if none.</summary>
     public int NearestShipyard()
     {
         var here = G!.Stars[V!.SystemStar];
-        return G.Ports.Where(p => Missions.KindOf(G, p) == StationKind.Shipyard && G.Stars[p].Region == here.Region)
-            .OrderBy(p => (G.Stars[p].Position - here.Position).Length).DefaultIfEmpty(-1).First();
+        return G.Ports.Where(p => G.KindOf(p) == StationKind.Shipyard && G.StarAt(p).Region == here.Region)
+            .OrderBy(p => (G.StarAt(p).Position - here.Position).Length).DefaultIfEmpty(-1).First();
     }
 
     public void Buy(string id, double price, string name)

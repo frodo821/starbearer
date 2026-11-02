@@ -70,29 +70,27 @@ public static class Missions
         _ => "港",
     };
 
-    /// <summary>The mark after a star's name on the chart: ◆ port, ◇ depot, ▲ shipyard, ● colony; none without a station.</summary>
-    public static string Mark(Galaxy g, int star) => !g.HasStation(star) ? "" : KindOf(g, star) switch
+    static string MarkOf(StationKind kind) => kind switch
     {
-        StationKind.Depot => " ◇",
-        StationKind.Shipyard => " ▲",
-        StationKind.Colony => " ●",
-        StationKind.Gate => " ◎",
-        _ => " ◆",
+        StationKind.Depot => "◇",
+        StationKind.Shipyard => "▲",
+        StationKind.Colony => "●",
+        StationKind.Gate => "◎",
+        _ => "◆",
     };
 
-    /// <summary>The kind comes from the seed, so it never needs saving.</summary>
-    public static StationKind KindOf(Galaxy g, int star)
-    {
-        if (g.Kinds.TryGetValue(star, out var kind)) return kind;
-        if (g.IsDepot(star)) return StationKind.Depot;
-        return (StationKind)new Rng(g.Seed * 6700417 + (ulong)star).Index((int)StationKind.Depot);
-    }
+    /// <summary>The marks after a star's name on the chart, one per station there: ◆ port, ◇ depot, ▲ shipyard, ● colony, ◎ gate; none without a station.</summary>
+    public static string Mark(Galaxy g, int star) =>
+        g.HasStation(star) ? " " + string.Concat(g.StationsIn(star).Select(id => MarkOf(g.KindOf(id)))) : "";
+
+    /// <summary>A station as the player reads it: its system and what it is, e.g. "Ruka 造船所".</summary>
+    public static string Label(Galaxy g, int station) => $"{g.StarAt(station).Name} {(g.KindOf(station) < StationKind.Depot ? Name(g.KindOf(station)) : ShortName(g.KindOf(station)))}";
 
     /// <summary>Pay grows with the straight-line distance. Whether the way there is worth flying is the pilot's call.</summary>
     static double PayFor(Galaxy g, int from, int to, Cargo cargo)
     {
-        var ly = (g.Stars[to].Position - g.Stars[from].Position).Length;
-        var demand = KindOf(g, to) == StationKind.Colony ? ColonyPay : 1;
+        var ly = (g.StarAt(to).Position - g.StarAt(from).Position).Length;
+        var demand = g.KindOf(to) == StationKind.Colony ? ColonyPay : 1;
         return Math.Round(cargo.Reward * Math.Max(0.4, ly / Tuning.StandardHaulLy) * demand);
     }
 
@@ -102,27 +100,27 @@ public static class Missions
     /// widest price gaps first. Pay is that gap, at least a fifth of the ware's price, plus a share for
     /// the distance. What is left over goes to one-off items. Gates post no jobs.
     /// </summary>
-    public static List<Mission> Board(Galaxy g, Market market, int star, int deliveries, IEnumerable<Consignment> hold)
+    public static List<Mission> Board(Galaxy g, Market market, int station, int deliveries, IEnumerable<Consignment> hold)
     {
-        var r = new Rng(g.Seed * 7919 + (ulong)star * 104729 + (ulong)deliveries * 31);
-        var kind = KindOf(g, star);
+        var r = new Rng(g.Seed * 7919 + g.SeedKey(station) * 104729 + (ulong)deliveries * 31);
+        var kind = g.KindOf(station);
         if (kind == StationKind.Gate) return new();
         // Within the region, or one a gate from here leads to.
-        var region = g.Stars[star].Region;
+        var region = g.StarAt(station).Region;
         var reach = g.LinkedRegions(region).Append(region).ToHashSet();
-        var places = g.Economies.Keys.Where(s => s != star && reach.Contains(g.Stars[s].Region)).ToArray();
-        var stations = places.Where(s => KindOf(g, s) != StationKind.Gate)
-            .OrderBy(s => r.Unit() / (KindOf(g, s) == StationKind.Colony ? ColonyPull : 1)).ToArray();
+        var places = g.Economies.Keys.Where(s => s != station && reach.Contains(g.StarAt(s).Region)).ToArray();
+        var stations = places.Where(s => g.KindOf(s) != StationKind.Gate)
+            .OrderBy(s => r.Unit() / (g.KindOf(s) == StationKind.Colony ? ColonyPull : 1)).ToArray();
         if (stations.Length == 0) return new();
         var count = kind is StationKind.Depot or StationKind.Shipyard ? SmallOffers : PortOffers;
-        var here = g.Economies[star];
+        var here = g.Economies[station];
         // Candidate hauls: spare stock here to a station short of it.
-        var spare = here.Wares.Where(w => here.Makes(w)).ToDictionary(w => w, w => market.StockOf(g, star, w) - here.Target[here.IndexOf(w)] * SpareFloor);
+        var spare = here.Wares.Where(w => here.Makes(w)).ToDictionary(w => w, w => market.StockOf(g, station, w) - here.Target[here.IndexOf(w)] * SpareFloor);
         var hauls = new List<(string Ware, int To, double Gap, double Short)>();
         foreach (var (ware, left) in spare)
         {
             if (left < 1) continue;
-            var priceHere = market.Price(g, star, ware)!.Value;
+            var priceHere = market.Price(g, station, ware)!.Value;
             foreach (var to in places)
                 if (g.Economies[to].Uses(ware) && market.Fill(g, to, ware) is { } fill and < ShortFill)
                 {
@@ -135,7 +133,7 @@ public static class Missions
         {
             var to = stations[i % stations.Length];
             var item = Specials[r.Index(Specials.Length)];
-            offers.Add(new Mission($"{star}-{deliveries}-{i}", star, to, item, PayFor(g, star, to, item)));
+            offers.Add(new Mission($"{station}-{deliveries}-{i}", station, to, item, PayFor(g, station, to, item)));
         }
         Special(0);
         foreach (var (ware, to, gap, shortBy) in hauls.OrderByDescending(h => (h.Gap + Wares.Get(h.Ware).Price * 0.1) * (1 + 0.4 * r.Unit())))
@@ -146,10 +144,10 @@ public static class Missions
             if (units < 1) continue;
             spare[ware] -= units;
             var w = Wares.Get(ware);
-            var ly = (g.Stars[to].Position - g.Stars[star].Position).Length;
-            var demand = KindOf(g, to) == StationKind.Colony ? ColonyPay : 1;
+            var ly = (g.StarAt(to).Position - g.StarAt(station).Position).Length;
+            var demand = g.KindOf(to) == StationKind.Colony ? ColonyPay : 1;
             var pay = units * (Math.Max(gap, w.Price * GapFloor) + w.Price * DistancePay * Math.Max(0.4, ly / Tuning.StandardHaulLy)) * demand;
-            offers.Add(new Mission($"{star}-{deliveries}-{offers.Count}", star, to, w.Load(units), Math.Round(pay)));
+            offers.Add(new Mission($"{station}-{deliveries}-{offers.Count}", station, to, w.Load(units), Math.Round(pay)));
         }
         for (int i = offers.Count; i < count; i++) Special(i);
         var taken = hold.Select(c => c.Mission.Id).ToHashSet();
@@ -167,10 +165,10 @@ public static class Missions
     /// </summary>
     public static List<Mission> OffersFor(SaveData s, Galaxy g)
     {
-        var key = $"{s.PortStar}:{s.Deliveries}:{s.TotalDays:F4}";
+        var key = $"{s.PortStation}:{s.Deliveries}:{s.TotalDays:F4}";
         if (s.OffersAt != key)
         {
-            s.Offers = Board(g, s.MarketIn(g), s.PortStar, s.Deliveries, s.Hold);
+            s.Offers = Board(g, s.MarketIn(g), s.PortStation, s.Deliveries, s.Hold);
             s.OffersAt = key;
         }
         return s.Offers;

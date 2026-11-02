@@ -127,7 +127,7 @@ public partial class Main
         Chart.Glide(PrimaryOnChart, ChartView.ZoomFor(V.Primary));
         ShowCue(new StateCue("亜光速へ降下", V.System.Name + " 星系", Palette.Good, Major: true, Outward: false));
         Message = V.LocalStation == null ? "この星系に港はない。J で再発進できる"
-            : V.Hold.Any(c => c.Mission.Target == V.SystemStar) ? "亜光速へ降下。軌道をタップしてマニューバを置き、港へ軌道を合わせる"
+            : V.Hold.Any(c => c.IsJob && G!.StarOf(c.Mission.Target) == V.SystemStar) ? "亜光速へ降下。軌道をタップしてマニューバを置き、港へ軌道を合わせる"
             : "この星系の港に入港すると補給できる。J で再発進もできる";
         _forecastDirty = true;
     }

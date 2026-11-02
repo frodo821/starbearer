@@ -16,11 +16,16 @@ public partial class SimTests
         new Star(0, "from", Vec3d.Zero, 1, 5000, Vec3d.Zero),
         new Star(1, "to", new Vec3d(8, 0, 0), 1, 5000, Vec3d.Zero));
 
+    /// <summary>The stations of WithPorts: one at star 0, one at star 1.</summary>
+    const int From = Galaxy.FirstStationId, To = Galaxy.FirstStationId + 1;
+
     static Galaxy WithPorts() => new()
     {
         Seed = 1,
         Stars = new[] { new Star(0, "from", Vec3d.Zero, 1, 5000, Vec3d.Zero), new Star(1, "to", new Vec3d(8, 0, 0), 1, 5000, Vec3d.Zero) },
         Nebulae = Array.Empty<Nebula>(),
-        Ports = new[] { 0, 1 },
+        Ports = new[] { From, To },
+        StationStars = new() { [From] = 0, [To] = 1 },
+        Kinds = new() { [From] = StationKind.City, [To] = StationKind.City },
     };
 }

@@ -11,11 +11,11 @@ public partial class Main
 {
     public int Course => Save!.Course;
 
-    /// <summary>The star the instruments steer for, when no cargo says otherwise: the nearest other station.</summary>
+    /// <summary>The star the instruments steer for, when no cargo says otherwise: the nearest other system with a station.</summary>
     int NearestStation()
     {
         var here = G!.Stars[V!.SystemStar].Position;
-        return G.Ports.Concat(G.Depots).Where(i => i != V.SystemStar).MinBy(i => (G.Stars[i].Position - here).Length);
+        return G.Ports.Concat(G.Depots).Select(G.StarOf).Where(i => i != V.SystemStar).MinBy(i => (G.Stars[i].Position - here).Length);
     }
 
     /// <summary>
@@ -27,22 +27,22 @@ public partial class Main
         var s = Save!;
         var v = V!;
         if (s.Course == v.SystemStar && v.Docked) s.Course = -1;   // arrived
-        if (s.Course < 0 && s.Hold.FirstOrDefault(c => c.IsJob && c.Mission.Target != v.SystemStar) is { } job) s.Course = job.Mission.Target;
+        if (s.Course < 0 && s.Hold.FirstOrDefault(c => c.IsJob && G!.StarOf(c.Mission.Target) != v.SystemStar) is { } job) s.Course = G!.StarOf(job.Mission.Target);
         v.TargetStar = s.Course >= 0 ? s.Course : NearestStation();
     }
 
     /// <summary>The course was picked by the pilot, not set by a job in the hold.</summary>
-    public bool FreeCourse => Save!.Course >= 0 && Save.Hold.All(c => c.Mission.Target != Save.Course);
+    public bool FreeCourse => Save!.Course >= 0 && Save.Hold.All(c => !c.IsJob || G!.StarOf(c.Mission.Target) != Save.Course);
 
     /// <summary>
     /// What the news that reached the last port says of a station's fuel: how much it had, and how many
-    /// days ago. Null for a star without a station.
+    /// days ago. Null for something that isn't a station.
     /// </summary>
-    public string? FuelNews(int star)
+    public string? FuelNews(int station)
     {
-        if (Save is not { } s || !G!.Economies.ContainsKey(star)) return null;
+        if (Save is not { } s || !G!.Economies.ContainsKey(station)) return null;
         var m = s.MarketIn(G);
-        if (m.Known(G, s.PortStar, star, Wares.ShipFuel) is not { } k) return "燃料 知らせなし";
+        if (m.Known(G, s.PortStation, station, Wares.ShipFuel) is not { } k) return "燃料 知らせなし";
         var stock = k.Fill < 0.05 ? "品切れ" : k.Fill < 0.3 ? "わずか" : k.Fill < 0.8 ? "少ない" : "十分";
         var age = m.Day - k.Day;
         return $"燃料 {stock}  {Economy.Price(Wares.Get(Wares.ShipFuel), k.Fill):F0}/単位" + (age > 0.5 ? $"（{age:F0} 日前）" : "（いま）");
@@ -51,7 +51,7 @@ public partial class Main
     /// <summary>Opens what the news says of a station: its market and the jobs it had posted.</summary>
     public void ShowStationInfo(int star) => _hud.StationInfo.Open(star);
     public void CloseStationInfo() => _hud.StationInfo.Close();
-    public bool StationInfoOpen => _hud.StationInfo.Star >= 0;
+    public bool StationInfoOpen => _hud.StationInfo.StationId >= 0;
 
     /// <summary>The manifest window: the hold and the jobs aboard, open over the chart or the sky.</summary>
     public bool ManifestOpen { get; private set; }
@@ -83,7 +83,8 @@ public partial class Main
     }
 
     /// <summary>Where the gate of this system leads, or -1.</summary>
-    public int GateExit => V != null && G!.GateLinks.TryGetValue(V.SystemStar, out var exit) ? exit : -1;
+    /// <summary>The gate station this system's gate leads to, or -1.</summary>
+    public int GateExit => V?.LocalStation is { } st && G!.GateLinks.TryGetValue(st.Id, out var exit) ? exit : -1;
 
     /// <summary>What a passage through this system's gate would cost now.</summary>
     public double GateToll => Gates.Toll(Save!, V!);
@@ -100,6 +101,6 @@ public partial class Main
         if (Save!.Credits - v.TollsDue < toll) { Message = $"通行税 {toll:F0} を払えない"; return; }
         v.BookGate(toll);
         var exit = GateExit;
-        Message = $"ゲート通過を予約（通行税 {toll:F0}、次の入港で精算）。ゲートの入港距離まで寄ると {G!.Stars[exit].Name}（{G.Regions[G.Stars[exit].Region].Name} 宙域）へ出る";
+        Message = $"ゲート通過を予約（通行税 {toll:F0}、次の入港で精算）。ゲートの入港距離まで寄ると {G!.StarAt(exit).Name}（{G.Regions[G.StarAt(exit).Region].Name} 宙域）へ出る";
     }
 }

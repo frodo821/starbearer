@@ -9,7 +9,7 @@ public sealed record Line((string Ware, double Rate)[] In, (string Ware, double 
 /// </summary>
 public sealed class StationEconomy
 {
-    public required int Star { get; init; }
+    public required int Station { get; init; }
     public required Line[] Lines { get; init; }
     /// <summary>Burnt every day for power; without it, nothing runs.</summary>
     public required (string Ware, double Rate)[] Upkeep { get; init; }
@@ -117,10 +117,10 @@ public static class Economy
         _ => new[] { R("fusion_fuel", 0.05) },
     };
 
-    public static StationEconomy Of(Galaxy g, int star)
+    public static StationEconomy Of(Galaxy g, int station)
     {
-        var kind = Missions.KindOf(g, star);
-        var lines = LinesFor(kind, new Rng(g.Seed * 40503 + (ulong)star));
+        var kind = g.KindOf(station);
+        var lines = LinesFor(kind, new Rng(g.Seed * 40503 + g.SeedKey(station)));
         var upkeep = UpkeepFor(kind);
         var flow = new Dictionary<string, double>();
         void Add(string w, double rate) => flow[w] = flow.GetValueOrDefault(w) + rate;
@@ -129,7 +129,7 @@ public static class Economy
         Add(Wares.ShipFuel, 0);
         var wares = flow.Keys.OrderBy(Sim.Wares.IndexOf).ToArray();
         var target = wares.Select(w => Math.Max(flow[w] * TargetDays, w == Sim.Wares.ShipFuel ? ShipFuelStock : 0)).ToArray();
-        return new StationEconomy { Star = star, Lines = lines, Upkeep = upkeep, Wares = wares, Target = target };
+        return new StationEconomy { Station = station, Lines = lines, Upkeep = upkeep, Wares = wares, Target = target };
     }
 
     /// <summary>

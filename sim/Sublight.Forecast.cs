@@ -47,7 +47,7 @@ public static partial class Sublight
     /// and elsewhere that system's station on the legs flown around the body it circles.</summary>
     static IOrbiter? Watch(Galaxy g, Center c, IOrbiter? goal) =>
         goal != null && goal.Star == c.Star ? Waypoint(c, goal)
-        : g.StationOrNull(c.Star) is { } st && st.Host?.Key == c.Key ? st : null;
+        : g.StationsIn(c.Star).Select(g.StationAt).FirstOrDefault(st => st.Host?.Key == c.Key);
 
     /// <summary>The straight run from a Disengage to the next star, flying and removing the burns in rest
     /// that fall on it. Stages stay in the frame of the star left behind, as the ship's state does.</summary>
@@ -87,7 +87,7 @@ public static partial class Sublight
     /// against the step toward the goal, by default this system's station.</summary>
     public static OrbitForecast PredictPath(Galaxy g, Center from, Vec3d p, Vec3d v, double t0, IReadOnlyCollection<Maneuver> nodes, double horizon, IOrbiter? goal = null)
     {
-        goal ??= g.StationOrNull(from.Star);
+        goal ??= g.MainStation(from.Star);
         var f = Predict(from, Watch(g, from, goal), p, v, t0, nodes, horizon);
         FollowOn(g, from.Star, f, nodes, goal: goal);
         return f;

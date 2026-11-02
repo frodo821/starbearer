@@ -41,7 +41,7 @@ public static class Trade
     /// <summary>The most whole units of a ware the flown ship can buy here: stock, credits and room in the bays all count.</summary>
     public static int MaxBuy(SaveData s, Galaxy g, Market m, string ware)
     {
-        var star = s.PortStar;
+        var star = s.PortStation;
         if (!Sells(g, star, ware)) return 0;
         var bays = CargoBays.Of(s);
         var w = Wares.Get(ware);
@@ -57,7 +57,7 @@ public static class Trade
     public static bool Buy(SaveData s, Galaxy g, Market m, string ware, int units)
     {
         if (units <= 0 || units > MaxBuy(s, g, m, ware)) return false;
-        var star = s.PortStar;
+        var star = s.PortStation;
         var cost = Cost(g, m, star, ware, units, true);
         s.Credits -= cost;
         m.Take(g, star, ware, units);
@@ -81,8 +81,8 @@ public static class Trade
     /// <summary>Sells a whole lot here. Returns what it fetched, or null if the station doesn't buy it.</summary>
     public static double? Sell(SaveData s, Galaxy g, Market m, Consignment lot)
     {
-        if (Offer(g, m, s.PortStar, lot) is not { } value) return null;
-        m.Put(g, s.PortStar, lot.Mission.Cargo.Ware!, lot.Mission.Cargo.Volume);
+        if (Offer(g, m, s.PortStation, lot) is not { } value) return null;
+        m.Put(g, s.PortStation, lot.Mission.Cargo.Ware!, lot.Mission.Cargo.Volume);
         s.Credits += value;
         s.Hold.Remove(lot);
         return value;
@@ -103,7 +103,7 @@ public static class Trade
     /// </summary>
     public static double? SellUnits(SaveData s, Galaxy g, Market m, string ware, int units, bool dryRun = false)
     {
-        var star = s.PortStar;
+        var star = s.PortStation;
         if (units <= 0 || !Buys(g, star, ware) || units > Held(s, ware)) return null;
         double value = 0;
         var left = (double)units;
@@ -136,9 +136,9 @@ public static class Trade
     public static (double Mass, double Cost) FuelQuote(SaveData s, Galaxy g, Market m)
     {
         var room = Math.Max(0, s.Ship.Type.Tank - s.HeldFuel);
-        var stock = m.StockOf(g, s.PortStar, Wares.ShipFuel);
+        var stock = m.StockOf(g, s.PortStation, Wares.ShipFuel);
         var units = Math.Min(FuelUnits(room), stock);
-        return (units * Wares.Get(Wares.ShipFuel).Mass, units > 0 ? Cost(g, m, s.PortStar, Wares.ShipFuel, units, true) : 0);
+        return (units * Wares.Get(Wares.ShipFuel).Mass, units > 0 ? Cost(g, m, s.PortStation, Wares.ShipFuel, units, true) : 0);
     }
 
     /// <summary>Fills the tank as far as stock and credits go. The fuel comes out of the station's stock.</summary>
@@ -151,12 +151,12 @@ public static class Trade
         {
             // Short of credits: as many units as they pay for.
             var lo = 0.0; var hi = units;
-            for (int i = 0; i < 40; i++) { var mid = (lo + hi) / 2; if (Cost(g, m, s.PortStar, Wares.ShipFuel, mid, true) <= s.Credits) lo = mid; else hi = mid; }
+            for (int i = 0; i < 40; i++) { var mid = (lo + hi) / 2; if (Cost(g, m, s.PortStation, Wares.ShipFuel, mid, true) <= s.Credits) lo = mid; else hi = mid; }
             units = lo;
-            cost = Cost(g, m, s.PortStar, Wares.ShipFuel, units, true);
+            cost = Cost(g, m, s.PortStation, Wares.ShipFuel, units, true);
         }
         s.Credits = Math.Max(0, s.Credits - cost);
-        m.Take(g, s.PortStar, Wares.ShipFuel, units);
+        m.Take(g, s.PortStation, Wares.ShipFuel, units);
         s.HeldFuel += units * Wares.Get(Wares.ShipFuel).Mass;
     }
 
