@@ -81,10 +81,10 @@ public partial class Hud
     }
 
     /// <summary>A panel's backing, with its title; taps on it never reach the chart beneath.</summary>
-    void Panel(Rect2 box, string title)
+    void Panel(Rect2 box, string title, bool opaque = false)
     {
         _panels.Add(box);
-        DrawRect(box, PanelFill);
+        DrawRect(box, opaque ? new Color(PanelFill, 1) : PanelFill);
         DrawRect(box, new Color(Ink, 0.18f), false, 1);
         if (title != "") Text(box.Position + new Vector2(PanelPad, 17), title, new Color(Dim, 0.9f), 12);
     }

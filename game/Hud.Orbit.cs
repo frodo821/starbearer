@@ -226,6 +226,8 @@ public partial class Hud
         }
         DrawNodes();
         DrawShipMarker();
+        // The open node's panel last, over everything on the chart.
+        if (Game.HandlesOpen && Game.Selected is { } open && Game.V!.Nodes.Contains(open)) DrawNodePanel(open);
     }
 
     /// <summary>The system's planets and moons, with their orbits.</summary>
@@ -431,7 +433,6 @@ public partial class Hud
             DrawCircle(tip, 7, h.Color);
             Text(tip + new Vector2(9, 4), h.Label, h.Color, 12);
         }
-        DrawNodePanel(n);
     }
 
     const float NodePanelWidth = 236, NodePanelHeight = 156;
@@ -463,7 +464,7 @@ public partial class Hud
         var v = Game.V!;
         var ordered = v.Nodes.OrderBy(m => m.Time).ToList();
         var index = ordered.IndexOf(n);
-        Panel(box, "");
+        Panel(box, "", opaque: true);   // over the chart's labels and paths, which must not show through
         var x = box.Position.X + PanelPad;
         var y = box.Position.Y + 20;
         var left = n.Time - v.AbsoluteTime;
