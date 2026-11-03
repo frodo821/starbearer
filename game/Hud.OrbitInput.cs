@@ -13,12 +13,6 @@ public partial class Hud
     public void OrbitTap(Vector2 at)
     {
         var v = Game.V!;
-        if (Game.HandlesOpen && Game.Selected is { } open && DeleteButton(open) is { } del && del.DistanceTo(at) < 14)
-        {
-            Game.SelectNodeQuietly(open);
-            Game.DeleteNode();
-            return;
-        }
         foreach (var n in v.Nodes)
             if (NodePoint(n) is { } np && np.DistanceTo(at) < 14) { Game.SelectNode(n); return; }
         // An apsis marker puts a node right on it.
@@ -47,8 +41,8 @@ public partial class Hud
         return time;
     }
 
-    /// <summary>Screen position of the node's delete button, placed clear of the handles.</summary>
-    public Vector2? DeleteButton(Maneuver n) => NodePoint(n) is { } np ? np + new Vector2(0, -HandleReach - 26) : null;
+    /// <summary>Screen position of the delete button in the node's panel.</summary>
+    public Vector2? DeleteButton(Maneuver n) => NodePanelBox(n) is { } box ? NodeDeleteBox(box).GetCenter() : null;
 
     const float HandleReach = 56f, DvPerPixel = 0.0005f;
     Maneuver? _heldNode;

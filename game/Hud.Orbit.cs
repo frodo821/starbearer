@@ -424,13 +424,6 @@ public partial class Hud
 
     void DrawHandles(Maneuver n, Vector2 np)
     {
-        if (DeleteButton(n) is { } del)
-        {
-            DrawCircle(del, 10, new Color(Bad, 0.85f));
-            DrawLine(del + new Vector2(-4, -4), del + new Vector2(4, 4), Colors.White, 2, true);
-            DrawLine(del + new Vector2(-4, 4), del + new Vector2(4, -4), Colors.White, 2, true);
-            Text(del + new Vector2(14, 5), "削除", Bad, 12);
-        }
         foreach (var h in Handles(n))
         {
             var tip = np + h.Dir * h.Reach;
@@ -438,6 +431,69 @@ public partial class Hud
             DrawCircle(tip, 7, h.Color);
             Text(tip + new Vector2(9, 4), h.Label, h.Color, 12);
         }
+        DrawNodePanel(n);
+    }
+
+    const float NodePanelWidth = 236, NodePanelHeight = 156;
+
+    /// <summary>Beside the node, clear of its handles: to the right, or to the left where the right is taken by the helm.</summary>
+    Rect2? NodePanelBox(Maneuver n)
+    {
+        if (NodePoint(n) is not { } np) return null;
+        var x = np.X + HandleReach + 24;
+        if (x + NodePanelWidth > HelmLeft - 8) x = np.X - HandleReach - 24 - NodePanelWidth;
+        x = Mathf.Clamp(x, NavRight + 8, Size.X - NodePanelWidth - 10);
+        var y = Mathf.Clamp(np.Y - NodePanelHeight / 2, NavTop, Size.Y - ConsoleHeight - NodePanelHeight - 60);
+        return new Rect2(x, y, NodePanelWidth, NodePanelHeight);
+    }
+
+    /// <summary>Where the + (or −) of an axis sits in the open node's panel.</summary>
+    public Vector2 NodeNudgeForTest(int axis, bool plus)
+    {
+        var box = NodePanelBox(Game.Selected!)!.Value;
+        return new Vector2(box.End.X - PanelPad - (plus ? 15 : 49), box.Position.Y + 48 + axis * 23 + 13);
+    }
+
+    Rect2 NodeDeleteBox(Rect2 panel) => new(panel.End.X - PanelPad - 64, panel.End.Y - 34, 64, 26);
+
+    /// <summary>The node's own panel, as KSP opens on a node: when, how much, a step at a time along each axis, the next and previous node, and deleting it.</summary>
+    void DrawNodePanel(Maneuver n)
+    {
+        if (NodePanelBox(n) is not { } box) return;
+        var v = Game.V!;
+        var ordered = v.Nodes.OrderBy(m => m.Time).ToList();
+        var index = ordered.IndexOf(n);
+        Panel(box, "");
+        var x = box.Position.X + PanelPad;
+        var y = box.Position.Y + 20;
+        var left = n.Time - v.AbsoluteTime;
+        Text(new Vector2(x, y), $"ノード {index + 1} / {ordered.Count}", StageColor(index + 1), 15);
+        var when = left > 0 ? $"{left:F1}日後" : "点火!";
+        Text(new Vector2(box.End.X - PanelPad - F.GetStringSize(when, HorizontalAlignment.Left, -1, 14).X, y), when, left <= 0.3 ? Warn : Ink, 14);
+        y += 20;
+        var burn = Game.EngineAcceleration > 0 ? $"   噴射 {n.DeltaV / Game.EngineAcceleration:F2} 日" : "";
+        Text(new Vector2(x, y), $"Δv {n.DeltaV:F4}" + burn, Ink, 14);
+        y += 8;
+        var step = Input.IsKeyPressed(Key.Shift) ? 0.0001 : 0.001;
+        var axes = new (string Label, double Value, Color Col)[]
+        {
+            ("順行", n.Prograde, new Color(0.45f, 1f, 0.6f)), ("外", n.Radial, new Color(0.45f, 0.8f, 1f)), ("法線", n.Normal, new Color(1f, 0.5f, 0.9f)),
+        };
+        for (int i = 0; i < axes.Length; i++)
+        {
+            var (label, value, col) = axes[i];
+            var axis = i;
+            Text(new Vector2(x, y + 18), label, col, 13);
+            Text(new Vector2(x + 44, y + 18), $"{value:+0.0000;-0.0000}", Ink, 14);
+            ActionButton(new Rect2(box.End.X - PanelPad - 64, y + 3, 30, 20), "−", () => Game.NudgeNode(axis, -step), col);
+            ActionButton(new Rect2(box.End.X - PanelPad - 30, y + 3, 30, 20), "+", () => Game.NudgeNode(axis, step), col);
+            y += 23;
+        }
+        var by = box.End.Y - 34;
+        ActionButton(new Rect2(x, by, 34, 26), "◀", () => Game.StepNode(-1), Ink, ordered.Count > 1);
+        ActionButton(new Rect2(x + 38, by, 34, 26), "▶", () => Game.StepNode(1), Ink, ordered.Count > 1);
+        Text(new Vector2(x + 80, by + 18), step < 0.001 ? "±0.0001" : "±0.001", Dim, 11);
+        ActionButton(NodeDeleteBox(box), "削除", () => { Game.SelectNodeQuietly(n); Game.DeleteNode(); }, Bad);
     }
 
     void DrawShipMarker()

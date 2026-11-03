@@ -105,25 +105,22 @@ public partial class Hud
     }
 
     /// <summary>Who is around you, and whether you are heading for them.</summary>
-    void DrawContacts()
+    void DrawContacts(float x, ref float y)
     {
         var v = Game.V!;
-        var x = Size.X - 345f; var y = 22f;
-        DrawRect(new Rect2(x - 12, 8, 345, 158), new Color(0.01f, 0.02f, 0.05f, 0.72f));
-        var (pos, vel) = (v.EstimatedPosition, Game.CurrentVelocity);
-        Text(new Vector2(x, y + 6), "周囲の天体   距離   進路差   接近   到達", Dim, 13);
-        y += 28;
-        foreach (var c in Instruments.Nearby(v.G, v.ChartPositions, pos, vel, 5))
+        Text(new Vector2(x, y + 12), "名前           距離   進路差   接近   到達", Dim, 12);
+        y += 22;
+        foreach (var c in Instruments.Nearby(v.G, v.ChartPositions, v.EstimatedPosition, Game.CurrentVelocity, 5))
         {
             var target = c.Star.Id == v.TargetStar;
             var eta = c.Eta is { } e && e < 999 ? $"{e:F0}日" : "—";
             var col = target ? Good : c.OffPrograde < 12 ? Warn : Ink;
-            Text(new Vector2(x, y), c.Star.Name, col, 14);
-            Text(new Vector2(x + 112, y), $"{c.Distance,5:F1}ly", col, 14);
-            Text(new Vector2(x + 176, y), $"{c.OffPrograde,3:F0}°", col, 14);
-            Text(new Vector2(x + 222, y), $"{c.ClosingSpeed:+0.00;-0.00}", col, 14);
-            Text(new Vector2(x + 278, y), eta, col, 14);
-            y += 22;
+            Text(new Vector2(x, y + 14), c.Star.Name, col, 14);
+            Text(new Vector2(x + 104, y + 14), $"{c.Distance,5:F1}ly", col, 14);
+            Text(new Vector2(x + 166, y + 14), $"{c.OffPrograde,3:F0}°", col, 14);
+            Text(new Vector2(x + 212, y + 14), $"{c.ClosingSpeed:+0.00;-0.00}", col, 14);
+            Text(new Vector2(x + 272, y + 14), eta, col, 14);
+            y += 20;
         }
     }
 
@@ -172,7 +169,64 @@ public partial class Hud
     }
 
     const float CompassRadius = 112;
-    Vector2 CompassCentre => new(Size.X - CompassRadius - 26, Size.Y - CompassRadius - 150);
+    /// <summary>The dial sits above the helm's two rows of buttons, with room under it for its captions.</summary>
+    Vector2 CompassCentre => new(Size.X - CompassRadius - 26, HelmRowsTop - 48 - CompassRadius);
+    float HelmRowsTop => Size.Y - ConsoleHeight - 10 - 2 * ButtonHeight - ButtonGap;
+    /// <summary>The left edge of the helm: the attitude buttons, or its rows of buttons if wider.</summary>
+    float HelmLeft
+    {
+        get
+        {
+            var left = CompassCentre.X - CompassRadius - 66 - 2 * 62 - 4;
+            if (Game.V == null || Game.Screen != Screen.Orbit && Game.Screen != Screen.Flight) return left;
+            var (thrust, nose) = Game.HelmCommands();
+            return Mathf.Min(left, Size.X - 10 - Mathf.Max(RowWidth(thrust), RowWidth(nose)));
+        }
+    }
+
+    /// <summary>
+    /// The helm, as around KSP's navball: the dial, the throttle and the attitude holds; above them what
+    /// the next burn needs; below them the buttons that fly the ship. Docked or planning, nothing to fly.
+    /// </summary>
+    void DrawHelm()
+    {
+        var v = Game.V!;
+        DrawCompass();
+        if (Game.Screen == Screen.Plan || v.Docked) return;
+        var (thrust, nose) = Game.HelmCommands();
+        ButtonRowRight(Size.X - 10, HelmRowsTop, thrust);
+        ButtonRowRight(Size.X - 10, HelmRowsTop + ButtonHeight + ButtonGap, nose);
+        if (Game.Screen == Screen.Orbit) DrawBurnBox();
+    }
+
+    /// <summary>What the next node asks of the pilot: how much is left, how long it burns, when to light, and whether the nose is on it.</summary>
+    void DrawBurnBox()
+    {
+        if (Game.NextNode is not { } burn) return;
+        var v = Game.V!;
+        var lines = new List<(string, Color)>
+        {
+            ($"ノード残 Δv {burn.DeltaV:F4}   スロットル {Game.Helm.Throttle * 100:F0}%" + (Game.NodeOvershot ? "  過ぎた" : ""), Game.NodeOvershot ? Warn : Ink),
+        };
+        if (Game.EngineAcceleration > 0)
+        {
+            var days = burn.DeltaV / Game.EngineAcceleration;
+            lines.Add(($"噴射 {days:F2} 日 (実時間 {days / Game.BurnTimeRate:F1} 秒)", days > 3 ? Warn : Good));
+            var start = burn.Time - days / 2 - v.AbsoluteTime;
+            lines.Add((start > 0 ? $"点火推奨 {start:F2} 日後" : "点火推奨 今", start < 0.3 ? Warn : Ink));
+        }
+        else lines.Add(("スロットル0%: 噴射できない (W で上げる)", Warn));
+        if (Game.NoseOffNode is { } off)
+            lines.Add(($"機首と噴射方向のずれ {off:F1}°" + (off > 5 ? "  「ノード」で保持" : ""), off > 5 ? Warn : Good));
+        // Only as wide as it needs, against the right edge, so the chart beside it stays in view.
+        var width = lines.Max(l => F.GetStringSize(l.Item1, HorizontalAlignment.Left, -1, 15).X) + 2 * PanelPad;
+        var left = Size.X - 10 - width;
+        var height = 26 + lines.Count * 20 + 6;
+        var bottom = CompassCentre.Y - CompassRadius - 30;
+        Panel(new Rect2(left, bottom - height, width, height), "噴射");
+        var y = bottom - height + 26;
+        foreach (var (text, col) in lines) { Text(new Vector2(left + PanelPad, y + 14), text, col, 15); y += 20; }
+    }
 
     Vector2 CompassPt(Vec3d d)
     {

@@ -275,6 +275,16 @@ public partial class Autotest : Node
             Shot("02_orbit_node");
             Check("time stops while planning", _g.CurrentRate == 0);
             _pro = _g.Selected!.Prograde;
+            Click(MouseButton.Left, _g.HudForTest.NodeNudgeForTest(0, true));
+        });
+        Do(() =>
+        {
+            Check("the node's panel adds Δv a step at a time", Math.Abs(_g.Selected!.Prograde - _pro - 0.001) < 1e-9);
+            Click(MouseButton.Left, _g.HudForTest.NodeNudgeForTest(0, false));
+        });
+        Do(() =>
+        {
+            Check("and takes it back", Math.Abs(_g.Selected!.Prograde - _pro) < 1e-9);
             Drag(_g.HandleTipForTest(0), new Vector2(60, 0));
         });
         Do(() =>
@@ -289,7 +299,7 @@ public partial class Autotest : Node
         {
             Check("dragging the node moves its time", Math.Abs(_g.Selected!.Time - _time) > 0.1);
             Check("all six handles are reachable", _g.HandleCountForTest >= 4);
-            Click(MouseButton.Left, new Vector2(1300, 100));
+            Click(MouseButton.Left, new Vector2(1050, 150));   // open chart, clear of the panels
         });
         Do(() =>
         {
@@ -399,9 +409,9 @@ public partial class Autotest : Node
             Check("the Ap node can be deleted", _g.V!.Nodes.Count == 0);
             Check("the station is the target again", _g.V.Goal == _g.V.LocalStation);
             _zoom = _g.Chart.Yaw;
-            Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Position = new Vector2(1300, 100), Pressed = true });
-            Input.ParseInputEvent(new InputEventMouseMotion { Position = new Vector2(1360, 120), Relative = new Vector2(60, 20) });
-            Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Position = new Vector2(1360, 120), Pressed = false });
+            Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Position = new Vector2(1050, 150), Pressed = true });
+            Input.ParseInputEvent(new InputEventMouseMotion { Position = new Vector2(1110, 170), Relative = new Vector2(60, 20) });
+            Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Position = new Vector2(1110, 170), Pressed = false });
         });
         Do(() => { Check("dragging empty space rotates the orbit view", _g.Chart.Yaw != _zoom); Shot("02d_rotated"); Press(Key.J); });
         Do(() =>

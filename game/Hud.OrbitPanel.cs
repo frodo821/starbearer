@@ -7,24 +7,33 @@ using static Starbearer.Palette;
 
 namespace Starbearer;
 
-/// <summary>The orbit readout on the left: elements, the goal, the forecast's events and the modules.</summary>
+/// <summary>Navigation in orbit, in three parts: the orbit flown, the target and how it is coming, and the plan of burns.</summary>
 public partial class Hud
 {
-    void DrawOrbitPanel(float x, float y)
+    void DrawOrbitNav(float x, ref float y, float width)
     {
         var v = Game.V!;
+        var yy = y;
+        void Line(string s, Color c, int size = 15) { Text(new Vector2(x, yy + 14), s, c, size); yy += 20; }
+
+        // The orbit.
+        Section(x, ref yy, width, "軌道");
         var el = Sublight.OrbitOf(v.Primary.Mu, v.SubPosition, v.SubVelocity);
         var (pe, ap) = Sublight.NextApsides(v.Primary.Mu, v.SubPosition, v.SubVelocity, v.AbsoluteTime);
-        void Line(string s, Color c) { Text(new Vector2(x, y), s, c, 15); y += 20; }
-        string When(Apsis? a) => a is { } x ? $"  {a.Value.Time - v.AbsoluteTime:F1}日後" : "";
+        string When(Apsis? a) => a is { } x ? $"  {x.Time - v.AbsoluteTime:F1}日後" : "";
         Line($"Pe {el.Periapsis:F3} AU" + When(pe), Ink);
         Line(el.Bound ? $"Ap {el.Apoapsis:F3} AU" + When(ap) : "Ap なし  脱出軌道", el.Bound ? Ink : Warn);
-        Line($"{(el.Bound ? $"周期 {el.Period:F1} 日   " : "")}{(Game.CurrentRate == 0 ? "一時停止 (Space)" : $"時間 {Instruments.Rate(Game.CurrentRate)}")}", Dim);
-        Line($"亜光速 Δv 残 {v.SublightDeltaV:F2}", Ink);
+        Line($"主天体 {v.Primary.Name}" + (el.Bound ? $"   周期 {el.Period:F1} 日" : ""), Dim);
+        Line($"速度 {v.SubVelocity.Length:F3}   位置誤差 ±{v.NavSigma:F3} ly", v.NavSigma > 0.1 ? Warn : Dim);
+        if (Game.SubForecast?.Impact == true) Line("天体に衝突する軌道", Bad);
+
+        // The target: what it is, how the ship is coming to it, and the plans that bring it there.
+        Section(x, ref yy, width, "目標");
+        Button(new Vector2(x, yy), Game.TargetCommand, width);
+        yy += ButtonHeight + 6;
         var st = v.LocalStation;
         var goal = v.Goal;
         var watched = Game.SubForecast?.Watched;
-        Line($"主天体 {v.Primary.Name}", Dim);
         if (goal != null)
         {
             var (goalAt, goalSpeed) = v.RelativeNow(goal);
@@ -32,7 +41,7 @@ public partial class Hud
             var rel = (goalSpeed - v.SubVelocity).Length;
             var refused = goal is Station && v.CanDock && !Game.DockAdmitted;
             var dockable = goal is Station && v.CanDock && !refused;
-            Line($"目標 {Game.NameOf(goal)}  {d:F4} AU   相対 {rel:F4}" + (dockable ? "   入港可 U" : refused ? "   入港拒否" : ""), dockable ? Good : refused ? Warn : goal is Station && d < Tuning.DockRange * 10 ? Warn : Ink);
+            Line($"距離 {d:F4} AU   相対 {rel:F4}" + (dockable ? "   入港可 U" : refused ? "   入港拒否" : ""), dockable ? Good : refused ? Warn : goal is Station && d < Tuning.DockRange * 10 ? Warn : Ink);
         }
         if (watched != null)
         {
@@ -50,48 +59,44 @@ public partial class Hud
         }
         else if (goal != null && v.Waypoint == null) Line(goal is Center c && c.Key == v.Primary.Key ? "目標を周回中" : "目標はこの天体の外", Dim);
         if (st != null && goal is Station)
-            Line($"港 半径 {st.Radius:F2} AU   入港 {Tuning.DockRange:F3} AU / 相対 {Tuning.DockRelativeSpeed:F3}", Dim);
-        if (Game.SubForecast?.Impact == true) Line("天体に衝突する軌道", Bad);
-        y += 4;
+            Line($"入港の条件  {Tuning.DockRange:F3} AU 以内 / 相対 {Tuning.DockRelativeSpeed:F3} 以下", Dim, 13);
+        yy += 2;
+        ButtonRow(x, yy, Game.TargetCommands());
+        yy += ButtonHeight + 4;
+
+        // The plan: each burn a row to pick (its handles and panel open on the chart), and the whole of it.
+        Section(x, ref yy, width, "計画");
         var fc = Game.SubForecast;
         var live = fc?.AllStages.Where(s => v.Nodes.Contains(s.Node)).ToList() ?? new List<Stage>();
-        if (Game.SubCurrent is { } now && (live.Count > 0 || Game.Helm.EngineOn))
-        {
-            var e3 = now.After;
-            var stop = e3.Bound ? $"近 {e3.Periapsis:F2} 遠 {e3.Apoapsis:F2}" : "脱出軌道";
-            Line($"今止めると {stop}" + (now.Closest is { } ca ? $"  {Game.NameOf(now.Watched)}まで {ca.Distance:F3}" : ""), Color.Color8(255, 255, 255));
-        }
-        if (Game.PlanDeviation() is { } dev)
-            Line($"計画固定中  ずれ {dev:F3} AU   「再計画」で作り直す", dev > 0.05 ? Warn : Good);
-        if (live.Count > 0)
+        if (live.Count == 0) Line("ノードなし  軌道をタップで置く", Dim, 14);
+        else
         {
             var total = live.Sum(s => s.Node.DeltaV);
-            Line($"計画 {live.Count} 段  Δv {total:F3} / 残 {v.SublightDeltaV:F2}", total > v.SublightDeltaV ? Bad : Ink);
+            Line($"{live.Count} 段  Δv {total:F3} / 残 {v.SublightDeltaV:F2}", total > v.SublightDeltaV ? Bad : Ink);
             for (int i = 0; i < Math.Min(live.Count, 5); i++)
             {
                 var s = live[i];
                 var left = s.Node.Time - v.AbsoluteTime;
                 var when = left > 0 ? $"{left:F1}日後" : "点火!";
                 var orbit = s.After.Bound ? $"{s.After.Periapsis:F2}-{s.After.Apoapsis:F2}" : "脱出";
-                Line($"{i + 1}. {when}  Δv {s.Node.DeltaV:F3}  → {orbit}", s.Node == Game.Selected ? Warn : left <= 0.3 ? Warn : Ink);
+                var row = new Rect2(x - 4, yy, width + 8, 20);
+                var node = s.Node;
+                _clicks.Add((row, () => Game.OpenNode(node)));
+                if (node == Game.Selected) DrawRect(row, new Color(Warn, 0.12f));
+                Line($"{i + 1}. {when}  Δv {node.DeltaV:F3}  → {orbit}", node == Game.Selected ? Warn : left <= 0.3 ? Warn : Ink);
             }
         }
-        if (Game.NextNode is { } burn)
+        if (Game.SubCurrent is { } now && (live.Count > 0 || Game.Helm.EngineOn))
         {
-            Line($"ノード残 Δv {burn.DeltaV:F4}   スロットル {Game.Helm.Throttle * 100:F0}%" + (Game.NodeOvershot ? "  過ぎた" : ""), Game.NodeOvershot ? Warn : Ink);
-            if (Game.EngineAcceleration > 0)
-            {
-                var days = burn.DeltaV / Game.EngineAcceleration;
-                Line($"噴射 {days:F2} 日 (実時間 {days / Game.BurnTimeRate:F1} 秒)", days > 3 ? Warn : Good);
-                var start = burn.Time - days / 2 - v.AbsoluteTime;
-                Line(start > 0 ? $"点火推奨 {start:F2} 日後" : "点火推奨 今", start < 0.3 ? Warn : Ink);
-            }
-            else Line("スロットル0%: 噴射できない (W で上げる)", Warn);
-            if (Game.NoseOffNode is { } off)
-                Line($"機首と噴射方向のずれ {off:F1}°" + (off > 5 ? "  「噴」をタップ" : ""), off > 5 ? Warn : Good);
+            var e3 = now.After;
+            var stop = e3.Bound ? $"近 {e3.Periapsis:F2} 遠 {e3.Apoapsis:F2}" : "脱出軌道";
+            Line($"今止めると {stop}" + (now.Closest is { } ca ? $"  {Game.NameOf(now.Watched)}まで {ca.Distance:F3}" : ""), Color.Color8(255, 255, 255), 14);
         }
-        if (Game.Selected is { } n && v.Nodes.Contains(n)) Line($"順 {n.Prograde:+0.000;-0.000} 径 {n.Radial:+0.000;-0.000} 法 {n.Normal:+0.000;-0.000}", Warn);
-        y += 4;
-        Line($"計算機 {(Game.Owns(Modules.Transfer) ? "搭載" : "なし")}   自動噴射 {(Game.Owns(Modules.AutoBurn) ? (v.AutoBurn ? "ON" : "OFF") : "なし")}", Dim);
+        if (Game.PlanDeviation() is { } dev)
+            Line($"計画固定中  ずれ {dev:F3} AU   「再計画」で作り直す", dev > 0.05 ? Warn : Good, 14);
+        yy += 2;
+        ButtonRow(x, yy, Game.PlanCommands());
+        yy += ButtonHeight;
+        y = yy;
     }
 }

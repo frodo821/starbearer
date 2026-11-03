@@ -10,29 +10,42 @@ namespace Starbearer;
 /// <summary>The clock and the instrument panels.</summary>
 public partial class Hud
 {
-    /// <summary>Mission clock, time rate, and the countdown to whatever comes next.</summary>
-    void DrawClock()
+    const float NavLeft = 10, NavWidth = 350, ShipWidth = 340, TimeTop = 8, TimeHeight = 92;
+    float NavRight => NavLeft + NavWidth;
+    float NavTop => TimeTop + TimeHeight + 8;
+    /// <summary>Panels sized to what they held last frame: drawn behind, their contents decide how tall.</summary>
+    float _navHeight = 300, _shipHeight = 260;
+
+    /// <summary>Time, as in KSP: stop and go, the rate, on to the next burn; under them the clocks and what comes next.</summary>
+    void DrawTimePanel()
     {
         var v = Game.V!;
-        var x = Size.X - 345f;
-        var y = 188f;
-        DrawRect(new Rect2(x - 12, y - 14, 345, 96), new Color(0.01f, 0.02f, 0.05f, 0.72f));
-        Text(new Vector2(x, y + 6), Instruments.Clock(v.Time), Ink, 22);
-        Text(new Vector2(x + 192, y + 6), "航海", Dim, 12);
-
-        var running = Game.Screen != Screen.Plan && Game.CurrentRate > 0;
-        var rate = running ? Instruments.Rate(Game.CurrentRate) : "時間停止";
-        Text(new Vector2(x + 230, y + 6), rate, running ? Ink : Warn, 14);
-        Text(new Vector2(x, y + 28), Instruments.Clock(v.AbsoluteTime), Dim, 15);
-        Text(new Vector2(x + 132, y + 28), "通算", Dim, 12);
-
+        var commands = Game.TimeCommands();
+        var width = Mathf.Max(RowWidth(commands) + 2 * PanelPad, NavWidth);
+        Panel(new Rect2(NavLeft, TimeTop, width, TimeHeight), "");
+        float x = NavLeft + PanelPad, y = TimeTop + 8;
+        var shown = Game.RateShown;
+        foreach (var c in commands)
+        {
+            var current = c.Key == Key.Key1 + shown && !Game.Paused && Game.Screen != Screen.Plan;
+            if (current) DrawRect(new Rect2(x, y, ButtonWidth(c), ButtonHeight), new Color(Ink, 0.25f));
+            x += Button(new Vector2(x, y), c) + ButtonGap;
+        }
+        y += ButtonHeight + 24;
+        x = NavLeft + PanelPad;
+        Text(new Vector2(x, y), Instruments.Clock(v.Time), Ink, 18);
+        Text(new Vector2(x + 132, y), "航海", Dim, 11);
+        Text(new Vector2(x + 170, y), Instruments.Clock(v.AbsoluteTime), Dim, 14);
+        Text(new Vector2(x + 284, y), "通算", Dim, 11);
+        y += 22;
         var (label, left) = NextEvent();
+        var running = Game.Screen != Screen.Plan && Game.CurrentRate > 0;
         if (left is { } t)
         {
-            Text(new Vector2(x, y + 54), Instruments.Countdown(t), t < 1 ? Warn : Good, 19);
-            Text(new Vector2(x + 180, y + 54), label, Dim, 13);
+            Text(new Vector2(x, y), Instruments.Countdown(t), t < 1 ? Warn : Good, 15);
+            Text(new Vector2(x + 132, y), label, Dim, 13);
         }
-        else Text(new Vector2(x, y + 54), "予定なし", Dim, 15);
+        else Text(new Vector2(x, y), running ? "予定なし" : "時間停止", running ? Dim : Warn, 14);
     }
 
     (string, double?) NextEvent()
@@ -52,15 +65,21 @@ public partial class Hud
 
     public string ClockTextForTest => Instruments.Clock(Game.V!.Time);
 
-    void DrawInstruments()
+    /// <summary>The ship, as in Elite's right panel: where the cargo is bound, the bars, what is fitted.</summary>
+    void DrawShipPanel()
     {
         var v = Game.V!; var g = Game.G!;
-        DrawRect(new Rect2(10, 8, 345, Game.Screen == Screen.Orbit ? 700 : 420), new Color(0.01f, 0.02f, 0.05f, 0.72f));   // keeps gauges legible over the chart and the sky
-        float x = 24, y = 34;
-        Text(new Vector2(x, y), (v.Hold.Count == 0 ? "空荷" : $"積荷 {v.Hold.Count} 件") + $"  →  {g.Stars[v.TargetStar].Name}", Good, 20); y += 28;
-        Text(new Vector2(x, y), $"質量 {v.Mass:F2}   積荷 {v.CargoMass:F1}   容積 {Missions.Cubic(Missions.VolumeUsed(v.Hold))}/{Missions.Cubic(v.Class.Capacity)}" + (v.Hold.Count > 0 ? $"   耐熱 {v.HeatTolerance:F2}" : ""), Dim, 15); y += 20;
-        foreach (var c in v.Hold.Take(3)) { Text(new Vector2(x, y), c.IsJob ? $"{c.Mission.Cargo.Name} → {g.StarAt(c.Mission.Target).Name}" : $"{c.Mission.Cargo.Name} {c.Mission.Cargo.Volume:F0} 単位（自分の荷）", c.IsJob && g.StarOf(c.Mission.Target) == v.TargetStar ? Ink : Dim, 14); y += 18; }
-        y += 8;
+        var left = Size.X - ShipWidth - 10;
+        Panel(new Rect2(left, 8, ShipWidth, _shipHeight), "");
+        float x = left + PanelPad, y = 34;
+        Text(new Vector2(x, y), (v.Hold.Count == 0 ? "空荷" : $"積荷 {v.Hold.Count} 件") + $"  →  {g.Stars[v.TargetStar].Name}", Good, 18);
+        var manifest = new Command(Key.I, "I", "積荷");
+        Button(new Vector2(left + ShipWidth - PanelPad - ButtonWidth(manifest), 14), manifest);
+        y += 22;
+        Text(new Vector2(x, y), $"質量 {v.Mass:F2}   積荷 {v.CargoMass:F1}   容積 {Missions.Cubic(Missions.VolumeUsed(v.Hold))}/{Missions.Cubic(v.Class.Capacity)}", Dim, 13); y += 18;
+        if (v.Hold.Count > 0) { Text(new Vector2(x, y), $"耐熱 {v.HeatTolerance:F2}", Dim, 13); y += 18; }
+        foreach (var c in v.Hold.Take(3)) { Text(new Vector2(x, y), c.IsJob ? $"{c.Mission.Cargo.Name} → {g.StarAt(c.Mission.Target).Name}" : $"{c.Mission.Cargo.Name} {c.Mission.Cargo.Volume:F0} 単位（自分の荷）", c.IsJob && g.StarOf(c.Mission.Target) == v.TargetStar ? Ink : Dim, 13); y += 18; }
+        y += 6;
         Bar(x, ref y, "燃料", v.Fuel / v.Class.Tank, Ink, $"Δv {v.DeltaVRemaining:F2}");
         if (Game.Screen == Screen.Plan)
         {
@@ -73,48 +92,48 @@ public partial class Hud
         Bar(x, ref y, "積荷", v.CargoIntegrity, v.CargoIntegrity < 0.6 ? Warn : Ink, $"{v.CargoIntegrity:P0}");
         Bar(x, ref y, "熱", Math.Min(v.Heat, 1.5) / 1.5, v.Heat > 1 ? Bad : v.Heat > v.HeatTolerance ? Warn : Ink, $"{v.Heat:F2}");
         Bar(x, ref y, "生命", v.LifeRemaining / Tuning.LifeSupportDays, Ink, v.Docked ? $"{v.LifeRemaining:F0}日 停泊中" : $"{v.LifeRemaining:F0}日");
-        y += 24;
-        Text(new Vector2(x, y), $"速度 {(v.Phase == Phase.Sublight ? v.SubVelocity : v.Velocity).Length:F3}", Ink, 16); y += 24;
-        Text(new Vector2(x, y), $"位置誤差 ±{v.NavSigma:F3} ly", v.NavSigma > 0.1 ? Warn : Ink, 16); y += 24;
-        if (Game.Screen != Screen.Orbit)
-        {
-            Text(new Vector2(x, y), $"残 Δv {v.DeltaVRemaining:F2}   推力 {Game.EngineAcceleration:F2} /日", Ink, 16); y += 24;
-        }
         y += 8;
+        Text(new Vector2(x, y), v.Phase == Phase.Sublight ? $"亜光速 Δv 残 {v.SublightDeltaV:F2}   推力 {Game.EngineAcceleration:F2} /日" : $"推力 {Game.EngineAcceleration:F2} /日", Ink, 14); y += 20;
+        Text(new Vector2(x, y), $"計算機 {(Game.Owns(Modules.Transfer) ? "搭載" : "なし")}   自動噴射 {(Game.Owns(Modules.AutoBurn) ? (v.AutoBurn ? "ON" : "OFF") : "なし")}", Dim, 13); y += 8;
+        _shipHeight = y + PanelPad - 8;
+    }
 
-        if (Game.Screen == Screen.Orbit)
-        {
-            DrawOrbitPanel(x, y);
-            DrawFtlState();
-            DrawCompass();
-            if (Game.OrbitSky) DrawContacts();
-            DrawClock();
-            return;
-        }
+    /// <summary>Navigation down the left, as in Elite's left panel: in orbit the orbit, the target and the plan; in FTL the forecast and who is near.</summary>
+    void DrawNavPanel()
+    {
+        var v = Game.V!; var g = Game.G!;
+        Panel(new Rect2(NavLeft, NavTop, NavWidth, _navHeight), "");
+        float x = NavLeft + PanelPad, y = NavTop + 4;
+        var width = NavWidth - 2 * PanelPad;
+        if (Game.Screen == Screen.Orbit) { DrawOrbitNav(x, ref y, width); _navHeight = y - NavTop + PanelPad; return; }
 
-        var fc = Game.Forecast;
+        Section(x, ref y, width, "航法");
+        void Line(string s, Color c, int size = 15) { Text(new Vector2(x, y + 14), s, c, size); y += 20; }
+        Line($"速度 {(v.Phase == Phase.Sublight ? v.SubVelocity : v.Velocity).Length:F3}   位置誤差 ±{v.NavSigma:F3} ly", v.NavSigma > 0.1 ? Warn : Ink);
         if (Game.Screen == Screen.Plan)
         {
-            Text(new Vector2(x, y), $"キック Δv {Game.PlanDv:F3}  (燃料 {v.FuelFor(Game.PlanDv):F2})", Warn, 18); y += 26;
+            Line($"キック Δv {Game.PlanDv:F3}  (燃料 {v.FuelFor(Game.PlanDv):F2})", Warn, 17);
             if (v.Phase == Phase.Sublight)
             {
                 var gain = v.SubVelocity.Dot(Game.PlanDir.Normalized());
-                Text(new Vector2(x, y), $"軌道速度の寄与 {gain:+0.00;-0.00}  {(gain >= 0 ? "追い風" : "向かい風")}", gain >= 0 ? Good : Warn, 15); y += 22;
+                Line($"軌道速度の寄与 {gain:+0.00;-0.00}  {(gain >= 0 ? "追い風" : "向かい風")}", gain >= 0 ? Good : Warn);
             }
         }
-        if (fc != null)
+        if (Game.Screen == Screen.Flight) { y += 4; ButtonRow(x, y, Game.FlightNavCommands()); y += ButtonHeight + 4; }
+
+        if (Game.Forecast is { } fc)
         {
-            Text(new Vector2(x, y), "予測", Dim, 15); y += 22;
+            Section(x, ref y, width, "予測");
             foreach (var e in fc.Encounters.Take(5))
             {
                 var isT = e.Star == v.TargetStar;
                 var line = $"{e.Time,5:F1}日  {g.Stars[e.Star].Name}  近日 {e.Periapsis:F2}";
                 if (isT) line += $"  減速 Δv {Game.CaptureDv(e):F2}";
-                Text(new Vector2(x, y), line, isT ? Good : Ink, 15); y += 20;
+                Line(line, isT ? Good : Ink, 14);
                 if (isT)
                 {
                     var el = Sublight.DescentOrbit(g.Stars[e.Star], e.Periapsis, e.PeriapsisSpeed);
-                    Text(new Vector2(x + 12, y), el.Bound ? $"近日点で降下 → {el.Periapsis:F2}-{el.Apoapsis:F2} AU" : "近日点で降下 → 脱出軌道", el.Bound ? Good : Warn, 14); y += 20;
+                    Line(el.Bound ? $"  近日点で降下 → {el.Periapsis:F2}-{el.Apoapsis:F2} AU" : "  近日点で降下 → 脱出軌道", el.Bound ? Good : Warn, 13);
                 }
             }
             var (txt, col) = fc.End switch
@@ -122,23 +141,26 @@ public partial class Hud
                 PredictionEnd.Stall => ($"{fc.Duration:F0}日後に失速", Warn),
                 PredictionEnd.Collision => ($"{fc.Duration:F1}日後に {g.Stars[fc.CollisionStar!.Value].Name} へ突入", Bad),
                 PredictionEnd.Lost => ("星域から離脱", Warn),
-                PredictionEnd.Captured => ($"{g.Stars[fc.Encounters[^1].Star].Name} の井戸に捕まる。降下するか噴射で抜ける", Warn),
+                PredictionEnd.Captured => ($"{g.Stars[fc.Encounters[^1].Star].Name} の井戸に捕まる。降下か噴射で抜ける", Warn),
                 _ => ("", Ink),
             };
-            if (txt != "") Text(new Vector2(x, y), txt, col, 16);
+            if (txt != "") Line(txt, col);
             if (Game.DescentForecast is { } df && Game.Screen == Screen.Flight)
-            {
-                y += 22;
-                var el = df.After;
-                Text(new Vector2(x, y), el.Bound ? $"今降下すると {el.Periapsis:F2}-{el.Apoapsis:F2} AU" : "今降下すると 脱出軌道", el.Bound ? Good : Warn, 15);
-            }
+                Line(df.After.Bound ? $"今降下すると {df.After.Periapsis:F2}-{df.After.Apoapsis:F2} AU" : "今降下すると 脱出軌道", df.After.Bound ? Good : Warn);
         }
+        Section(x, ref y, width, "周囲の天体");
+        DrawContacts(x, ref y);
+        _navHeight = y - NavTop + PanelPad;
+    }
 
+    void DrawInstruments()
+    {
+        DrawTimePanel();
+        DrawNavPanel();
+        DrawShipPanel();
         DrawFtlState();
-        DrawRangeGauge();
-        DrawCompass();
-        if (!Game.MapOpen) DrawContacts();
-        DrawClock();
+        if (Game.Screen != Screen.Orbit) DrawRangeGauge();
+        DrawHelm();
     }
 
     /// <summary>Whether the ship is in FTL at all, then how close it is to falling out.</summary>
@@ -184,8 +206,8 @@ public partial class Hud
     void DrawRangeGauge()
     {
         var v = Game.V!; var g = Game.G!; var fc = Game.Forecast;
-        // Clear of the attitude buttons, throttle and dial on the right.
-        var room = Size.X - 460 - 40;
+        // Clear of the helm on the right.
+        var room = HelmLeft - 40 - 40;
         var width = Mathf.Min(room, 900f);
         var x0 = 40 + (room - width) / 2;
         var top = Size.Y - ConsoleHeight - 112;

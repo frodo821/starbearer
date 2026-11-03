@@ -18,33 +18,80 @@ public partial class Main
     {
         if (c.Hold) { HeldButton = c.Key; return; }
         _fromButton = true;
-        try { _UnhandledInput(new InputEventKey { Keycode = c.Key, Pressed = true }); }
+        try { _UnhandledInput(new InputEventKey { Keycode = c.Key, Pressed = true, ShiftPressed = c.Shift }); }
         finally { _fromButton = false; }
     }
 
-    static List<(string, Command[])> RateGroup(double[] rates, int current) => new()
-    {
-        ("時間", rates.Select((r, i) => new Command(Key.Key1 + i, $"{i + 1}", i == current ? $"[{Instruments.Rate(r)}]" : Instruments.Rate(r))).ToArray()),
-    };
+    /// <summary>The rate chosen for this kind of travel, as an index into Rates.</summary>
+    public int RateShown => Screen == Screen.Orbit ? (Aligning ? 0 : SubRateIndex) : RateIndex;
 
-    static Command[] ShipCommands(bool engineOn, Main g) => new[]
+    /// <summary>Time: stop and go, the rate, and (in orbit) on to the next burn.</summary>
+    public Command[] TimeCommands()
     {
-        new Command(Key.E, "E", engineOn ? "停止" : "点火"),
-        new Command(Key.W, "W", "推力+", Hold: true),
-        new Command(Key.S, "S", "推力-", Hold: true),
-        new Command(Key.O, "O", "全開"),
-        new Command(Key.L, "L", "ゼロ"),
-        new Command(Key.B, "B", "機首視点"),
-    };
+        var list = new List<Command> { new(Key.Space, "", Paused ? "▶ 再開" : "■ 停止") };
+        list.AddRange(Rates.Select((r, i) => new Command(Key.Key1 + i, "", Instruments.Rate(r))));
+        if (Screen == Screen.Orbit) list.Add(new(Key.N, "", ToNode ? "加速中" : "⏭ 点火へ", V!.Nodes.Count > 0));
+        return list.ToArray();
+    }
+
+    /// <summary>The target and the plans made toward it, in the navigation panel.</summary>
+    public Command[] TargetCommands()
+    {
+        var v = V!;
+        var way = v.Waypoint;
+        return new Command[]
+        {
+            new(Key.H, "", way == null && v.Primary.Parent != null ? "脱出案" : "遷移案", way != null || v.Primary.Parent != null),
+            new(Key.M, "", "合流案", way is Station),
+            new(Key.T, "", "計算機", way != null && Owns(Modules.Transfer)),
+        };
+    }
+
+    public Command TargetCommand => new(Key.C, "", "目標: " + (V!.Goal == null ? "なし" : NameOf(V.Goal)) + "  ▸");
+
+    public Command[] PlanCommands()
+    {
+        var nodes = V!.Nodes.Count > 0;
+        return new Command[] { new(Key.Y, "", "再計画", nodes), new(Key.Backspace, "", "全削除", nodes, Shift: true) };
+    }
+
+    /// <summary>Finding the way in FTL, in the navigation panel.</summary>
+    public Command[] FlightNavCommands() => new Command[] { new(Key.C, "C", "修正計画"), new(Key.F, "F", "天測") };
+
+    /// <summary>The helm, under the attitude dial: thrust, then the nose. Nothing to fly while docked.</summary>
+    public (Command[] Thrust, Command[] Nose) HelmCommands()
+    {
+        var v = V!;
+        var thrust = new List<Command>
+        {
+            new(Key.E, "E", Helm.EngineOn ? "停止" : "点火"),
+            new(Key.W, "W", "推力+", Hold: true),
+            new(Key.S, "S", "推力-", Hold: true),
+            new(Key.O, "O", "全開"),
+            new(Key.L, "L", "ゼロ"),
+        };
+        if (Screen == Screen.Orbit) thrust.Add(new(Key.G, "G", v.AutoBurn ? "自動噴射 ON" : "自動噴射", Owns(Modules.AutoBurn) && !v.Docked));
+        var nose = new List<Command>(NoseCommands) { new(Key.B, "B", "機首視点") };
+        if (Screen == Screen.Orbit)
+        {
+            var st = v.LocalStation != null;
+            nose.Add(new(Key.X, "X", "接近", st, Hold: true));
+            nose.Add(new(Key.Z, "Z", "相対0", st, Hold: true));
+        }
+        return (thrust.ToArray(), nose.ToArray());
+    }
 
     static readonly Command[] NoseCommands =
     {
-        new(Key.Left, "←", "左", Hold: true), new(Key.Right, "→", "右", Hold: true),
-        new(Key.Up, "↑", "上", Hold: true), new(Key.Down, "↓", "下", Hold: true),
+        new(Key.Left, "", "←", Hold: true), new(Key.Right, "", "→", Hold: true),
+        new(Key.Up, "", "↑", Hold: true), new(Key.Down, "", "↓", Hold: true),
     };
 
-    /// <summary>The console for the current screen, in groups. A dark button says why it can't be used yet by being dark.</summary>
-    public List<(string Group, Command[] Items)> Commands()
+    /// <summary>
+    /// The bottom band: only what takes the ship from one kind of travel to another (port, normal space,
+    /// FTL) and the view. In planning a jump, the plan's own controls.
+    /// </summary>
+    public List<(string Group, Command[] Items)> BarCommands()
     {
         var v = V!;
         var list = new List<(string, Command[])>();
@@ -57,47 +104,20 @@ public partial class Main
         }
         if (Screen == Screen.Orbit)
         {
-            var st = v.LocalStation;
-            var way = v.Waypoint;
-            var nodes = v.Nodes.Count > 0;
-            list.Add(("計画", new Command[]
-            {
-                new(Key.C, "", "目標:" + (v.Goal == null ? "なし" : NameOf(v.Goal))),
-                new(Key.H, "", way == null && v.Primary.Parent != null ? "脱出案" : "遷移案", way != null || v.Primary.Parent != null),
-                new(Key.M, "", "合流案", way is Station),
-                new(Key.T, "", "計算機", way != null && Owns(Modules.Transfer)),
-                new(Key.G, "G", v.AutoBurn ? "自動噴射 ON" : "自動噴射", Owns(Modules.AutoBurn) && !v.Docked),
-                new(Key.Y, "", "再計画", nodes),
-                new(Key.Backspace, "BS", "ノード削除", nodes),
-            }));
-            list.AddRange(RateGroup(Rates, Aligning ? 0 : SubRateIndex));
-            list.Add(("待機", new Command[] { new(Key.Space, "Space", Paused ? "再開" : "停止"), new(Key.N, "N", ToNode ? "加速中" : "ノードへ", nodes) }));
             if (v.Docked)
-            {
                 list.Add(("港", new Command[] { new(Key.U, "U", "出港"), new(Key.Enter, "Enter", "港の施設") }));
-                list.Add(("航行", new Command[] { new(Key.J, "J", "発進計画"), new(Key.Tab, "Tab", OrbitSky ? "軌道図" : "空"), new(Key.I, "I", "積荷") }));
-                return list;
+            else
+            {
+                var port = new List<Command> { new(Key.U, "U", v.CanDock && !DockAdmitted ? "入港拒否" : "入港", v.CanDock && DockAdmitted) };
+                if (v.AtGate) port.Add(new(Key.K, "", !v.Class.Gates ? "ゲート不可" : v.GateBooked != null ? "通過を取消" : !GateOpen ? "ゲート停止" : !GateAdmitted ? "通航拒否" : $"ゲート通過 {GateToll:F0}", v.Class.Gates && (GateOpen && GateAdmitted || v.GateBooked != null)));
+                list.Add(("港", port.ToArray()));
             }
-            list.Add(("操船", ShipCommands(Helm.EngineOn, this)));
-            list.Add(("機首", NoseCommands));
-            var port = new List<Command> { new(Key.X, "X", "接近", st != null, Hold: true), new(Key.Z, "Z", "相対0", st != null, Hold: true), new(Key.U, "U", v.CanDock && !DockAdmitted ? "入港拒否" : "入港", v.CanDock && DockAdmitted) };
-            if (v.AtGate) port.Add(new(Key.K, "", !v.Class.Gates ? "ゲート不可" : v.GateBooked != null ? "通過を取消" : !GateOpen ? "ゲート停止" : !GateAdmitted ? "通航拒否" : $"ゲート通過 {GateToll:F0}", v.Class.Gates && (GateOpen && GateAdmitted || v.GateBooked != null)));
-            list.Add(("港", port.ToArray()));
-            list.Add(("航行", new Command[] { new(Key.J, "J", "FTL発進"), new(Key.Tab, "Tab", OrbitSky ? "軌道図" : "空"), new(Key.I, "I", "積荷") }));
+            list.Add(("FTL", new Command[] { new(Key.J, "J", v.Docked ? "発進計画" : "FTL発進") }));
+            list.Add(("表示", new Command[] { new(Key.Tab, "Tab", OrbitSky ? "軌道図" : "空") }));
             return list;
         }
-        list.Add(("操船", ShipCommands(Helm.EngineOn, this)));
-        list.Add(("機首", NoseCommands));
-        list.AddRange(RateGroup(Rates, RateIndex));
-        list.Add(("待機", new Command[] { new(Key.Space, "Space", Paused ? "再開" : "停止") }));
-        list.Add(("航行", new Command[]
-        {
-            new(Key.D, "D", "降下", v.Phase == Phase.Flight && v.NearestWell(out _) < double.MaxValue),
-            new(Key.C, "C", "修正計画"),
-            new(Key.F, "F", "天測"),
-            new(Key.Tab, "Tab", MapOpen ? "空" : "星図"),
-            new(Key.I, "I", "積荷"),
-        }));
+        list.Add(("亜光速", new Command[] { new(Key.D, "D", "降下", v.Phase == Phase.Flight && v.NearestWell(out _) < double.MaxValue) }));
+        list.Add(("表示", new Command[] { new(Key.Tab, "Tab", MapOpen ? "空" : "星図") }));
         return list;
     }
 

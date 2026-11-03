@@ -32,6 +32,31 @@ public partial class Main
     }
 
     public void SelectNodeQuietly(Maneuver m) => Selected = m;
+
+    /// <summary>Picks a node and opens its handles and panel on the chart.</summary>
+    public void OpenNode(Maneuver m)
+    {
+        Selected = m;
+        HandlesOpen = true;
+        Paused = true;
+    }
+
+    /// <summary>The node before or after the one picked, in time order.</summary>
+    public void StepNode(int by)
+    {
+        var ordered = V!.Nodes.OrderBy(n => n.Time).ToList();
+        if (ordered.Count == 0) return;
+        var i = Selected is { } m ? ordered.IndexOf(m) : -1;
+        OpenNode(ordered[((i < 0 ? 0 : i + by) % ordered.Count + ordered.Count) % ordered.Count]);
+    }
+
+    /// <summary>Δv added to the picked node along one of its axes: 0 prograde, 1 radial, 2 normal.</summary>
+    public void NudgeNode(int axis, double dv)
+    {
+        if (Selected is not { } n || !V!.Nodes.Contains(n)) return;
+        if (axis == 0) n.Prograde += dv; else if (axis == 1) n.Radial += dv; else n.Normal += dv;
+        NodeEdited();
+    }
     public void NodeEdited() => Replan();
 
     /// <summary>Deletes the selected node, or the next one if the selection has gone stale.</summary>

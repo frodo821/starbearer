@@ -51,6 +51,7 @@ public partial class Hud : Control
 
     public override void _Draw()
     {
+        ClearButtons();
         switch (Game.Screen)
         {
             case Screen.Title: DrawTitle(); return;
