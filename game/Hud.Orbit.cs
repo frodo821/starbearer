@@ -435,7 +435,7 @@ public partial class Hud
         }
     }
 
-    const float NodePanelWidth = 236, NodePanelHeight = 156;
+    const float NodePanelWidth = 270, NodePanelHeight = 156;
 
     /// <summary>Beside the node, clear of its handles: to the right, or to the left where the right is taken by the helm.</summary>
     Rect2? NodePanelBox(Maneuver n)
@@ -469,10 +469,10 @@ public partial class Hud
         var y = box.Position.Y + 20;
         var left = n.Time - v.AbsoluteTime;
         Text(new Vector2(x, y), $"ノード {index + 1} / {ordered.Count}", StageColor(index + 1), 15);
-        var when = left > 0 ? $"{left:F1}日後" : "点火!";
+        var when = left > 0 ? Instruments.Countdown(left) : "点火!";
         Text(new Vector2(box.End.X - PanelPad - F.GetStringSize(when, HorizontalAlignment.Left, -1, 14).X, y), when, left <= 0.3 ? Warn : Ink, 14);
         y += 20;
-        var burn = Game.EngineAcceleration > 0 ? $"   噴射 {n.DeltaV / Game.EngineAcceleration:F2} 日" : "";
+        var burn = Game.EngineAcceleration > 0 ? $"   噴射 {Instruments.Span(n.DeltaV / Game.EngineAcceleration)}" : "";
         Text(new Vector2(x, y), $"Δv {n.DeltaV:F4}" + burn, Ink, 14);
         y += 8;
         var step = Input.IsKeyPressed(Key.Shift) ? 0.0001 : 0.001;

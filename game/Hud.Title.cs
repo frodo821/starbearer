@@ -98,7 +98,7 @@ public partial class Hud
             var where = s.Where != "" ? s.Where : $"銀河 {s.Seed % 100000:D5}";
             Text(new Vector2(x, y + 21), where, e.Playable ? (picked ? Ink : new Color(Ink, 0.8f)) : Dim, 18);
             var detail = e.Playable
-                ? $"銀河暦 {s.TotalDays:F0} 日    配達 {s.Deliveries} 件    資金 {s.Credits:F0}    船 {s.Fleet.Count} 隻"
+                ? $"{Instruments.Day(s.TotalDays)}    配達 {s.Deliveries} 件    資金 {s.Credits:F0}    船 {s.Fleet.Count} 隻"
                 : "古い版のセーブ。この版では続けられない";
             Text(new Vector2(x, y + 40), detail, e.Playable ? Dim : Warn, 13);
         }

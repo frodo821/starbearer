@@ -196,7 +196,55 @@ public partial class Hud
         var (thrust, nose) = Game.HelmCommands();
         ButtonRowRight(Size.X - 10, HelmRowsTop, thrust);
         ButtonRowRight(Size.X - 10, HelmRowsTop + ButtonHeight + ButtonGap, nose);
-        if (Game.Screen == Screen.Orbit) DrawBurnBox();
+        if (Game.Screen == Screen.Orbit) { DrawBurnBox(); DrawNodeTiming(); }
+    }
+
+    /// <summary>A span of real time as the pilot reads it.</summary>
+    static string RealTime(double seconds) => Instruments.Span(seconds / Instruments.SecondsPerDay);
+
+    /// <summary>
+    /// Over the attitude holds, the next node's timing: how long until the best moment to light (half
+    /// the burn before the node), and how much burn is left, each in game days and in real time. Real
+    /// time to ignition is at the rate time runs now; the burn's is at the rate a burn runs at.
+    /// </summary>
+    void DrawNodeTiming()
+    {
+        if (Game.NextNode is not { } burn || Game.IgnitionIn is not { } wait) return;
+        var holds = HoldButtons().ToList();
+        if (holds.Count == 0) return;
+        var left = holds.Min(b => b.Box.Position.X);
+        var right = holds.Max(b => b.Box.End.X);
+        var bottom = holds.Min(b => b.Box.Position.Y) - 8;
+        const float rowH = 19, height = 3 * rowH + 10;
+        var box = new Rect2(left, bottom - height, Mathf.Max(right - left, 300), height);
+        box.Position = new Vector2(right - box.Size.X, box.Position.Y);
+        Panel(box, "", opaque: true);
+        float x = box.Position.X + 8, c1 = x + 62, c2 = x + 180, y = box.Position.Y + 16;
+        Text(new Vector2(c1, y), "ゲーム内", Dim, 11);
+        Text(new Vector2(c2, y), "実時間", Dim, 11);
+        y += rowH;
+        // Until ignition.
+        var rate = Game.CurrentRate;
+        var lit = Game.Helm.EngineOn;
+        Text(new Vector2(x, y), "点火まで", Dim, 13);
+        if (lit) Text(new Vector2(c1, y), "噴射中", Warn, 14);
+        else
+        {
+            var col = wait <= 0 ? Warn : wait < 0.3 ? Warn : Good;
+            Text(new Vector2(c1, y), wait <= 0 ? "今" : Instruments.Span(wait), col, 14);
+            Text(new Vector2(c2, y), wait <= 0 ? "今" : rate > 0 ? RealTime(wait / rate) : "時間停止", rate > 0 || wait <= 0 ? col : Dim, 14);
+        }
+        y += rowH;
+        // The burn left.
+        Text(new Vector2(x, y), "噴射残", Dim, 13);
+        if (Game.EngineAcceleration > 0)
+        {
+            var days = burn.DeltaV / Game.EngineAcceleration;
+            var col = days > 3 ? Warn : lit ? Warn : Ink;
+            Text(new Vector2(c1, y), Instruments.Span(days), col, 14);
+            Text(new Vector2(c2, y), RealTime(days / Game.BurnRateNow), col, 14);
+        }
+        else Text(new Vector2(c1, y), "推力 0", Warn, 14);
     }
 
     /// <summary>What the next node asks of the pilot: how much is left, how long it burns, when to light, and whether the nose is on it.</summary>
@@ -208,14 +256,7 @@ public partial class Hud
         {
             ($"ノード残 Δv {burn.DeltaV:F4}   スロットル {Game.Helm.Throttle * 100:F0}%" + (Game.NodeOvershot ? "  過ぎた" : ""), Game.NodeOvershot ? Warn : Ink),
         };
-        if (Game.EngineAcceleration > 0)
-        {
-            var days = burn.DeltaV / Game.EngineAcceleration;
-            lines.Add(($"噴射 {days:F2} 日 (実時間 {days / Game.BurnTimeRate:F1} 秒)", days > 3 ? Warn : Good));
-            var start = burn.Time - days / 2 - v.AbsoluteTime;
-            lines.Add((start > 0 ? $"点火推奨 {start:F2} 日後" : "点火推奨 今", start < 0.3 ? Warn : Ink));
-        }
-        else lines.Add(("スロットル0%: 噴射できない (W で上げる)", Warn));
+        if (Game.EngineAcceleration <= 0) lines.Add(("スロットル0%: 噴射できない (W で上げる)", Warn));
         if (Game.NoseOffNode is { } off)
             lines.Add(($"機首と噴射方向のずれ {off:F1}°" + (off > 5 ? "  「ノード」で保持" : ""), off > 5 ? Warn : Good));
         // Only as wide as it needs, against the right edge, so the chart beside it stays in view.

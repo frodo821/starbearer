@@ -19,6 +19,9 @@ public partial class Main
         ? n.Time - (EngineAcceleration > 0 ? n.DeltaV / EngineAcceleration / 2 : 0) - V!.AbsoluteTime
         : null;
 
+    /// <summary>The rate time runs at while the engine burns in orbit: the chosen rate, at most the burn's.</summary>
+    public double BurnRateNow => Math.Min(Rates[SubRateIndex], BurnTimeRate);
+
     void TogglePause()
     {
         Paused = !Paused;

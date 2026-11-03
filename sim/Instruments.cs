@@ -33,20 +33,45 @@ public static class Instruments
         return (x / side * r, y / side * r);
     }
 
-    /// <summary>Mission clock, e.g. "D012 03:24:10".</summary>
-    public static string Clock(double days)
+    /// <summary>A year of the clock, in days.</summary>
+    public const double DaysPerYear = 365;
+    /// <summary>The galaxy's day 0, on the calendar.</summary>
+    public static readonly DateTime Epoch = new(3456, 1, 1);
+
+    /// <summary>A span of time, e.g. "1y 2d 03:04:05.67"; years and days only where there are any.</summary>
+    public static string Span(double days)
     {
-        var seconds = (long)Math.Floor(Math.Max(days, 0) * 86400);
-        return $"D{seconds / 86400:000} {seconds / 3600 % 24:00}:{seconds / 60 % 60:00}:{seconds % 60:00}";
+        var sign = days < 0 ? "-" : "";
+        var cs = (long)Math.Round(Math.Abs(days) * SecondsPerDay * 100);
+        var seconds = cs / 100;
+        var day = seconds / 86400;
+        var (y, d) = (day / (long)DaysPerYear, day % (long)DaysPerYear);
+        var lead = y > 0 ? $"{y}y {d}d " : d > 0 ? $"{d}d " : "";
+        return $"{sign}{lead}{seconds / 3600 % 24:00}:{seconds / 60 % 60:00}:{seconds % 60:00}.{cs % 100:00}";
     }
 
-    /// <summary>Time until an event, e.g. "T-2d 03:24:10", or "T+00:01:05" once it has passed.</summary>
-    public static string Countdown(double days)
+    /// <summary>The mission clock: time since leaving port, as a span.</summary>
+    public static string Clock(double days) => Span(Math.Max(days, 0));
+
+    /// <summary>Time until an event, e.g. "T-2d 03:24:10.00", or "T+00:01:05.00" once it has passed.</summary>
+    public static string Countdown(double days) => (days >= 0 ? "T-" : "T+") + Span(Math.Abs(days));
+
+    static string Ordinal(int n) => n + (n % 100 is 11 or 12 or 13 ? "th" : (n % 10) switch { 1 => "st", 2 => "nd", 3 => "rd", _ => "th" });
+
+    /// <summary>A day of the galaxy on the calendar, e.g. "Jan, 1st 3456".</summary>
+    public static string Day(double day)
     {
-        var seconds = (long)Math.Ceiling(Math.Abs(days) * 86400);
-        var sign = days >= 0 ? "T-" : "T+";
-        var d = seconds / 86400;
-        return $"{sign}{(d > 0 ? $"{d}d " : "")}{seconds / 3600 % 24:00}:{seconds / 60 % 60:00}:{seconds % 60:00}";
+        var at = Epoch.AddDays(Math.Max(day, 0));
+        return $"{at.ToString("MMM", System.Globalization.CultureInfo.InvariantCulture)}, {Ordinal(at.Day)} {at.Year}";
+    }
+
+    /// <summary>A moment of the galaxy on the calendar, e.g. "Jan, 1st 3456, 07:08:09.12".</summary>
+    public static string Date(double day)
+    {
+        var cs = (long)Math.Round(Math.Max(day, 0) * SecondsPerDay * 100);
+        var at = Epoch.AddSeconds(cs / 100);
+        var month = at.ToString("MMM", System.Globalization.CultureInfo.InvariantCulture);
+        return $"{month}, {Ordinal(at.Day)} {at.Year}, {at:HH}:{at:mm}:{at:ss}.{cs % 100:00}";
     }
 
     /// <summary>The nearest charted stars, closest first.</summary>

@@ -72,13 +72,13 @@ public partial class Main
         var s = Save!; var g = G!;
         var lines = War.Casualties(s, g).Select(x => $"自船 {x.Type.Name} を失った: {Missions.Label(g, x.Station)} が破壊された" + (x.Hold.Count > 0 ? $"（積荷 {x.Hold.Count} 件とともに）" : "")).ToList();
         var news = War.Between(s.MarketIn(g), from, to).ToList();
-        lines.AddRange(news.TakeLast(4).Select(e => $"戦況  {e.Day:F0} 日  {War.Describe(g, e)}"));
+        lines.AddRange(news.TakeLast(4).Select(e => $"戦況  {Instruments.Day(e.Day)}  {War.Describe(g, e)}"));
         if (news.Count > 4) lines.Add($"ほか {news.Count - 4} 件（戦況タブ）");
         return lines;
     }
 
     /// <summary>The galaxy's day at the checkpoint, as the port shows it.</summary>
-    public string GalaxyDayText => $"銀河暦 {Save!.TotalDays:F0} 日";
+    public string GalaxyDayText => Instruments.Day(Save!.TotalDays);
 
     /// <summary>Fills the tank from the station's fuel stock, as far as stock and credits go.</summary>
     public void BuyFuel()
@@ -183,7 +183,7 @@ public partial class Main
         var station = v.LocalStation!.Id;
         var here = v.Hold.Where(c => c.Mission.Target == station).ToList();
         PortReport = here.Select(c => $"配達  {c.Mission.Cargo.Name}  健全度 {c.Integrity:P0}   報酬 {c.Payout:F0}").ToList();
-        PortReport.Add($"所要 {v.Time:F1} 日   残燃料 {v.Fuel:F2}   船体 {v.Hull:P0}");
+        PortReport.Add($"所要 {Instruments.Span(v.Time)}   残燃料 {v.Fuel:F2}   船体 {v.Hull:P0}");
         Earned = here.Sum(c => c.Payout);
         if (v.TollsDue > 0) PortReport.Add($"通行税  -{v.TollsDue:F0}");
         s.Credits = Math.Max(0, s.Credits + Earned - v.TollsDue);

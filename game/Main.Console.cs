@@ -141,7 +141,7 @@ public partial class Main
         }
         if (v.Docked)
             return IgnitionIn is { } hold && hold > 0.05
-                ? (ToNode ? null : Key.N, $"次の点火まで {hold:F1} 日。その前に出港する")
+                ? (ToNode ? null : Key.N, $"次の点火まで {Instruments.Span(hold)}。その前に出港する")
                 : (Key.U, "港に停泊中。時機を選んで出港する");
         var st = v.LocalStation;
         if (v.Goal == null)
@@ -163,7 +163,7 @@ public partial class Main
                 return relative > 0.1 ? (Key.Z, $"港の近く。相対速度 {relative:F2} を押し続けて落とす") : (Key.X, $"港まで {distance:F3} AU。押し続けて寄せる");
         }
         if (IgnitionIn is { } wait)
-            return wait > 0.05 ? (ToNode ? null : Key.N, $"次の点火まで {wait:F1} 日" + (v.AutoBurn ? "。自動噴射が点火する" : "。ノードまで時間を進める")) : (Key.E, "点火の時機。機首をノードに向けて点火");
+            return wait > 0.05 ? (ToNode ? null : Key.N, $"次の点火まで {Instruments.Span(wait)}" + (v.AutoBurn ? "。自動噴射が点火する" : "。ノードまで時間を進める")) : (Key.E, "点火の時機。機首をノードに向けて点火");
         if (SubForecast is { Watched: Station, Closest.Distance: < 0.03 }) return (Key.M, "港に接近する軌道。最接近で速度を合わせる");
         var goal = NameOf(v.Goal);
         return v.Waypoint switch

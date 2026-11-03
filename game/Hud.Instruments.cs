@@ -10,7 +10,7 @@ namespace Starbearer;
 /// <summary>The clock and the instrument panels.</summary>
 public partial class Hud
 {
-    const float NavLeft = 10, NavWidth = 350, ShipWidth = 340, TimeTop = 8, TimeHeight = 92;
+    const float NavLeft = 10, NavWidth = 380, ShipWidth = 340, TimeTop = 8, TimeHeight = 92;
     float NavRight => NavLeft + NavWidth;
     float NavTop => TimeTop + TimeHeight + 8;
     /// <summary>Panels sized to what they held last frame: drawn behind, their contents decide how tall.</summary>
@@ -21,7 +21,7 @@ public partial class Hud
     {
         var v = Game.V!;
         var commands = Game.TimeCommands();
-        var width = Mathf.Max(RowWidth(commands) + 2 * PanelPad, NavWidth);
+        var width = Mathf.Max(RowWidth(commands) + 2 * PanelPad, 540);
         Panel(new Rect2(NavLeft, TimeTop, width, TimeHeight), "");
         float x = NavLeft + PanelPad, y = TimeTop + 8;
         var shown = Game.RateShown;
@@ -33,17 +33,20 @@ public partial class Hud
         }
         y += ButtonHeight + 24;
         x = NavLeft + PanelPad;
-        Text(new Vector2(x, y), Instruments.Clock(v.Time), Ink, 18);
-        Text(new Vector2(x + 132, y), "航海", Dim, 11);
-        Text(new Vector2(x + 170, y), Instruments.Clock(v.AbsoluteTime), Dim, 14);
-        Text(new Vector2(x + 284, y), "通算", Dim, 11);
+        var right = NavLeft + width - PanelPad;
+        void RightText(float yy, string s, Color c, int size) => Text(new Vector2(right - F.GetStringSize(s, HorizontalAlignment.Left, -1, size).X, yy), s, c, size);
+        Text(new Vector2(x, y), "航海", Dim, 11);
+        Text(new Vector2(x + 30, y), Instruments.Clock(v.Time), Ink, 17);
+        RightText(y, Instruments.Date(v.AbsoluteTime), Dim, 14);
         y += 22;
         var (label, left) = NextEvent();
         var running = Game.Screen != Screen.Plan && Game.CurrentRate > 0;
         if (left is { } t)
         {
-            Text(new Vector2(x, y), Instruments.Countdown(t), t < 1 ? Warn : Good, 15);
-            Text(new Vector2(x + 132, y), label, Dim, 13);
+            var count = Instruments.Countdown(t);
+            Text(new Vector2(x, y), count, t < 1 ? Warn : Good, 15);
+            Text(new Vector2(x + F.GetStringSize(count, HorizontalAlignment.Left, -1, 15).X + 10, y), label, Dim, 13);
+            RightText(y, "(" + Instruments.Date(v.AbsoluteTime + t) + ")", Dim, 12);
         }
         else Text(new Vector2(x, y), running ? "予定なし" : "時間停止", running ? Dim : Warn, 14);
     }
@@ -127,7 +130,7 @@ public partial class Hud
             foreach (var e in fc.Encounters.Take(5))
             {
                 var isT = e.Star == v.TargetStar;
-                var line = $"{e.Time,5:F1}日  {g.Stars[e.Star].Name}  近日 {e.Periapsis:F2}";
+                var line = $"{Instruments.Span(e.Time)}  {g.Stars[e.Star].Name}  近日 {e.Periapsis:F2}";
                 if (isT) line += $"  減速 Δv {Game.CaptureDv(e):F2}";
                 Line(line, isT ? Good : Ink, 14);
                 if (isT)
@@ -138,8 +141,8 @@ public partial class Hud
             }
             var (txt, col) = fc.End switch
             {
-                PredictionEnd.Stall => ($"{fc.Duration:F0}日後に失速", Warn),
-                PredictionEnd.Collision => ($"{fc.Duration:F1}日後に {g.Stars[fc.CollisionStar!.Value].Name} へ突入", Bad),
+                PredictionEnd.Stall => ($"{Instruments.Span(fc.Duration)} 後に失速", Warn),
+                PredictionEnd.Collision => ($"{Instruments.Span(fc.Duration)} 後に {g.Stars[fc.CollisionStar!.Value].Name} へ突入", Bad),
                 PredictionEnd.Lost => ("星域から離脱", Warn),
                 PredictionEnd.Captured => ($"{g.Stars[fc.Encounters[^1].Star].Name} の井戸に捕まる。降下か噴射で抜ける", Warn),
                 _ => ("", Ink),
@@ -260,7 +263,7 @@ public partial class Hud
             PredictionEnd.Captured => "で井戸に捕まる",
             _ => "以上",
         };
-        var line = $"航程 {total:F1} ly / {fc.Duration:F0} 日{ending}";
+        var line = $"航程 {total:F1} ly / {Instruments.Span(fc.Duration)} {ending}";
         if (targetHit)
         {
             var need = Game.CaptureDv(fc.Encounters.First(e => e.Star == v.TargetStar));

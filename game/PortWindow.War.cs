@@ -50,7 +50,7 @@ public partial class PortWindow
         box.AddChild(Text("最近の出来事", 17, Good));
         var log = m.War.Log.AsEnumerable().Reverse().Take(12).ToList();
         if (log.Count == 0) box.AddChild(Text("なし", 14, Dim));
-        foreach (var e in log) box.AddChild(Text($"{e.Day:F0} 日  {War.Describe(g, e)}", 14, Dim));
+        foreach (var e in log) box.AddChild(Text($"{Instruments.Day(e.Day)}  {War.Describe(g, e)}", 14, Dim));
         return box;
     }
 }

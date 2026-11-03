@@ -20,10 +20,10 @@ public partial class Hud
         Section(x, ref yy, width, "軌道");
         var el = Sublight.OrbitOf(v.Primary.Mu, v.SubPosition, v.SubVelocity);
         var (pe, ap) = Sublight.NextApsides(v.Primary.Mu, v.SubPosition, v.SubVelocity, v.AbsoluteTime);
-        string When(Apsis? a) => a is { } x ? $"  {x.Time - v.AbsoluteTime:F1}日後" : "";
+        string When(Apsis? a) => a is { } x ? "  " + Instruments.Countdown(x.Time - v.AbsoluteTime) : "";
         Line($"Pe {el.Periapsis:F3} AU" + When(pe), Ink);
         Line(el.Bound ? $"Ap {el.Apoapsis:F3} AU" + When(ap) : "Ap なし  脱出軌道", el.Bound ? Ink : Warn);
-        Line($"主天体 {v.Primary.Name}" + (el.Bound ? $"   周期 {el.Period:F1} 日" : ""), Dim);
+        Line($"主天体 {v.Primary.Name}" + (el.Bound ? $"   周期 {Instruments.Span(el.Period)}" : ""), Dim);
         Line($"速度 {v.SubVelocity.Length:F3}   位置誤差 ±{v.NavSigma:F3} ly", v.NavSigma > 0.1 ? Warn : Dim);
         if (Game.SubForecast?.Impact == true) Line("天体に衝突する軌道", Bad);
 
@@ -52,9 +52,9 @@ public partial class Hud
             var planned = last is { Node: not null } ls ? Sublight.RelativeInclination(watched, ls.Position, ls.Velocity + Sublight.Impulse(ls.Position, ls.Velocity, ls.Node)) : incl;
             Line($"相対傾斜 {incl:F1}°" + (last is { Node: not null } ? $" → {planned:F1}°" : ""), planned < 1.5 ? Good : Warn);
             if (Game.SubForecast?.Closest is { } a)
-                Line($"最接近 {a.Distance:F3} AU  {a.Time - v.AbsoluteTime:F1}日後  相対 {a.RelativeSpeed:F2}", a.Distance < 0.05 ? Good : Warn);
+                Line($"最接近 {a.Distance:F3} AU  {Instruments.Countdown(a.Time - v.AbsoluteTime)}  相対 {a.RelativeSpeed:F2}", a.Distance < 0.05 ? Good : Warn);
             if (Game.SubForecast?.Crossing is { } x2)
-                Line($"交差時の{name} {Math.Abs(x2.LeadDegrees):F0}° {(x2.LeadDegrees >= 0 ? "先" : "後ろ")}  {x2.Time - v.AbsoluteTime:F1}日後", Math.Abs(x2.LeadDegrees) < 8 ? Good : Warn);
+                Line($"交差時の{name} {Math.Abs(x2.LeadDegrees):F0}° {(x2.LeadDegrees >= 0 ? "先" : "後ろ")}  {Instruments.Countdown(x2.Time - v.AbsoluteTime)}", Math.Abs(x2.LeadDegrees) < 8 ? Good : Warn);
             else Line($"{name}の軌道半径に届いていない", Warn);
         }
         else if (goal != null && v.Waypoint == null) Line(goal is Center c && c.Key == v.Primary.Key ? "目標を周回中" : "目標はこの天体の外", Dim);
@@ -77,7 +77,7 @@ public partial class Hud
             {
                 var s = live[i];
                 var left = s.Node.Time - v.AbsoluteTime;
-                var when = left > 0 ? $"{left:F1}日後" : "点火!";
+                var when = left > 0 ? Instruments.Countdown(left) : "点火!";
                 var orbit = s.After.Bound ? $"{s.After.Periapsis:F2}-{s.After.Apoapsis:F2}" : "脱出";
                 var row = new Rect2(x - 4, yy, width + 8, 20);
                 var node = s.Node;
