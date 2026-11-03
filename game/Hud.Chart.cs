@@ -139,7 +139,7 @@ public partial class Hud
     {
         if (Game.Chart.Zoom < 40) return;
         var g = Game.G!; var v = Game.V!;
-        foreach (var id in g.Ports.Concat(g.Depots))
+        foreach (var id in g.Ports.Concat(g.Depots).Where(g.Alive))
         {
             var star = g.StarOf(id);
             var st = g.StationAt(id);

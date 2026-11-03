@@ -1,7 +1,7 @@
 namespace Starbearer.Sim;
 
 /// <summary>A power that owns stations. Every faction is at war with every other, for good.</summary>
-public sealed record Faction(int Id, string Name);
+public sealed record Faction(int Id, string Name, string Weapon = "shells");
 
 /// <summary>How a faction treats the company, by its standing with it.</summary>
 public enum Stance { Hostile, Neutral, Friendly }
@@ -80,11 +80,12 @@ public static class Factions
         count = Math.Min(count, n);
         var list = new Faction[count];
         var suffixes = Suffixes.OrderBy(_ => r.Next()).ToArray();
+        var weapons = War.Weapons.OrderBy(_ => r.Next()).ToArray();   // each its own doctrine, so fronts differ in what they burn
         for (int f = 0; f < count; f++)
         {
             string name;
             do name = Galaxy.MakeName(r); while (!names.Add(name));
-            list[f] = new Faction(f, name + suffixes[f % suffixes.Length]);
+            list[f] = new Faction(f, name + suffixes[f % suffixes.Length], weapons[f % weapons.Length]);
         }
         if (count == 0) return (list, owners);
         // Every way of dealing the regions out evenly, kept where each faction's share is one run a gate

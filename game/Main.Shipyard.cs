@@ -16,7 +16,7 @@ public partial class Main
     public int NearestShipyard()
     {
         var here = G!.Stars[V!.SystemStar];
-        return G.Ports.Where(p => G.KindOf(p) == StationKind.Shipyard && G.StarAt(p).Region == here.Region)
+        return G.Ports.Where(p => G.KindOf(p) == StationKind.Shipyard && G.Alive(p) && G.StarAt(p).Region == here.Region)
             .OrderBy(p => (G.StarAt(p).Position - here.Position).Length).DefaultIfEmpty(-1).First();
     }
 

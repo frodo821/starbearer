@@ -158,6 +158,12 @@ public partial class Autotest : Node
         Do(() =>
         {
             Shot("01b_port_market");
+            _g.HudForTest.Port.ShowTab(3);
+        });
+        Do(() =>
+        {
+            Check("the war tab lists the fronts", War.Fronts(_g.G!).Any());
+            Shot("01b_port_war");
             _g.HudForTest.Port.ShowTab(0);
         });
         Do(() =>

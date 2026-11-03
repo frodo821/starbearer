@@ -60,6 +60,10 @@ public static class Tuning
     public const int RegionCount = 4;
     /// <summary>Powers at war, each holding about the same share of the regions.</summary>
     public const int FactionCount = 2;
+    /// <summary>Per side of a front, systems that get fortress sites, and how many of the nearest are fought over from the start.</summary>
+    public const int FrontSystems = 4, Battlefields = 1;
+    /// <summary>A fortress's supply line to each station of its faction: its strength at no distance, and the distance it falls to 1/e over.</summary>
+    public const double SupplyLine = 1, SupplyLy = 50;
     public const int StarsPerRegion = 30;
     public const int StarCount = RegionCount * StarsPerRegion;
     /// <summary>The disc grows with the star count so the stars stay as far apart as before.</summary>

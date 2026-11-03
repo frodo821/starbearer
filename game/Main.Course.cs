@@ -15,7 +15,7 @@ public partial class Main
     int NearestStation()
     {
         var here = G!.Stars[V!.SystemStar].Position;
-        return G.Ports.Concat(G.Depots).Select(G.StarOf).Where(i => i != V.SystemStar).MinBy(i => (G.Stars[i].Position - here).Length);
+        return G.Ports.Concat(G.Depots).Where(G.Alive).Select(G.StarOf).Where(i => i != V.SystemStar).MinBy(i => (G.Stars[i].Position - here).Length);
     }
 
     /// <summary>

@@ -63,6 +63,20 @@ public partial class Main
         return moved.Count == 0 ? null : "スタンディング  " + string.Join("   ", moved);
     }
 
+    /// <summary>
+    /// What the war did over those days, as lines for the port: the company's ships lost with a station
+    /// first, then the news, the most recent few.
+    /// </summary>
+    List<string> WarNews(double from, double to)
+    {
+        var s = Save!; var g = G!;
+        var lines = War.Casualties(s, g).Select(x => $"自船 {x.Type.Name} を失った: {Missions.Label(g, x.Station)} が破壊された" + (x.Hold.Count > 0 ? $"（積荷 {x.Hold.Count} 件とともに）" : "")).ToList();
+        var news = War.Between(s.MarketIn(g), from, to).ToList();
+        lines.AddRange(news.TakeLast(4).Select(e => $"戦況  {e.Day:F0} 日  {War.Describe(g, e)}"));
+        if (news.Count > 4) lines.Add($"ほか {news.Count - 4} 件（戦況タブ）");
+        return lines;
+    }
+
     /// <summary>The galaxy's day at the checkpoint, as the port shows it.</summary>
     public string GalaxyDayText => $"銀河暦 {Save!.TotalDays:F0} 日";
 
@@ -97,10 +111,19 @@ public partial class Main
     public void WaitAtPort(double days)
     {
         var s = Save!;
-        s.TotalDays += days;
-        s.MarketIn(G!);
+        var g = G!;
+        var from = s.TotalDays;
+        var waited = 0;
+        // A day at a time, so a port coming under fire sends the ship off before it falls.
+        for (; waited < days; waited++)
+        {
+            if (g.War.HullOf(s.PortStation) < 0.6) break;
+            s.TotalDays += 1;
+            s.MarketIn(g);
+        }
+        PortReport = WarNews(from, s.TotalDays);
         VisitingPort = false;
-        Message = $"{days:F0} 日待った";
+        Message = waited < days ? $"{waited} 日で待つのをやめた: この港は砲火を浴びている（構造 {g.War.HullOf(s.PortStation):P0}）" : $"{days:F0} 日待った";
         PortChanged();
     }
 
@@ -169,12 +192,14 @@ public partial class Main
         s.HeldFuel = v.Fuel;
         s.HeldHull = v.Hull;
         s.HeldLife = v.LifeRemaining;
+        var from = s.TotalDays;
         s.TotalDays += v.Time;
-        s.MarketIn(G!);   // the galaxy's stock catches up with the days flown
+        s.MarketIn(G!);   // the galaxy's stock, and the war, catch up with the days flown
         var before = s.Standing.ToArray();
         foreach (var c in here) Missions.Deliver(s, G!, c);
         if (StandingChange(before) is { } moved) PortReport.Add(moved);
         s.PortStation = station;
+        PortReport.AddRange(WarNews(from, s.TotalDays));
         s.ClosestApproach = v.ClosestApproach;
         WriteSave();
         VisitingPort = false;

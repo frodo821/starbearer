@@ -118,8 +118,10 @@ public partial class SimTests
                     Assert.Equal(s, steps.Stock[star][i], 9);
                 }
             // Fuel is made in every region, so it doesn't run out across the galaxy.
-            var dry = g.Economies.Keys.Count(s => once.Fill(g, s, Wares.ShipFuel) < 0.1);
-            Assert.True(dry < g.Economies.Count / 5, $"{dry} stations out of fuel");
+            // Fortresses burn it for war, and a fallen station holds nothing: the rest keep enough.
+            var open = g.Economies.Keys.Where(s => g.Alive(s) && g.KindOf(s) != StationKind.Fortress).ToList();
+            var dry = open.Count(s => once.Fill(g, s, Wares.ShipFuel) < 0.1);
+            Assert.True(dry < open.Count / 5, $"{dry} stations out of fuel");
         }
     }
 }

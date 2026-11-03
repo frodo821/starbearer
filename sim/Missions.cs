@@ -5,7 +5,7 @@ namespace Starbearer.Sim;
 /// come first, up to Depot; the ones after it each have a role of their own. Harvesters need the body
 /// their work needs: gas a giant, ice a moon; mines work the belt around the star.
 /// </summary>
-public enum StationKind { Mine, IceMine, GasHarvester, Refinery, ChemPlant, FuelPlant, Farm, Clinic, Factory, City, Depot, Shipyard, Colony, Gate }
+public enum StationKind { Mine, IceMine, GasHarvester, Refinery, ChemPlant, FuelPlant, Farm, Clinic, Factory, City, Depot, Shipyard, Colony, Armory, Fortress, Gate }
 
 /// <summary>A job from a mission board: carry Cargo to Target for Pay, less whatever the cargo loses.</summary>
 public sealed record Mission(string Id, int Origin, int Target, Cargo Cargo, double Pay);
@@ -56,6 +56,8 @@ public static class Missions
         StationKind.City => "都市ステーション",
         StationKind.Shipyard => "造船所",
         StationKind.Colony => "コロニー",
+        StationKind.Armory => "軍需工場",
+        StationKind.Fortress => "要塞",
         StationKind.Gate => "ゲート",
         _ => "補給ステーション",
     };
@@ -66,6 +68,8 @@ public static class Missions
         StationKind.Depot => "補給港",
         StationKind.Shipyard => "造船所",
         StationKind.Colony => "コロニー",
+        StationKind.Armory => "軍需工場",
+        StationKind.Fortress => "要塞",
         StationKind.Gate => "ゲート",
         _ => "港",
     };
@@ -76,10 +80,11 @@ public static class Missions
         StationKind.Shipyard => "▲",
         StationKind.Colony => "●",
         StationKind.Gate => "◎",
+        StationKind.Fortress => "■",
         _ => "◆",
     };
 
-    /// <summary>The marks after a star's name on the chart, one per station there: ◆ port, ◇ depot, ▲ shipyard, ● colony, ◎ gate; none without a station.</summary>
+    /// <summary>The marks after a star's name on the chart, one per station standing there: ◆ port, ◇ depot, ▲ shipyard, ● colony, ■ fortress, ◎ gate; none without a station.</summary>
     public static string Mark(Galaxy g, int star) =>
         g.HasStation(star) ? " " + string.Concat(g.StationsIn(star).Select(id => MarkOf(g.KindOf(id)))) : "";
 
@@ -104,12 +109,12 @@ public static class Missions
     {
         var r = new Rng(g.Seed * 7919 + g.SeedKey(station) * 104729 + (ulong)deliveries * 31);
         var kind = g.KindOf(station);
-        if (kind == StationKind.Gate) return new();
+        if (kind is StationKind.Gate or StationKind.Fortress) return new();
         // Within the region, or one a gate from here leads to.
         var region = g.StarAt(station).Region;
         var reach = g.LinkedRegions(region).Append(region).ToHashSet();
-        var places = g.Economies.Keys.Where(s => s != station && reach.Contains(g.StarAt(s).Region)).ToArray();
-        var stations = places.Where(s => g.KindOf(s) != StationKind.Gate)
+        var places = g.Economies.Keys.Where(s => s != station && g.Alive(s) && reach.Contains(g.StarAt(s).Region)).ToArray();
+        var stations = places.Where(s => g.KindOf(s) is not (StationKind.Gate or StationKind.Fortress))
             .OrderBy(s => r.Unit() / (g.KindOf(s) == StationKind.Colony ? ColonyPull : 1)).ToArray();
         if (stations.Length == 0) return new();
         var count = kind is StationKind.Depot or StationKind.Shipyard ? SmallOffers : PortOffers;

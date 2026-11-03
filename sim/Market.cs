@@ -9,6 +9,8 @@ namespace Starbearer.Sim;
 public sealed class Market
 {
     public double Day { get; set; }
+    /// <summary>The war, which runs day by day with the market. The galaxy reads it from here (see AdvanceTo).</summary>
+    public WarState War { get; set; } = new();
     /// <summary>Per station (by star), stock in the order of its StationEconomy.Wares.</summary>
     public Dictionary<int, double[]> Stock { get; set; } = new();
     /// <summary>How full every station was, every few days back, for news that is still on its way.</summary>
@@ -24,7 +26,8 @@ public sealed class Market
     public static Market Open(Galaxy g)
     {
         var r = new Rng(g.Seed ^ 0x3A2C7E);
-        var m = new Market { Day = -HistoryDays };
+        var m = new Market { Day = -HistoryDays, War = WarState.Start(g) };
+        g.War = m.War;
         foreach (var (star, e) in g.Economies)
             m.Stock[star] = e.Target.Select(t => t * r.Range(0.6, 1.3)).ToArray();
         m.AdvanceTo(g, 0);
@@ -63,6 +66,7 @@ public sealed class Market
     /// <summary>Runs the economy on to the given galaxy day, a day at a time.</summary>
     public void AdvanceTo(Galaxy g, double day)
     {
+        g.War = War;
         if (History.Count == 0) Record(g);
         while (Day + 1 <= day)
         {
@@ -128,10 +132,14 @@ public sealed class Market
         return (b / 255.0 * Economy.Capacity, snap.Day);
     }
 
+    /// <summary>One day: production (a fortress's upkeep is the war's), trade between neighbours, then the war.</summary>
     void Step(Galaxy g)
     {
-        foreach (var (star, e) in g.Economies) Produce(e, Stock[star]);
-        foreach (var (a, b, closeness) in g.Neighbours) Even(g.Economies[a], Stock[a], g.Economies[b], Stock[b], closeness);
+        foreach (var (star, e) in g.Economies)
+            if (g.Alive(star) && g.KindOf(star) != StationKind.Fortress) Produce(e, Stock[star]);
+        foreach (var (a, b, closeness) in g.Neighbours)
+            if (g.Alive(a) && g.Alive(b)) Even(g.Economies[a], Stock[a], g.Economies[b], Stock[b], closeness);
+        Sim.War.Step(g, this);
     }
 
     /// <summary>
@@ -176,7 +184,7 @@ public sealed class Market
         }
     }
 
-    public Market Copy() => new() { Day = Day, Stock = Stock.ToDictionary(k => k.Key, k => (double[])k.Value.Clone()), History = History.ToList() };
+    public Market Copy() => new() { Day = Day, War = War.Copy(), Stock = Stock.ToDictionary(k => k.Key, k => (double[])k.Value.Clone()), History = History.ToList() };
 }
 
 /// <summary>Every station's fill on one day, a byte per ware in Galaxy.EconomyOrder, base64 for a small save.</summary>

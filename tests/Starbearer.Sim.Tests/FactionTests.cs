@@ -19,9 +19,14 @@ public partial class SimTests
                 Assert.Equal(g.Regions.Length / g.Factions.Length, mine.Count);
                 Assert.All(mine, a => Assert.True(mine.Count == 1 || g.LinkedRegions(a).Any(mine.Contains), $"seed {seed}: {f.Name} is cut in two"));
             }
-            // Every station belongs to its region's faction, and every system with one is held, none contested yet.
-            Assert.All(g.StationStars.Keys, st => Assert.Equal(g.RegionOwners[g.StarAt(st).Region], g.OwnerOf(st)));
-            Assert.All(g.StationStars.Values.Distinct(), star => Assert.Equal((g.RegionOwners[g.Stars[star].Region], false), g.Claim(star)));
+            // Every station but the fortresses belongs to its region's faction, and a system without one is
+            // held by it alone. Each front has a battlefield on each side from the start.
+            var forts = g.StationStars.Keys.Where(st => g.KindOf(st) == StationKind.Fortress).ToHashSet();
+            Assert.All(g.StationStars.Keys.Except(forts), st => Assert.Equal(g.RegionOwners[g.StarAt(st).Region], g.OwnerOf(st)));
+            Assert.All(g.StationStars.Values.Distinct().Where(star => !g.AllStationsIn(star).Any(forts.Contains)),
+                star => Assert.Equal((g.RegionOwners[g.Stars[star].Region], false), g.Claim(star)));
+            Assert.All(War.Fronts(g), star => Assert.Equal(g.RegionOwners[g.Stars[star].Region], g.Claim(star).Holder));   // the defender came first
+            Assert.NotEmpty(War.Fronts(g));
             // The two sides meet: some gate leads from one faction's region into the other's.
             Assert.Contains(g.Gates, gate => g.OwnerOf(gate) != g.OwnerOf(g.GateLinks[gate]));
         }

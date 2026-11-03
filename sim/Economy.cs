@@ -52,7 +52,7 @@ public static class Economy
     /// The lines a kind of station can run: those it always runs, and options it runs a seeded few of
     /// (mines and harvesters work what their ground holds).
     /// </summary>
-    static (Line[] Always, Line[] Options, int Picks) Plan(StationKind kind) => kind switch
+    static (Line[] Always, Line[] Options, int Picks) Plan(StationKind kind, string weapon = "shells") => kind switch
     {
         StationKind.Mine => (Array.Empty<Line>(), new[] { Make(R("iron_ore", 2)), Make(R("titanium_ore", 1)), Make(R("silica", 1.5)), Make(R("uranium_ore", 0.4)) }, 2),
         StationKind.IceMine => (new[] { Make(R("water", 6)), Make(R("organics", 1.2)) }, Array.Empty<Line>(), 0),
@@ -78,13 +78,36 @@ public static class Economy
         StationKind.Factory => (new[] { From(new[] { R("silicon_carbide", 0.6), R("titanium", 0.35) }, R("electronics", 0.6)) }, Array.Empty<Line>(), 0),
         StationKind.City => (new[] { Use(R("food", 1.2), R("water", 0.6), R("oxygen", 0.6), R("medical", 0.12), R("electronics", 0.08)) }, Array.Empty<Line>(), 0),
         StationKind.Colony => (new[] { Use(R("food", 0.6), R("water", 0.5), R("oxygen", 0.5), R("medical", 0.08), R("steel", 0.2)) }, Array.Empty<Line>(), 0),
+        StationKind.Armory => (ArmoryLines(weapon), Array.Empty<Line>(), 0),
+        // A fortress's lines are its upkeep in war: the war burns them (see War.Step), steel toward the next fortress.
+        StationKind.Fortress => (new[] { Use(R(weapon, AmmoPerDay(weapon)), R("food", 0.15), R("steel", 0.1)) }, Array.Empty<Line>(), 0),
         StationKind.Shipyard => (new[] { Use(R("steel", 0.4), R("titanium", 0.2), R("electronics", 0.08), R("silicon_carbide", 0.1), R("hydrazine", 0.15)) }, Array.Empty<Line>(), 0),
         _ => (Array.Empty<Line>(), Array.Empty<Line>(), 0),
     };
 
-    static Line[] LinesFor(StationKind kind, Rng r)
+    /// <summary>What a fortress fires a day, by the ware its weapon burns: dear ammunition goes slowly, hydrogen by the tank.</summary>
+    static double AmmoPerDay(string weapon) => weapon switch
     {
-        var (always, options, picks) = Plan(kind);
+        "missiles" => 0.12, "shells" => 0.3, "slugs" => 0.4, "laser_optics" => 0.08, _ => 0.6,
+    };
+
+    /// <summary>An armory makes its faction's ammunition, and explosives from ammonia where the shot needs them.</summary>
+    static Line[] ArmoryLines(string weapon)
+    {
+        var explosives = From(new[] { R("ammonia", 0.6) }, R("explosives", 0.5));
+        return weapon switch
+        {
+            "missiles" => new[] { explosives, From(new[] { R("steel", 0.25), R("electronics", 0.1), R("hydrazine", 0.2), R("explosives", 0.25) }, R("missiles", 0.5)) },
+            "shells" => new[] { explosives, From(new[] { R("steel", 0.4), R("explosives", 0.4) }, R("shells", 1.2)) },
+            "slugs" => new[] { From(new[] { R("steel", 0.8) }, R("slugs", 1.6)) },
+            "laser_optics" => new[] { From(new[] { R("silicon_carbide", 0.4), R("electronics", 0.12) }, R("laser_optics", 0.32)) },
+            _ => Array.Empty<Line>(),
+        };
+    }
+
+    static Line[] LinesFor(StationKind kind, Rng r, string weapon = "shells")
+    {
+        var (always, options, picks) = Plan(kind, weapon);
         return always.Concat(options.OrderBy(_ => r.Next()).Take(picks)).ToArray();
     }
 
@@ -113,6 +136,7 @@ public static class Economy
         StationKind.FuelPlant => Array.Empty<(string, double)>(),
         StationKind.Refinery or StationKind.Factory => new[] { R("fission_fuel", 0.05) },
         StationKind.Gate => new[] { R("fusion_fuel", 0.15) },
+        StationKind.Fortress => new[] { R("fusion_fuel", 0.1) },
         StationKind.City or StationKind.Colony or StationKind.Shipyard => new[] { R("fusion_fuel", 0.1) },
         _ => new[] { R("fusion_fuel", 0.05) },
     };
@@ -120,7 +144,8 @@ public static class Economy
     public static StationEconomy Of(Galaxy g, int station)
     {
         var kind = g.KindOf(station);
-        var lines = LinesFor(kind, new Rng(g.Seed * 40503 + g.SeedKey(station)));
+        var weapon = kind is StationKind.Armory or StationKind.Fortress && g.OwnerOf(station) is var f and >= 0 ? g.Factions[f].Weapon : "shells";
+        var lines = LinesFor(kind, new Rng(g.Seed * 40503 + g.SeedKey(station)), weapon);
         var upkeep = UpkeepFor(kind);
         var flow = new Dictionary<string, double>();
         void Add(string w, double rate) => flow[w] = flow.GetValueOrDefault(w) + rate;
