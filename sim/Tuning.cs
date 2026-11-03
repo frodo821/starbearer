@@ -58,6 +58,8 @@ public static class Tuning
 
     // Generation. A region is about what the whole galaxy used to be: 28 stars in 24 ly, 4 ports, 8 depots.
     public const int RegionCount = 4;
+    /// <summary>Powers at war, each holding about the same share of the regions.</summary>
+    public const int FactionCount = 2;
     public const int StarsPerRegion = 30;
     public const int StarCount = RegionCount * StarsPerRegion;
     /// <summary>The disc grows with the star count so the stars stay as far apart as before.</summary>

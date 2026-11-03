@@ -82,9 +82,11 @@ public partial class Main
         PortChanged();
     }
 
-    /// <summary>Where the gate of this system leads, or -1.</summary>
     /// <summary>The gate station this system's gate leads to, or -1.</summary>
     public int GateExit => V?.LocalStation is { } st && G!.GateLinks.TryGetValue(st.Id, out var exit) ? exit : -1;
+
+    /// <summary>Whether this system's gate lets the ship in: its owner must not be hostile. The exit doesn't ask.</summary>
+    public bool GateAdmitted => V?.LocalStation is { } st && Factions.Admits(Save!, G!, st.Id);
 
     /// <summary>What a passage through this system's gate would cost now.</summary>
     public double GateToll => Gates.Toll(Save!, V!);
@@ -97,6 +99,7 @@ public partial class Main
         if (!v.Class.Gates) { Message = $"{v.Class.Name} はゲートを通れない"; return; }
         if (v.Docked) { Message = "出港してからゲートへ向かう"; return; }
         if (v.GateBooked != null) { v.CancelGate(); Message = "ゲート通過の予約を取り消した"; return; }
+        if (!GateAdmitted) { Message = $"{Factions.OwnerName(G!, v.LocalStation!.Id)} はゲートの通航を拒否している（敵対）"; return; }
         var toll = GateToll;
         if (Save!.Credits - v.TollsDue < toll) { Message = $"通行税 {toll:F0} を払えない"; return; }
         v.BookGate(toll);

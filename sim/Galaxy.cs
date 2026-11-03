@@ -38,6 +38,27 @@ public sealed class Galaxy
     /// <summary>Where each gate leads: the station id of the gate it is paired with.</summary>
     public Dictionary<int, int> GateLinks { get; init; } = new();
 
+    /// <summary>The powers at war over the galaxy. Empty in a galaxy made by hand, where no one owns anything.</summary>
+    public Faction[] Factions { get; set; } = Array.Empty<Faction>();
+    /// <summary>The faction each region was given at the start, by region id.</summary>
+    public int[] RegionOwners { get; set; } = Array.Empty<int>();
+    /// <summary>Owners of stations that don't simply belong to their region's faction, by station id.</summary>
+    public Dictionary<int, int> Owners { get; init; } = new();
+
+    /// <summary>The faction that owns a station, for good; -1 for none.</summary>
+    public int OwnerOf(int station) =>
+        Owners.TryGetValue(station, out var f) ? f : RegionOwners.Length > 0 ? RegionOwners[StarAt(station).Region] : -1;
+
+    /// <summary>
+    /// Who holds a system: the faction of its earliest station (stations are numbered as they are built),
+    /// and whether another faction has a station there too. -1 where no faction has one.
+    /// </summary>
+    public (int Holder, bool Contested) Claim(int star)
+    {
+        var owners = StationsIn(star).Select(OwnerOf).Where(f => f >= 0).ToList();
+        return owners.Count == 0 ? (-1, false) : (owners[0], owners.Distinct().Count() > 1);
+    }
+
     public int StarOf(int station) => StationStars[station];
     public StationKind KindOf(int station) => Kinds[station];
     public bool IsStation(int id) => StationStars.ContainsKey(id);
@@ -202,7 +223,7 @@ public sealed class Galaxy
 
     static readonly string[] Syllables = "ka ru mi to sa ne ra li on ve th al dor ys ean or tes mar qu ien sol vi ga".Split(' ');
 
-    static string MakeName(Rng r)
+    internal static string MakeName(Rng r)
     {
         var s = "";
         for (int i = 0, n = 2 + r.Index(2); i < n; i++) s += Syllables[r.Index(Syllables.Length)];
@@ -271,6 +292,7 @@ public sealed class Galaxy
             GateLinks = links.ToDictionary(l => id[l.Key], l => id[l.Value]),
         };
         foreach (var (star, c) in systems) galaxy._systems[star] = c;   // built already, to fit the stations
+        (galaxy.Factions, galaxy.RegionOwners) = Sim.Factions.Divide(r, galaxy, names, Tuning.FactionCount);
         return galaxy;
     }
 

@@ -85,6 +85,7 @@ public static class Trade
         m.Put(g, s.PortStation, lot.Mission.Cargo.Ware!, lot.Mission.Cargo.Volume);
         s.Credits += value;
         s.Hold.Remove(lot);
+        Factions.Serve(s, g, s.PortStation, value, lot.Mission.Cargo.Ware);
         return value;
     }
 
@@ -125,7 +126,9 @@ public static class Trade
                     Cost = lot.Cost * (1 - k / volume),
                 });
         }
-        if (!dryRun) s.Credits += value;
+        if (dryRun) return value;
+        s.Credits += value;
+        Factions.Serve(s, g, star, value, ware);
         return value;
     }
 

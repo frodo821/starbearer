@@ -80,8 +80,8 @@ public partial class Main
             }
             list.Add(("操船", ShipCommands(Helm.EngineOn, this)));
             list.Add(("機首", NoseCommands));
-            var port = new List<Command> { new(Key.X, "X", "接近", st != null, Hold: true), new(Key.Z, "Z", "相対0", st != null, Hold: true), new(Key.U, "U", "入港", v.CanDock) };
-            if (v.AtGate) port.Add(new(Key.K, "", !v.Class.Gates ? "ゲート不可" : v.GateBooked != null ? "通過を取消" : $"ゲート通過 {GateToll:F0}", v.Class.Gates));
+            var port = new List<Command> { new(Key.X, "X", "接近", st != null, Hold: true), new(Key.Z, "Z", "相対0", st != null, Hold: true), new(Key.U, "U", v.CanDock && !DockAdmitted ? "入港拒否" : "入港", v.CanDock && DockAdmitted) };
+            if (v.AtGate) port.Add(new(Key.K, "", !v.Class.Gates ? "ゲート不可" : v.GateBooked != null ? "通過を取消" : !GateAdmitted ? "通航拒否" : $"ゲート通過 {GateToll:F0}", v.Class.Gates && (GateAdmitted || v.GateBooked != null)));
             list.Add(("港", port.ToArray()));
             list.Add(("航行", new Command[] { new(Key.J, "J", "FTL発進"), new(Key.Tab, "Tab", OrbitSky ? "軌道図" : "空"), new(Key.I, "I", "積荷") }));
             return list;
@@ -137,6 +137,7 @@ public partial class Main
             var (stationAt, stationSpeed) = v.StationNow();
             var distance = (stationAt - v.SubPosition).Length;
             var relative = (stationSpeed - v.SubVelocity).Length;
+            if (v.CanDock && !DockAdmitted) return (Key.J, $"{Factions.OwnerName(G!, st.Id)} は入港を拒否している。ほかの港へ");
             if (v.CanDock) return (Key.J, "港のすぐそば。発進するか、U で入港し直す");
             if (distance < 0.05)
                 return relative > 0.1 ? (Key.Z, $"港の近く。相対速度 {relative:F2} を押し続けて落とす") : (Key.X, $"港まで {distance:F3} AU。押し続けて寄せる");

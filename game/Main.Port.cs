@@ -54,6 +54,15 @@ public partial class Main
         _hud.Port.Rebuild();
     }
 
+    /// <summary>How standing moved since before, as a line for the port; null if it didn't.</summary>
+    string? StandingChange(double[] before)
+    {
+        var g = G!; var s = Save!;
+        var moved = g.Factions.Where(f => f.Id < before.Length && Math.Abs(Factions.Standing(s, f.Id) - before[f.Id]) >= 0.005)
+            .Select(f => $"{f.Name} {Factions.Standing(s, f.Id) - before[f.Id]:+0.00;-0.00}").ToList();
+        return moved.Count == 0 ? null : "スタンディング  " + string.Join("   ", moved);
+    }
+
     /// <summary>The galaxy's day at the checkpoint, as the port shows it.</summary>
     public string GalaxyDayText => $"銀河暦 {Save!.TotalDays:F0} 日";
 
@@ -77,8 +86,9 @@ public partial class Main
     public void SellWare(string ware, int units)
     {
         var s = Save!;
+        var before = s.Standing.ToArray();
         if (Trade.SellUnits(s, G!, s.MarketIn(G!), ware, units) is not { } got) { Refuse($"{Wares.Get(ware).Name}: ここでは売れない"); return; }
-        Message = $"{Wares.Get(ware).Name} を {units} 単位、{got:F0} で売った";
+        Message = $"{Wares.Get(ware).Name} を {units} 単位、{got:F0} で売った" + (StandingChange(before) is { } moved ? "。" + moved : "");
         PortChanged();
     }
 
@@ -112,9 +122,13 @@ public partial class Main
             Message = "出港した。ここから生命維持を消費する";
             _forecastDirty = true;
         }
+        else if (v.CanDock && !DockAdmitted) Message = $"{Factions.OwnerName(G!, v.LocalStation!.Id)} は入港を拒否した（敵対）";
         else if (v.RequestDock()) Dock();
         else Message = $"港まで {Tuning.DockRange:F3} AU、相対 {Tuning.DockRelativeSpeed:F3} 以内で入港できる（X 接近、Z 相対0 で寄せる）";
     }
+
+    /// <summary>Whether the station in reach lets the ship dock: its owner must not be hostile.</summary>
+    public bool DockAdmitted => V?.LocalStation is { } st && Factions.Admits(Save!, G!, st.Id);
 
     public void OpenPort()
     {
@@ -157,7 +171,9 @@ public partial class Main
         s.HeldLife = v.LifeRemaining;
         s.TotalDays += v.Time;
         s.MarketIn(G!);   // the galaxy's stock catches up with the days flown
+        var before = s.Standing.ToArray();
         foreach (var c in here) Missions.Deliver(s, G!, c);
+        if (StandingChange(before) is { } moved) PortReport.Add(moved);
         s.PortStation = station;
         s.ClosestApproach = v.ClosestApproach;
         WriteSave();

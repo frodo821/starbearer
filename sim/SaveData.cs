@@ -20,6 +20,8 @@ public sealed class SaveData
     /// <summary>The board at the port of the checkpoint, as posted (see Missions.OffersFor).</summary>
     public List<Mission> Offers { get; set; } = new();
     public string OffersAt { get; set; } = "";
+    /// <summary>How each faction regards the company, by faction id (see Factions).</summary>
+    public double[] Standing { get; set; } = new double[Tuning.FactionCount];
     /// <summary>The galaxy's stock, as of the checkpoint.</summary>
     public Market? Market { get; set; }
 

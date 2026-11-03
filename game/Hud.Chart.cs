@@ -43,6 +43,7 @@ public partial class Hud
             var err = (float)(Tuning.ChartErrorLy * Voyage.ChartFactor(v.ClosestApproach[i]) * zoom);
             if (err > 2) DrawArc(p, err * 2, 0, Mathf.Tau, 20, new Color(1f, 0.6f, 0.3f, 0.45f), 1f, true);
             var station = g.HasStation(i);
+            DrawClaim(p, g.Claim(i));
             var name = s.Name + Missions.Mark(g, i) + (parked.TryGetValue(i, out var ships) ? $"  自船×{ships}" : "");
             if (ships > 0) DrawRect(new Rect2(p + new Vector2(-9, -9), 18, 18), new Color(Good, 0.8f), false, 1.5f);
             if (i == current) { DrawHere(p, name, ring: true); continue; }
@@ -68,6 +69,21 @@ public partial class Hud
         }
     }
 
+    /// <summary>
+    /// Whose a system is: a ring in its holder's colour, and for a contested one, the ring split between
+    /// the holder and its rival, with a short tick across.
+    /// </summary>
+    void DrawClaim(Vector2 p, (int Holder, bool Contested) claim)
+    {
+        if (claim.Holder < 0) return;
+        var c = new Color(Palette.Faction(claim.Holder), 0.85f);
+        if (!claim.Contested) { DrawArc(p, 6.5f, 0, Mathf.Tau, 20, c, 1.5f, true); return; }
+        var rival = new Color(Palette.Faction(Game.G!.Factions.Select(f => f.Id).First(f => f != claim.Holder)), 0.85f);
+        DrawArc(p, 7f, -Mathf.Pi / 2, Mathf.Pi / 2, 12, c, 2f, true);
+        DrawArc(p, 7f, Mathf.Pi / 2, Mathf.Pi * 1.5f, 12, rival, 2f, true);
+        DrawLine(p + new Vector2(-10, 10), p + new Vector2(10, -10), new Color(Palette.Warn, 0.9f), 1.5f, true);
+    }
+
     /// <summary>Zoomed out to where regions read, each one's name over its middle.</summary>
     void DrawRegionNames()
     {
@@ -82,6 +98,12 @@ public partial class Hud
             var width = F.GetStringSize(label, HorizontalAlignment.Left, -1, size).X;
             var at = MapPoint(region.Center) + new Vector2(-width / 2, 0);
             Text(at, label, new Color(region.Id == mine ? Good : Ink, 0.4f * fade), size);
+            if (region.Id < g.RegionOwners.Length && g.RegionOwners[region.Id] is var f and >= 0)
+            {
+                var owner = g.Factions[f].Name;
+                var w = F.GetStringSize(owner, HorizontalAlignment.Left, -1, 16).X;
+                Text(MapPoint(region.Center) + new Vector2(-w / 2, 22), owner, new Color(Palette.Faction(f), 0.55f * fade), 16);
+            }
         }
     }
 

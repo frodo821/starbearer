@@ -82,6 +82,8 @@ public partial class Hud
         if (Game.Owns(Modules.Transfer)) yield return new("計算機で計画", () => Game.PlanFor(o, Key.T));
         if (o is Station && v.AtGate && !v.Docked && !v.Class.Gates)
             yield return new($"{v.Class.Name} はゲートを通れない", null);
+        else if (o is Station && v.AtGate && !v.Docked && !Game.GateAdmitted && v.GateBooked == null)
+            yield return new($"{Factions.OwnerName(Game.G!, v.LocalStation!.Id)} は通航を拒否している", null);
         else if (o is Station && v.AtGate && !v.Docked)
             yield return new(v.GateBooked != null ? "通過の予約を取消" : $"通過を予約（通行税 {Game.GateToll:F0}）", Game.ToggleGate);
     }
@@ -94,7 +96,9 @@ public partial class Hud
         foreach (var id in g.StationsIn(star))
         {
             if (Game.FuelNews(id) is { } news) yield return new($"{Missions.Label(g, id)}  {news}", null);
-            yield return new($"港の情報: {Missions.Label(g, id)}", () => Game.ShowStationInfo(id));
+            var owner = Factions.OwnerName(g, id);
+            var refused = !Factions.Admits(Game.Save!, g, id) ? "  入港拒否" : "";
+            yield return new($"港の情報: {Missions.Label(g, id)}" + (owner != "" ? $"（{owner}）" : "") + refused, () => Game.ShowStationInfo(id));
         }
         if (star == v.TargetStar && Game.FreeCourse) yield return new("目的地を解除", Game.ClearCourse);
         else if (star != v.TargetStar) yield return new("目的地にする", () => Game.SetCourse(star));
@@ -106,6 +110,7 @@ public partial class Hud
         var g = Game.G!;
         return g.Stars[star].Name + Missions.Mark(g, star)
             + (g.GateIn(star) is var gate and >= 0 ? $" → {g.StarAt(g.GateLinks[gate]).Name}" : "")
+            + (Factions.ClaimText(g, star) is { Length: > 0 } claim ? "  " + claim : "")
             + (star == Game.V!.TargetStar ? "  目的地" : "");
     }
 

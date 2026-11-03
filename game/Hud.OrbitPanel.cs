@@ -30,8 +30,9 @@ public partial class Hud
             var (goalAt, goalSpeed) = v.RelativeNow(goal);
             var d = (goalAt - v.SubPosition).Length;
             var rel = (goalSpeed - v.SubVelocity).Length;
-            var dockable = goal is Station && v.CanDock;
-            Line($"目標 {Main.NameOf(goal)}  {d:F4} AU   相対 {rel:F4}" + (dockable ? "   入港可 U" : ""), dockable ? Good : goal is Station && d < Tuning.DockRange * 10 ? Warn : Ink);
+            var refused = goal is Station && v.CanDock && !Game.DockAdmitted;
+            var dockable = goal is Station && v.CanDock && !refused;
+            Line($"目標 {Main.NameOf(goal)}  {d:F4} AU   相対 {rel:F4}" + (dockable ? "   入港可 U" : refused ? "   入港拒否" : ""), dockable ? Good : refused ? Warn : goal is Station && d < Tuning.DockRange * 10 ? Warn : Ink);
         }
         if (watched != null)
         {

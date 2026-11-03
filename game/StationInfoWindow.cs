@@ -47,6 +47,12 @@ public partial class StationInfoWindow : PanelContainer
         var age = known == null ? (double?)null : m.Day - known.Day;
         _root.AddChild(Row(Text($"{st.Name}  {Missions.Name(g.KindOf(StationId))}  {g.Regions[st.Region].Name} 宙域", 18, Good),
             Press("閉じる  Esc", _game.CloseStationInfo, size: 13)));
+        if (Factions.OwnerName(g, StationId) is { Length: > 0 } owner)
+        {
+            var stance = Factions.Toward(s, g, StationId);
+            var contested = g.Claim(g.StarOf(StationId)).Contested ? $"   {Factions.ClaimText(g, g.StarOf(StationId))}" : "";
+            _root.AddChild(Text($"{owner} のステーション{contested}   この勢力とは{Factions.Name(stance)}" + (stance == Stance.Hostile ? ": 入港できない" : ""), 14, stance == Stance.Hostile ? Palette.Warn : Palette.Faction(g.OwnerOf(StationId))));
+        }
         var far = (st.Position - g.StarAt(here).Position).Length;
         _root.AddChild(Text(known == null ? "この港の知らせはまだ届いていない"
             : (age < 0.5 ? "いまの様子" : $"{age:F0} 日前の知らせ（{g.StarAt(here).Name} から {far:F0} ly）") + "。着いたときには変わっている", 13, Dim));

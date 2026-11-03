@@ -70,8 +70,11 @@ public partial class PortWindow : PanelContainer
         var s = _game.Save!;
         var g = _game.G!;
         var station = s.PortStation;
-        _root.AddChild(Text($"{g.StarAt(station).Name}   {Missions.Name(g.KindOf(station))}   {g.Regions[g.StarAt(station).Region].Name} 宙域", 28, Good));
+        var owner = Factions.OwnerName(g, station);
+        _root.AddChild(Text($"{g.StarAt(station).Name}   {Missions.Name(g.KindOf(station))}   {g.Regions[g.StarAt(station).Region].Name} 宙域" + (owner != "" ? $"   {owner}" : ""), 28, Good));
         _root.AddChild(Text($"資金 {s.Credits:F0}   配達 {s.Deliveries} 件   {_game.GalaxyDayText}   ここがチェックポイント", 15, Dim));
+        if (g.Factions.Length > 0)
+            _root.AddChild(Text($"スタンディング   {Factions.Summary(s, g)}   （{Factions.HostileAt:+0;-0} 以下で敵対: 入港とゲートを拒まれる）", 14, Dim));
         foreach (var line in _game.PortReport) _root.AddChild(Text(line, 16));
         var tabs = new TabContainer { SizeFlagsVertical = SizeFlags.ExpandFill };
         tabs.AddThemeFontSizeOverride("font_size", 16);
@@ -107,7 +110,9 @@ public partial class PortWindow : PanelContainer
             var far = (g.StarAt(m.Target).Position - g.StarAt(m.Origin).Position).Length;
             var refusal = bays.Refusal(s.Hold, c);
             var info = new VBoxContainer();
-            info.AddChild(Text($"{c.Name}  →  {g.StarAt(m.Target).Name}（{Missions.Name(g.KindOf(m.Target))}）", 17));
+            var owner = Factions.OwnerName(g, m.Target);
+            info.AddChild(Text($"{c.Name}  →  {g.StarAt(m.Target).Name}（{Missions.Name(g.KindOf(m.Target))}）" + (owner != "" ? $"  {owner}" : ""), 17));
+            if (!Factions.Admits(s, g, m.Target)) info.AddChild(Text($"届け先の {owner} は敵対している: 入港できない", 13, Warn));
             info.AddChild(Text($"{Cargos.Name(c.Kind)}   直線 {far:F1} ly   容積 {Missions.Cubic(c.Volume)}   質量 {c.Mass:F1}   耐熱 {c.HeatTolerance:F2}", 14, Dim));
             if (refusal != null) info.AddChild(Text($"積めない: {refusal}", 13, Warn));
             var take = Press("請ける", () => _game.TakeMission(m), refusal == null);
@@ -178,6 +183,7 @@ public partial class PortWindow : PanelContainer
             }
             var target = g.StarOf(c.Mission.Target);
             info.AddChild(Text($"{cargo.Name}  →  {Missions.Label(g, c.Mission.Target)}", 16));
+            if (!Factions.Admits(s, g, c.Mission.Target)) info.AddChild(Text($"届け先の {Factions.OwnerName(g, c.Mission.Target)} は敵対している: 入港できない", 13, Warn));
             info.AddChild(Text($"{Cargos.Name(cargo.Kind)}   健全度 {c.Integrity:P0}   報酬 {c.Payout:F0}   容積 {Missions.Cubic(cargo.Volume)}", 13, Dim));
             var course = _game.Course == target ? Text("針路", 14, Good) as Control : Press("針路に", () => _game.SetCourse(target));
             box.AddChild(Row(info, course, Press($"破棄 -{Missions.DropFee(c):F0}", () => _game.DropCargo(c))));

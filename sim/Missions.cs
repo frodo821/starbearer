@@ -198,10 +198,14 @@ public static class Missions
         return true;
     }
 
-    /// <summary>Hands over what is bound here: a ware goes into the station's stock, as much of it as came through.</summary>
-    public static void Deliver(SaveData s, Galaxy g, Consignment c)
+    /// <summary>
+    /// Hands over what is bound here: a ware goes into the station's stock, as much of it as came through,
+    /// and the station's owner counts it a service. Returns the change in standing with the owner.
+    /// </summary>
+    public static double Deliver(SaveData s, Galaxy g, Consignment c)
     {
         if (c.Mission.Cargo.Ware is { } ware) s.MarketIn(g).Put(g, c.Mission.Target, ware, c.Mission.Cargo.Volume * c.Integrity);
+        return Factions.Serve(s, g, c.Mission.Target, c.Payout, c.Mission.Cargo.Ware);
     }
 
     /// <summary>Gives up a job. The fee stops at what the company has, so this alone can't bankrupt it.</summary>

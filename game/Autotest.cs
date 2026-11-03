@@ -407,7 +407,7 @@ public partial class Autotest : Node
         Do(() =>
         {
             _infoStation = _infoStar >= 0 ? _g.G!.StationsIn(_infoStar).First() : -1;
-            var item = _infoStation >= 0 ? _g.HudForTest.MenuItemForTest($"港の情報: {Missions.Label(_g.G!, _infoStation)}") : null;
+            var item = _infoStation >= 0 ? _g.HudForTest.MenuItemForTest($"港の情報: {Missions.Label(_g.G!, _infoStation)}（{Factions.OwnerName(_g.G!, _infoStation)}）") : null;
             Check("a station's menu offers what the news says of it", _infoStar >= 0 && item != null);
             if (item is { } at) Click(MouseButton.Left, at);
         });
@@ -913,7 +913,24 @@ public partial class Autotest : Node
             Press(Key.Enter);
         });
         Do(() => Press(Key.U));
-        Do(() => _g.CommandForTest(Key.K));
+        Do(() =>
+        {
+            // Hostile to the gate's owner: its gate and its station turn the ship away.
+            _g.Purchase(s => s.Standing[_g.G!.OwnerOf(_gate)] = Factions.HostileAt - 1);
+            _g.CommandForTest(Key.K);
+        });
+        Do(() =>
+        {
+            Check("a hostile faction's gate refuses passage", _g.V!.GateBooked == null && _g.Message.Contains("通航を拒否"));
+            Press(Key.U);
+        });
+        Do(() =>
+        {
+            Check("and its station refuses to dock the ship", !_g.V!.Docked && _g.V.CanDock && _g.Message.Contains("入港を拒否"));
+            Shot("13b_refused");
+            _g.Purchase(s => s.Standing[_g.G!.OwnerOf(_gate)] = 0);
+            _g.CommandForTest(Key.K);
+        });
         Do(() =>
         {
             var v = _g.V!;
