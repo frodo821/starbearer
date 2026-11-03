@@ -56,3 +56,42 @@ public partial class SimTests
         Assert.Equal(StationKind.Refinery, g.KindOf(built.Station));
     }
 }
+
+public partial class SimTests
+{
+    [Fact]
+    public void GateSitesWaitUnbuiltAndPassNothing()
+    {
+        var (s, g) = SaveData.NewGalaxy(5);
+        var m = s.MarketIn(g);
+        var sites = g.Gates.Where(x => g.UnbuiltSites.Contains(x)).ToList();
+        Assert.NotEmpty(sites);
+        Assert.All(sites, x => Assert.Contains(g.GateLinks[x], sites));
+        Assert.All(sites, x => Assert.True(g.GateSpan(x) >= Tuning.GateSiteMinLy));
+        Assert.All(sites, x => Assert.False(Gates.Open(g, m, x)));
+        Assert.All(g.Regions, r => Assert.DoesNotContain(g.LinkedRegions(r.Id), x => g.Gates.Where(g.Alive).All(gt => g.StarAt(gt).Region != x)));
+    }
+
+    [Fact]
+    public void AStrandedWareGetsAGateBetweenWhereItIsMadeAndWanted()
+    {
+        var (s, g) = SaveData.NewGalaxy(5);
+        var m = s.MarketIn(g);
+        var f = 0;
+        // A ware piled up at its makers and run out where it is wanted, for months.
+        var ware = "medical";
+        foreach (var (st, e) in g.Economies.Where(x => g.OwnerOf(x.Key) == f && x.Value.IndexOf(ware) >= 0))
+            m.Stock[st][e.IndexOf(ware)] = e.Makes(ware) ? e.Target[e.IndexOf(ware)] * 1.9 : 0;
+        m.War.Stranded[f][ware] = Industry.ShortDays + 1;
+        m.War.GateProgress[f] = 1;
+        var before = g.Gates.Count(g.Alive);
+        // Built on the day's stock, before evening out has run its course.
+        Industry.BuildGate(g, m, f);
+        var built = Assert.Single(m.War.Log, e => e.Kind == "gate built");
+        Assert.Equal(f, built.Faction);
+        Assert.Equal(before + 2, g.Gates.Count(g.Alive));
+        Assert.True(Gates.Open(g, m, built.Station));
+        Assert.True(m.War.GateProgress[f] < 1);
+        Assert.Contains("ゲートを建てた", War.Describe(g, built));
+    }
+}

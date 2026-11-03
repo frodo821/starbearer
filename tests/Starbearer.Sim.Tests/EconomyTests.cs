@@ -87,7 +87,7 @@ public partial class SimTests
     public void NeighboursEvenOutWhatTheyBothHold()
     {
         var g = Galaxy.Generate(5);
-        var (a, b, _, _, _) = g.Neighbours.First(n => g.StarAt(n.A).Region == g.StarAt(n.B).Region);
+        var (a, b, _, _, _, _, _) = g.Neighbours.First(n => g.StarAt(n.A).Region == g.StarAt(n.B).Region);
         var m = Market.Open(g);
         var fuel = Wares.ShipFuel;
         m.Take(g, a, fuel, 1e9);

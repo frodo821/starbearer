@@ -24,6 +24,10 @@ public sealed class WarState
     public double[] Industry { get; set; } = Array.Empty<double>();
     /// <summary>Per faction, how long each ware has been short across it, in days, by ware id.</summary>
     public List<Dictionary<string, double>> Shortage { get; set; } = new();
+    /// <summary>Per faction, how long each ware has been stranded: plenty where it is made, short where it is wanted.</summary>
+    public List<Dictionary<string, double>> Stranded { get; set; } = new();
+    /// <summary>Per faction, materials gathered toward its next gate, as a share of one.</summary>
+    public double[] GateProgress { get; set; } = Array.Empty<double>();
     /// <summary>Gate pairs standing still for want of upkeep, by the lower id of the pair.</summary>
     public HashSet<int> Stopped { get; set; } = new();
     /// <summary>Per faction, the day it last built a station of the economy.</summary>
@@ -34,13 +38,15 @@ public sealed class WarState
     public WarState Copy() => new()
     {
         Down = Down.ToHashSet(), Hull = new(Hull), Built = new(Built), Progress = (double[])Progress.Clone(), Destroyed = Destroyed.ToHashSet(), Log = Log.ToList(),
-        Stopped = Stopped.ToHashSet(), Industry = (double[])Industry.Clone(), Shortage = Shortage.Select(x => new Dictionary<string, double>(x)).ToList(), LastBuilt = (double[])LastBuilt.Clone(),
+        Stopped = Stopped.ToHashSet(), Industry = (double[])Industry.Clone(),
+        Stranded = Stranded.Select(x => new Dictionary<string, double>(x)).ToList(), GateProgress = (double[])GateProgress.Clone(), Shortage = Shortage.Select(x => new Dictionary<string, double>(x)).ToList(), LastBuilt = (double[])LastBuilt.Clone(),
     };
 
     public static WarState Start(Galaxy g) => new()
     {
         Down = g.UnbuiltSites.ToHashSet(), Progress = new double[g.Factions.Length], Industry = new double[g.Factions.Length],
-        Shortage = g.Factions.Select(_ => new Dictionary<string, double>()).ToList(), LastBuilt = Enumerable.Repeat(double.NegativeInfinity, g.Factions.Length).ToArray(),
+        Shortage = g.Factions.Select(_ => new Dictionary<string, double>()).ToList(),
+        Stranded = g.Factions.Select(_ => new Dictionary<string, double>()).ToList(), GateProgress = new double[g.Factions.Length], LastBuilt = Enumerable.Repeat(double.NegativeInfinity, g.Factions.Length).ToArray(),
     };
 }
 
@@ -174,6 +180,7 @@ public static class War
         "built" => $"{g.Factions[e.Faction].Name} が {g.Stars[e.Star].Name} に{(g.KindOf(e.Station) == StationKind.Fortress ? "要塞" : Missions.Name(g.KindOf(e.Station)))}を建てた",
         "taken" => $"{g.Stars[e.Star].Name} 星系が {g.Factions[e.Faction].Name} 領になった",
         "gate down" => $"{g.Stars[e.Star].Name} のゲートが止まった（維持の品物が尽きた）。{g.Stars[g.StarOf(g.GateLinks[e.Station])].Name} との間は通れない",
+        "gate built" => $"{g.Factions[e.Faction].Name} が {g.Stars[e.Star].Name} と {g.Stars[g.StarOf(g.GateLinks[e.Station])].Name} の間にゲートを建てた",
         "gate up" => $"{g.Stars[e.Star].Name} と {g.Stars[g.StarOf(g.GateLinks[e.Station])].Name} の間のゲートが動き出した",
         _ => e.Kind,
     };

@@ -24,7 +24,7 @@ public partial class Hud
         }
         // Gate links, faint, under the stars.
         foreach (var (gate, exit) in g.GateLinks)
-            if (gate < exit)
+            if (gate < exit && g.Alive(gate) && g.Alive(exit))
                 DrawDashedLine(MapPoint(v.ChartPositions[g.StarOf(gate)]), MapPoint(v.ChartPositions[g.StarOf(exit)]), new Color(0.8f, 0.6f, 1f, 0.45f), 1.5f, 8, true);
         var current = CurrentStar();
         var zoom = Game.Chart.Zoom;

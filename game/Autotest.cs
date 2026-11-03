@@ -907,7 +907,7 @@ public partial class Autotest : Node
             _g.ViewFromForTest(-1, Vec3d.Zero);
             var g = _g.G!;
             var region = g.Stars[_g.V!.SystemStar].Region;
-            _gate = g.Gates.FirstOrDefault(x => g.StarAt(x).Region == region, g.Gates[0]);
+            _gate = g.Gates.Where(g.Alive).FirstOrDefault(x => g.StarAt(x).Region == region, g.Gates[0]);
             _exit = g.GateLinks[_gate];
             _g.Purchase(s => s.Credits = 1000);
             _g.DockAtForTest(_gate);

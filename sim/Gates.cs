@@ -27,6 +27,7 @@ public static class Gates
         var w = m.War;
         foreach (var (gate, exit) in g.GateLinks.Where(x => x.Key < x.Value).OrderBy(x => x.Key))
         {
+            if (!g.Alive(gate) || !g.Alive(exit)) continue;
             var open = Open(g, m, gate);
             if (open == !w.Stopped.Contains(gate)) continue;
             if (open) w.Stopped.Remove(gate); else w.Stopped.Add(gate);
@@ -37,7 +38,7 @@ public static class Gates
 
     /// <summary>Whether a gate pair passes ships and goods: both ends powered.</summary>
     public static bool Open(Galaxy g, Market m, int gate) =>
-        Powered(g, m, gate) && (!g.GateLinks.TryGetValue(gate, out var exit) || Powered(g, m, exit));
+        g.Alive(gate) && Powered(g, m, gate) && (!g.GateLinks.TryGetValue(gate, out var exit) || g.Alive(exit) && Powered(g, m, exit));
 
     /// <summary>What a passage costs: a share of what goes through, the ship, its modules and its cargo.</summary>
     public static double Toll(SaveData s, Voyage v) =>

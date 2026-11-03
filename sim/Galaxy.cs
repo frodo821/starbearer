@@ -34,7 +34,7 @@ public sealed class Galaxy
     /// <summary>Station ids of the small resupply stations. Their boards have only small jobs.</summary>
     public int[] Depots { get; set; } = Array.Empty<int>();
     /// <summary>Station ids of the gates. Gates post no jobs and take no deliveries.</summary>
-    public int[] Gates { get; init; } = Array.Empty<int>();
+    public int[] Gates { get; set; } = Array.Empty<int>();
     /// <summary>Where each gate leads: the station id of the gate it is paired with.</summary>
     public Dictionary<int, int> GateLinks { get; init; } = new();
 
@@ -96,7 +96,7 @@ public sealed class Galaxy
 
     /// <summary>The regions a gate in this one leads to.</summary>
     public IEnumerable<int> LinkedRegions(int region) =>
-        Gates.Where(g => StarAt(g).Region == region).Select(g => StarAt(GateLinks[g]).Region).Distinct();
+        Gates.Where(g => Alive(g) && StarAt(g).Region == region).Select(g => StarAt(GateLinks[g]).Region).Distinct();
 
     HashSet<int>? _depots;
     public bool IsDepot(int station) => (_depots ??= Depots.ToHashSet()).Contains(station);
@@ -106,22 +106,27 @@ public sealed class Galaxy
     public IReadOnlyDictionary<int, StationEconomy> Economies => _economies ??=
         Ports.Concat(Depots).Concat(Gates).ToDictionary(s => s, s => Economy.Of(this, s));
 
-    (int A, int B, double Closeness, int Gate, double Direct)[]? _neighbours;
+    (int A, int B, double Closeness, int Gate, double Direct, double Fallback, int FallbackGate)[]? _neighbours;
     /// <summary>
     /// Station pairs whose stock evens out, and how strongly: closer ones more. Only a faction's own
     /// stations trade: within a region, between regions along a gate route (weaker the farther the
     /// stations sit from the gates), and along the supply lines of what a faction keeps supplied from
-    /// everywhere. Goods reach the enemy only in ships' holds. Gate is the gate a route goes through
-    /// (-1 for none), and Direct how close they are without it, for when that gate stands still.
+    /// everywhere. Goods reach the enemy only in ships' holds. Gate is the gate the best route goes
+    /// through (-1 for none), counting gates a faction may yet build; Fallback the best by the gates
+    /// there from the start (FallbackGate, or -1 for straight); Direct how close they are by no gate.
+    /// Each day the first of these whose gate runs is used.
     /// </summary>
-    public (int A, int B, double Closeness, int Gate, double Direct)[] Neighbours => _neighbours ??= Economies.Keys.OrderBy(s => s)
+    public (int A, int B, double Closeness, int Gate, double Direct, double Fallback, int FallbackGate)[] Neighbours => _neighbours ??= Economies.Keys.OrderBy(s => s)
         .SelectMany(a => Economies.Keys.Where(b => b > a && OwnerOf(a) == OwnerOf(b)).Select(b =>
         {
             var direct = Closeness(a, b, null);
             var pair = GateLinks.TryGetValue(a, out var x) && x == b;
-            var (ly, gate) = TradeLy(a, b);
+            if (pair) return (a, b, 1.0, a, 0.0, 0.0, -1);
+            var (ly, gate) = TradeLy(a, b, all: true);
             var via = ly == null ? direct : Closeness(a, b, ly);
-            return (a, b, Math.Max(via, direct), pair ? a : via > direct ? gate : -1, pair ? 0 : direct);
+            var (ly0, gate0) = TradeLy(a, b, all: false);
+            var via0 = ly0 == null ? direct : Closeness(a, b, ly0);
+            return (a, b, Math.Max(via, direct), via > direct ? gate : -1, direct, Math.Max(via0, direct), via0 > direct ? gate0 : -1);
         }).Where(l => l.Item3 > 0))
         .ToArray();
 
@@ -138,13 +143,14 @@ public sealed class Galaxy
     /// How far goods go between two stations by way of a gate: to it, and on from its exit, with the
     /// passage counted as Tuning.GateTradeLy more, and the gate. Null where no gate route is shorter than the way straight there.
     /// </summary>
-    (double? Ly, int Gate) TradeLy(int a, int b)
+    (double? Ly, int Gate) TradeLy(int a, int b, bool all)
     {
         double Apart(int x, int y) => (StarAt(x).Position - StarAt(y).Position).Length;
         var direct = Apart(a, b);
         (double? Ly, int Gate) best = (null, -1);
         foreach (var (gate, exit) in GateLinks)
         {
+            if (!all && UnbuiltSites.Contains(gate)) continue;
             var ly = Apart(a, gate) + Apart(exit, b) + Tuning.GateTradeLy;
             if (ly < direct && (best.Ly == null || ly < best.Ly)) best = (ly, gate);
         }
@@ -174,6 +180,8 @@ public sealed class Galaxy
     }
 
     double[,]? _lag;
+    /// <summary>A gate went up: news finds the new way from now on.</summary>
+    public void GateBuilt() => _lag = null;
     int[]? _economyOrder;
 
     /// <summary>Stations in the fixed order market snapshots keep them.</summary>
@@ -194,6 +202,7 @@ public sealed class Galaxy
             var edges = Enumerable.Range(0, n).Select(_ => new List<(int To, double Days)>()).ToArray();
             foreach (var (a, b, _) in Links)
             {
+                if (GateLinks.TryGetValue(a, out var pair) && pair == b && (!Alive(a) || !Alive(b))) continue;   // no news by a gate not yet built
                 var days = GateLinks.TryGetValue(a, out var x) && x == b ? Economy.GateRelayDays
                     : (StarAt(a).Position - StarAt(b).Position).Length / Economy.NewsLyPerDay;
                 edges[index[a]].Add((index[b], days));
@@ -605,7 +614,53 @@ public sealed class Galaxy
                 g.UnbuiltSites.Add(Add(free[r.Index(free.Count)].Id, kind, g.RegionOwners[region.Id]));
             }
         g.Ports = g.Ports.Concat(added).ToArray();
+        PlaceGateSites(r, g, ref next);
         g.War = WarState.Start(g);
+    }
+
+    /// <summary>
+    /// Where each faction may one day build a gate of its own: in each of its regions a few free stars
+    /// spread away from the gates already there, and of the pairs of them far enough apart to be worth a
+    /// gate, the longest few that share no end. Nothing stands on them until a faction builds (see Industry).
+    /// </summary>
+    static void PlaceGateSites(Rng r, Galaxy g, ref int next)
+    {
+        var gates = new List<int>();
+        foreach (var f in g.Factions)
+        {
+            var anchors = new List<Star>();
+            foreach (var region in Enumerable.Range(0, g.Regions.Length).Where(x => g.RegionOwners[x] == f.Id))
+            {
+                var taken = g.Gates.Where(x => g.StarAt(x).Region == region).Select(x => g.StarAt(x).Position).ToList();
+                var free = g.Stars.Where(s => s.Region == region && g.AllStationsIn(s.Id).Length == 0).ToList();
+                for (int i = 0; i < Tuning.GateAnchorsPerRegion && free.Count > 0; i++)
+                {
+                    var pick = taken.Count == 0 ? free[r.Index(free.Count)] : free.MaxBy(s => taken.Min(p => (p - s.Position).Length))!;
+                    anchors.Add(pick); taken.Add(pick.Position); free.Remove(pick);
+                }
+            }
+            var pairs = anchors.SelectMany((a, i) => anchors.Skip(i + 1).Select(b => (A: a, B: b, Ly: (a.Position - b.Position).Length)))
+                .Where(p => p.Ly >= Tuning.GateSiteMinLy).OrderByDescending(p => p.Ly).ToList();
+            var used = new HashSet<int>();
+            foreach (var (a, b, _) in pairs)
+            {
+                if (gates.Count(x => g.OwnerOf(x) == f.Id) >= Tuning.GateSitesPerFaction * 2) break;
+                if (used.Contains(a.Id) || used.Contains(b.Id)) continue;
+                used.Add(a.Id); used.Add(b.Id);
+                var (x, y) = (next++, next++);
+                foreach (var (id, star) in new[] { (x, a.Id), (y, b.Id) })
+                {
+                    g.StationStars[id] = star;
+                    g.Kinds[id] = StationKind.Gate;
+                    if (f.Id != g.RegionOwners[g.Stars[star].Region]) g.Owners[id] = f.Id;
+                    g.UnbuiltSites.Add(id);
+                    gates.Add(id);
+                }
+                g.GateLinks[x] = y; g.GateLinks[y] = x;
+                g._byStar = null;
+            }
+        }
+        g.Gates = g.Gates.Concat(gates).ToArray();
     }
 
     public double Density(Vec3d p)

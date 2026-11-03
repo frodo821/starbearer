@@ -66,6 +66,9 @@ public static class Tuning
     public const double SupplyLine = 1, SupplyLy = 50;
     /// <summary>What a passage through a gate counts as, in light years, for goods evening out along a gate route.</summary>
     public const double GateTradeLy = 6;
+    /// <summary>Gate sites a faction may build on: free stars per region to pair, the least span worth a gate, and pairs per faction.</summary>
+    public const int GateAnchorsPerRegion = 3, GateSitesPerFaction = 3;
+    public const double GateSiteMinLy = 20;
     public const int StarsPerRegion = 30;
     public const int StarCount = RegionCount * StarsPerRegion;
     /// <summary>The disc grows with the star count so the stars stay as far apart as before.</summary>

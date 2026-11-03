@@ -137,8 +137,10 @@ public sealed class Market
     {
         foreach (var (star, e) in g.Economies)
             if (g.Alive(star) && g.KindOf(star) != StationKind.Fortress) Produce(e, Stock[star]);
-        foreach (var (a, b, closeness, gate, direct) in g.Neighbours)
-            if (g.Alive(a) && g.Alive(b)) Even(g.Economies[a], Stock[a], g.Economies[b], Stock[b], gate >= 0 && !Gates.Open(g, this, gate) ? direct : closeness);
+        foreach (var (a, b, closeness, gate, direct, fallback, fallbackGate) in g.Neighbours)
+            if (g.Alive(a) && g.Alive(b))
+                Even(g.Economies[a], Stock[a], g.Economies[b], Stock[b],
+                    gate < 0 || Gates.Open(g, this, gate) ? closeness : fallbackGate < 0 || Gates.Open(g, this, fallbackGate) ? fallback : direct);
         Sim.War.Step(g, this);
         Industry.Step(g, this);
         Gates.Watch(g, this);

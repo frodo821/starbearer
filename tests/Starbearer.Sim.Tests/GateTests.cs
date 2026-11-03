@@ -88,7 +88,7 @@ public partial class SimTests
     {
         var (s, g) = SaveData.NewGalaxy(5);
         var m = s.MarketIn(g);
-        var (near, far) = (g.Gates.MinBy(g.GateSpan), g.Gates.MaxBy(g.GateSpan));
+        var (near, far) = (g.Gates.Where(g.Alive).MinBy(g.GateSpan), g.Gates.Where(g.Alive).MaxBy(g.GateSpan));
         double Rate(int gate, string ware) => g.Economies[gate].Upkeep.Single(u => u.Ware == ware).Rate;
         Assert.True(Rate(far, "electronics") > Rate(near, "electronics"));
         Assert.Equal(Rate(far, "fission_fuel") / Rate(near, "fission_fuel"), g.GateSpan(far) / g.GateSpan(near), 6);

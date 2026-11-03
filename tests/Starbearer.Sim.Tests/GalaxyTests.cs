@@ -37,7 +37,7 @@ public partial class SimTests
         for (ulong seed = 1; seed <= 5; seed++)
         {
             var g = Galaxy.Generate(seed);
-            Assert.All(g.Gates, gate =>
+            Assert.All(g.Gates.Where(g.Alive), gate =>
             {
                 var exit = g.GateLinks[gate];
                 Assert.Equal(gate, g.GateLinks[exit]);
