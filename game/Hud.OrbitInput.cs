@@ -54,7 +54,7 @@ public partial class Hud
     (Vector2 Dir, Color Color, string Label, int Kind, float Sign, float Reach)[] Handles(Maneuver n)
     {
         if (StageOf(n) is not { } s) return Array.Empty<(Vector2, Color, string, int, float, float)>();
-        var (t, r, nor) = Sublight.Frame(s.Position, s.Velocity);
+        var (t, r, nor) = Sublight.FrameOf(n, s.Position, s.Velocity);
         var map = LegMap(Game.SubForecast!.LegOf(n)!);
         var o = map(s.Position);
         var unit = 1.0 / Game.Chart.PixelsPerAu;

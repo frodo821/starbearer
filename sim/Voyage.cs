@@ -383,7 +383,7 @@ public sealed class Voyage
             Sublight.Propagate(mu, ref p, ref v, AbsoluteTime - target.Time);
             miss = v - SubVelocity;
         }
-        var (t, r, n) = Sublight.Frame(target.Position, target.Before);
+        var (t, r, n) = Sublight.FrameOf(node, target.Position, target.Before);
         node.Prograde = miss.Dot(t);
         node.Radial = miss.Dot(r);
         node.Normal = miss.Dot(n);

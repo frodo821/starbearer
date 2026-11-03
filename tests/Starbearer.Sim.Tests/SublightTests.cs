@@ -130,6 +130,36 @@ public partial class SimTests
     }
 
     [Fact]
+    public void ANodeStoppedShortKeepsTheAxesOfTheOrbitItWasToLeave()
+    {
+        // A radial node, burned on halfway and then planned again from where the ship is.
+        var g = Galaxy.Generate(3);
+        var v = new Voyage(g, g.Ports[0], g.StarOf(g.Ports[1]), Box, Unseen(g), 1);
+        var (t0, r0, n0) = Sublight.Frame(v.SubPosition, v.SubVelocity);
+        var dv = v.SubVelocity.Length * 0.6;   // big enough to turn the orbit a good way
+        var node = new Maneuver { Time = v.AbsoluteTime, Radial = dv };
+        v.Nodes.Add(node);
+        var plan = Sublight.Predict(v.Primary, null, v.SubPosition, v.SubVelocity, v.AbsoluteTime, v.Nodes, 1);
+        var burn = new NodeBurn();
+        burn.Prepare(v, node, plan);
+        Assert.Equal((t0, r0, n0), node.Locked);
+        v.AdvanceSublight(dv / 2 / Tuning.SublightThrust, r0);
+        burn.Measure(v, node, r0 * (dv / 2));
+        Assert.Equal(NodeBurn.Ending.Short, burn.Stop(v));
+        // What is left is read along the axes the burn began on, though the ship's own have turned.
+        var (tNow, rNow, nNow) = Sublight.Frame(v.SubPosition, v.SubVelocity);
+        Assert.True(rNow.Dot(r0) < 0.995, "the burn turned the orbit");
+        var along0 = t0 * node.Prograde + r0 * node.Radial + n0 * node.Normal;
+        var alongNow = tNow * node.Prograde + rNow * node.Radial + nNow * node.Normal;
+        Assert.True((Sublight.Impulse(v.SubPosition, v.SubVelocity, node) - along0).Length < 1e-12);
+        Assert.True((along0 - alongNow).Length > 0.05 * node.DeltaV, "the ship's own axes would have read it otherwise");
+        // And the forecast made again from here applies it the same way.
+        var again = Sublight.Predict(v.Primary, null, v.SubPosition, v.SubVelocity, v.AbsoluteTime, v.Nodes, 1);
+        var st = again.StageOf(node)!.Value;
+        Assert.True((Sublight.Impulse(st.Position, st.Velocity, node) - along0).Length < 1e-12);
+    }
+
+    [Fact]
     public void CoastingDoesNotChangeWhatIsLeftOfANode()
     {
         // The node sits half an orbit ahead, so its axes differ from the ship's current ones.

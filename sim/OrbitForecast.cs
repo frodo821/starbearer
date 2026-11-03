@@ -26,6 +26,13 @@ public sealed record Station(int Id, int Star, double Radius, double Phase, doub
 public sealed class Maneuver
 {
     public double Time, Prograde, Radial, Normal;
+    /// <summary>
+    /// The axes the node is read along once the engine has burned on it: those of the orbit it was to
+    /// leave, fixed in space. Until then a node takes the axes of the path where it lies. Without
+    /// this, a node stopped short and planned again would be read along the half-turned orbit of the
+    /// burn so far, and what is left of a radial or normal burn would swing round with it.
+    /// </summary>
+    public (Vec3d T, Vec3d R, Vec3d N)? Locked;
     public double DeltaV => Math.Sqrt(Prograde * Prograde + Radial * Radial + Normal * Normal);
 }
 

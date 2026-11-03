@@ -218,9 +218,12 @@ public static partial class Sublight
     public static Elements DescentOrbit(Star star, double periapsisLy, double speed) =>
         OrbitOf(Mu(star), new Vec3d(periapsisLy / Scale, 0, 0), new Vec3d(0, 0, speed));
 
+    /// <summary>The axes a node is read along at a state: its locked ones once burned on, else the state's own.</summary>
+    public static (Vec3d T, Vec3d R, Vec3d N) FrameOf(Maneuver m, Vec3d p, Vec3d v) => m.Locked ?? Frame(p, v);
+
     public static Vec3d Impulse(Vec3d p, Vec3d v, Maneuver m)
     {
-        var (t, r, n) = Frame(p, v);
+        var (t, r, n) = FrameOf(m, p, v);
         return t * m.Prograde + r * m.Radial + n * m.Normal;
     }
 }

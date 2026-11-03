@@ -44,6 +44,10 @@ public sealed class NodeBurn
             _aim = null;
         }
         if (Node != null && _aim == null && frozen != null) _aim = AimFrom(v, frozen, Node);
+        // From the first burn on, the node keeps the axes of the orbit it was to leave: the plan's, or
+        // without one the ship's at ignition.
+        if (firedOn != null && Node == firedOn && Node.Locked == null)
+            Node.Locked = _aim is { } aim ? Sublight.Frame(aim.At.Position, aim.At.Before) : Sublight.Frame(v.SubPosition, v.SubVelocity);
     }
 
     /// <summary>After the ship moved. flown is the velocity change the engine made on the node this frame, if it burned.</summary>
@@ -99,7 +103,7 @@ public sealed class NodeBurn
     /// <summary>Without a plan to compare against, as across a change of primary, just count off what was flown.</summary>
     static void CountOff(Voyage v, Maneuver node, Vec3d flown)
     {
-        var (t, r, n) = Sublight.Frame(v.SubPosition, v.SubVelocity);
+        var (t, r, n) = Sublight.FrameOf(node, v.SubPosition, v.SubVelocity);
         node.Prograde -= flown.Dot(t);
         node.Radial -= flown.Dot(r);
         node.Normal -= flown.Dot(n);
