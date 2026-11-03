@@ -13,6 +13,9 @@ public partial class Main
 
     public void ViewFromForTest(int star, Vec3d at) => _viewForTest = (star, at);
 
+    /// <summary>Autotest only: where the sky is seen from, in ly, instead of the ship.</summary>
+    public Vec3d? SkyFromForTest;
+
     /// <summary>Autotest only: forces the death path through the normal flow.</summary>
     public void CrashForTest() { V!.ForceDeathForTest(); Screen = Screen.Dead; }
 
@@ -72,6 +75,7 @@ public partial class Main
     public Vector2 DeleteButtonForTest => _hud.DeleteButton(Selected!)!.Value;
     public void ReloadForTest() => Continue();
     public Hud HudForTest => _hud;
+    public Sky SkyForTest => _sky!;
     public Vector2 BodyPointForTest(Center c) => _hud.BodyPointForTest(c);
     public Vector2? ApsisPointForTest(bool apo) => _hud.ApsisPointForTest(apo);
     public bool ForecastBusyForTest => _forecastJob != null || (_forecastDirty && Screen is Screen.Orbit or Screen.Plan or Screen.Flight);

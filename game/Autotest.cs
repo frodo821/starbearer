@@ -436,6 +436,14 @@ public partial class Autotest : Node
         });
         Do(() => _g.LookAtPublic(_g.NearestStarDirection()!.Value));
         Do(() => Shot("04a_star_in_well"));
+        Do(() => _g.LookAtPublic(_g.V!.Velocity.Normalized()));
+        Do(() =>
+        {
+            Check("in FTL the bubble crowds the sky ahead", _g.SkyForTest.Bubble.Beta > 0.3);
+            Shot("04c_ftl_ahead");
+            _g.LookAtPublic(-_g.V!.Velocity.Normalized());
+        });
+        Do(() => Shot("04d_ftl_behind"));
         Do(() => Press(Key.I));
         Do(() =>
         {
@@ -556,8 +564,23 @@ public partial class Autotest : Node
         Do(() =>
         {
             Check("D descends at the target", _g.Screen == Screen.Orbit && _g.V!.SystemStar == _g.V.TargetStar);
+            Check("the bubble lets go a flash ahead as it collapses", _g.SkyForTest.FlashedForTest);
             Shot("06_orbit_arrival");
             _g.OrbitSky = true;
+            _g.LookAtPublic(_g.NearestStarDirection()!.Value);
+        });
+        Do(() =>
+        {
+            // From 2 AU off the star, looking past it into the band of far stars: the star's lens rings them.
+            var star = _g.V!.SystemStar;
+            var band = _g.SkyForTest.BandForTest;
+            _g.SkyFromForTest = _g.V.TruePositions[star] - band * (2 * Sublight.Scale);
+            _g.LookAtPublic(band);
+        }, 150);   // the arrival banner fades
+        Do(() =>
+        {
+            Shot("06f_lensing");
+            _g.SkyFromForTest = null;
             _g.LookAtPublic(_g.NearestStarDirection()!.Value);
         });
         Do(() =>

@@ -90,7 +90,7 @@ public partial class Main : Node3D
         if (Screen == Screen.Flight) UpdateFlight(delta);
         if (Screen == Screen.Orbit) Chart.Follow(PrimaryOnChart, v.Primary.Parent != null);
         TickForecast(delta);
-        _sky?.UpdateSky(v.TruePositions, v.TruePosition);
+        _sky?.UpdateSky(v.TruePositions, SkyFromForTest ?? v.TruePosition, v.Phase == Phase.Flight ? v.Velocity : null, delta);
         ShowWorlds();
         _hud.QueueRedraw();
     }
@@ -99,7 +99,9 @@ public partial class Main : Node3D
     {
         var v = V!;
         if (_viewForTest is { Star: >= 0 } view) { _worlds.Show(G!, view.Star, view.At, v.AbsoluteTime); return; }
+        if (SkyFromForTest != null) { _worlds.Show(G!, -1, Vec3d.Zero, v.AbsoluteTime); return; }   // the sky seen from elsewhere: no worlds from here
         var star = v.Phase == Phase.Flight ? (v.NearestWell(out var s) < double.MaxValue && s != null ? s.Id : -1) : v.SystemStar;
-        _worlds.Show(G!, star, star < 0 ? Vec3d.Zero : (v.TruePosition - v.TruePositions[star]) / Sublight.Scale, v.AbsoluteTime);
+        var (along, beta) = _sky?.Bubble ?? (Vec3d.Zero, 0);
+        _worlds.Show(G!, star, star < 0 ? Vec3d.Zero : (v.TruePosition - v.TruePositions[star]) / Sublight.Scale, v.AbsoluteTime, along, beta);
     }
 }

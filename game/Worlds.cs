@@ -85,15 +85,18 @@ public partial class Worlds : Node3D
 
     /// <param name="star">The star whose system the ship is in, or -1 in open space.</param>
     /// <param name="ship">The ship relative to that star, in AU.</param>
-    public void Show(Galaxy g, int star, Vec3d ship, double t)
+    /// <param name="along">The way the ship goes in FTL, and the effective β the bubble shows the sky at (see Optics): bodies move and shrink with the stars.</param>
+    public void Show(Galaxy g, int star, Vec3d ship, double t, Vec3d along = default, double beta = 0)
     {
         if (star != _system) Build(g, star);
         foreach (var (body, mesh, look) in _shown)
         {
             var to = body.StarPosition(t) - ship;
             var dist = Math.Max(to.Length, body.BodyRadius * 1.02);
-            var angle = Math.Max(Math.Atan(body.BodyRadius / dist) * 2 * (body.Parent == null ? 1 : Exaggeration), SmallestAngle);
-            mesh.Position = Sky.ToV(to.Normalized()) * Shell;
+            var (seen, doppler) = Optics.Aberrate(to.Normalized(), along, beta);
+            var angle = Math.Max(Math.Atan(body.BodyRadius / dist) * 2 * (body.Parent == null ? 1 : Exaggeration) / doppler, SmallestAngle);
+            mesh.Position = Sky.ToV(seen) * Shell;
+            mesh.Visible = beta <= 0 || Optics.Horizon(seen, along, Optics.SpeedFor(beta)) > 0.5;   // in the dark behind, nothing is seen
             var size = (float)(2 * Shell * Math.Tan(Math.Min(angle, 2.8) / 2));
             mesh.Scale = new Vector3(size, size, size);
             look.SetShaderParameter("sun", Sky.ToV((-body.StarPosition(t)).Normalized()));
