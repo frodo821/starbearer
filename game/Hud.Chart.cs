@@ -48,9 +48,11 @@ public partial class Hud
             if (ships > 0) DrawRect(new Rect2(p + new Vector2(-9, -9), 18, 18), new Color(Good, 0.8f), false, 1.5f);
             if (i == current) { DrawHere(p, name, ring: true); continue; }
             var key = i == v.TargetStar || bound.Contains(i) || ships > 0;
-            // Zoomed out, names thin to the stations, then to where the ship is bound.
-            if (!key && (zoom < 4 || zoom < 8 && !station)) continue;
-            Text(p + new Vector2(8, 4), name, i == v.TargetStar || ships > 0 ? Good : bound.Contains(i) ? Warn : station ? Ink : Dim, 13);
+            // Zoomed out, names give way to the regions' as those come in; where the ship is bound, and its ships, stay.
+            var shown = key ? 1 : 1 - RegionFade;
+            if (!key && (shown <= 0 || zoom < 8 && !station)) continue;
+            var c = i == v.TargetStar || ships > 0 ? Good : bound.Contains(i) ? Warn : station ? Ink : Dim;
+            Text(p + new Vector2(8, 4), name, new Color(c, c.A * shown), 13);
         }
         DrawRegionNames();
         var fc = Game.Forecast;
@@ -85,9 +87,12 @@ public partial class Hud
     }
 
     /// <summary>Zoomed out to where regions read, each one's name over its middle.</summary>
+    /// <summary>How far the regions' names have come in, 0 to 1, as the chart zooms out.</summary>
+    float RegionFade => Mathf.Clamp((16 - (float)Game.Chart.Zoom) / 8, 0, 1);
+
     void DrawRegionNames()
     {
-        var fade = Mathf.Clamp((16 - Game.Chart.Zoom) / 8, 0, 1);
+        var fade = RegionFade;
         if (fade <= 0) return;
         var g = Game.G!;
         var mine = CurrentStar() is var here and >= 0 ? g.Stars[here].Region : -1;
