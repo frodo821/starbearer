@@ -87,7 +87,7 @@ public partial class SimTests
     public void NeighboursEvenOutWhatTheyBothHold()
     {
         var g = Galaxy.Generate(5);
-        var (a, b, _, _, _, _, _) = g.Neighbours.First(n => g.StarAt(n.A).Region == g.StarAt(n.B).Region);
+        var (a, b, _, _, _) = g.Neighbours.First(n => g.StarAt(n.A).Region == g.StarAt(n.B).Region);
         var m = Market.Open(g);
         var fuel = Wares.ShipFuel;
         m.Take(g, a, fuel, 1e9);
@@ -281,7 +281,7 @@ public partial class SimTests
         var known = m.KnownAs(g, here, there)!;
         Assert.Equal(m.Known(g, here, there, g.Economies[there].Wares[0])!.Value.Day, known.Day);
         then.AdvanceTo(g, known.Day);
-        foreach (var (star, e) in g.Economies)
+        foreach (var (star, e) in g.Economies.Where(x => then.Stock.ContainsKey(x.Key)))   // not those built after the news left
             for (int i = 0; i < e.Wares.Length; i++)
                 Assert.InRange(known.Stock[star][i] - then.Stock[star][i], -e.Target[i] * 0.01, e.Target[i] * 0.01);
         Assert.NotEmpty(Missions.Board(g, known, there, 0, Array.Empty<Consignment>()));

@@ -18,14 +18,12 @@ public partial class SimTests
     static void Starve(Galaxy g, Market m, int fortress) => Array.Clear(m.Stock[fortress]);
 
     [Fact]
-    public void TheWarStartsWithBattlefieldsAndSitesLeftToBuild()
+    public void TheWarStartsWithBattlefields()
     {
         var (_, g, m, star, defender, attacker) = AtTheFront();
         Assert.Equal(2, War.Sides(g, star).Length);
         Assert.True(g.Claim(star).Contested);
-        Assert.NotEmpty(g.UnbuiltSites);
-        Assert.All(g.UnbuiltSites, x => Assert.False(g.Alive(x)));
-        Assert.All(g.UnbuiltSites, x => Assert.DoesNotContain(x, g.StationsIn(g.StarOf(x))));
+        Assert.All(g.StationStars.Keys, x => Assert.True(g.Alive(x)));   // nothing waits unbuilt
         Assert.All(g.Factions, f => Assert.Contains(f.Weapon, War.Weapons));
         Assert.NotEqual(g.Factions[0].Weapon, g.Factions[1].Weapon);
         // A fortress uses its faction's weapon; an armory, where there is one, makes it.
@@ -61,7 +59,7 @@ public partial class SimTests
         }
         Assert.All(theirs, x => Assert.False(g.Alive(x)));
         Assert.InRange(day0, 60, 1000);                                  // it takes months, not days
-        Assert.Equal((g.OwnerOf(attacker), false), g.Claim(star));       // the system changes hands
+        // The system changed hands (the loser may since have come back to contest it).
         Assert.Contains(m.War.Log, x => x.Kind == "destroyed" && x.Station == defender);
         Assert.Contains(m.War.Log, x => x.Kind == "taken" && x.Star == star && x.Faction == g.OwnerOf(attacker));
         // A ship left there is lost with it; the one flown is not.
@@ -73,6 +71,60 @@ public partial class SimTests
         var back = SaveData.FromJson(s.ToJson())!;
         Assert.Equal(m.War.Down, back.Market!.War.Down);
         Assert.Equal(m.War.Log, back.Market.War.Log);
+    }
+
+    [Fact]
+    public void HavingTakenASystemAFactionCarriesTheWarToTheNext()
+    {
+        var (_, g, m, star, defender, attacker) = AtTheFront();
+        var (us, them) = (g.OwnerOf(attacker), g.OwnerOf(defender));
+        // The attacker wins the battlefield...
+        foreach (var x in g.StationsIn(star).Where(x => g.OwnerOf(x) == them).ToList())
+        {
+            m.War.Hull[x] = 1e-9;
+            Array.Clear(m.Stock[x]);
+        }
+        for (int day = 1; g.StationsIn(star).Any(x => g.OwnerOf(x) == them) && day < 50; day++) m.AdvanceTo(g, day);
+        Assert.Equal((us, false), g.Claim(star));
+        // ...and its next fortress goes to an enemy system within reach of what it holds: the front moves on.
+        var before = War.Fortresses(g).Where(x => g.OwnerOf(x) == us).ToHashSet();
+        m.War.Progress[us] = 1;
+        m.AdvanceTo(g, m.Day + 1);
+        var built = War.Fortresses(g).Where(x => g.OwnerOf(x) == us).Except(before).Single();
+        var at = g.StarOf(built);
+        Assert.True(g.BuiltDuringGame(built));
+        Assert.True(g.Claim(at).Contested);
+        Assert.Contains(them, War.Sides(g, at));
+        Assert.True(g.Stars.Where(s => War.Sides(g, s.Id).Contains(us) && s.Id != at).Min(s => (s.Position - g.Stars[at].Position).Length) <= Tuning.FrontReachLy);
+        // It is saved and comes back with the market.
+        var s2 = new SaveData { Market = m };
+        var back = SaveData.FromJson(s2.ToJson())!;
+        var g2 = Galaxy.Generate(g.Seed);
+        back.Market!.AdvanceTo(g2, m.Day);
+        Assert.True(g2.Alive(built));
+        Assert.Equal(StationKind.Fortress, g2.KindOf(built));
+        Assert.Equal(at, g2.StarOf(built));
+    }
+
+    [Fact]
+    public void AGateCaughtInTheFightingIsDestroyed()
+    {
+        var (_, g, m, _, defender, attacker) = AtTheFront();
+        var (us, them) = (g.OwnerOf(attacker), g.OwnerOf(defender));
+        var gate = g.Gates.First(x => g.OwnerOf(x) == them && g.Alive(x));
+        var at = g.StarOf(gate);
+        var fort = m.Build(g, at, StationKind.Fortress, us, fill: 1);
+        Assert.True(g.Claim(at).Contested);
+        for (int day = 1; g.Alive(gate) && day < 3000; day++)
+        {
+            foreach (var x in g.StationsIn(at).Where(x => g.OwnerOf(x) == them && g.KindOf(x) == StationKind.Fortress)) Array.Clear(m.Stock[x]);
+            m.Stock[fort] = g.Economies[fort].Target.ToArray();
+            m.AdvanceTo(g, day);
+        }
+        Assert.False(g.Alive(gate));
+        Assert.False(Gates.Open(g, m, g.GateLinks[gate]));
+        Assert.Contains(m.War.Log, e => e.Kind == "destroyed" && e.Station == gate);
+        Assert.DoesNotContain(g.Neighbours, n => n.Gate == gate || n.Gate == g.GateLinks[gate]);
     }
 
     [Fact]

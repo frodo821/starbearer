@@ -60,15 +60,18 @@ public static class Tuning
     public const int RegionCount = 4;
     /// <summary>Powers at war, each holding about the same share of the regions.</summary>
     public const int FactionCount = 2;
-    /// <summary>Per side of a front, systems that get fortress sites, and how many of the nearest are fought over from the start.</summary>
-    public const int FrontSystems = 4, Battlefields = 1;
+    /// <summary>Per side of a front, how many of the systems nearest the enemy are fought over from the start.</summary>
+    public const int Battlefields = 1;
+    /// <summary>How far from a system it holds a faction reaches to attack, or to garrison against the enemy.</summary>
+    public const double FrontReachLy = 12;
     /// <summary>A fortress's supply line to each station of its faction: its strength at no distance, and the distance it falls to 1/e over.</summary>
     public const double SupplyLine = 1, SupplyLy = 50;
     /// <summary>What a passage through a gate counts as, in light years, for goods evening out along a gate route.</summary>
     public const double GateTradeLy = 6;
-    /// <summary>Gate sites a faction may build on: free stars per region to pair, the least span worth a gate, and pairs per faction.</summary>
-    public const int GateAnchorsPerRegion = 3, GateSitesPerFaction = 3;
-    public const double GateSiteMinLy = 20;
+    /// <summary>The least span a faction thinks worth a gate of its own.</summary>
+    public const double GateMinLy = 20;
+    /// <summary>How much farther a faction will look to put a new station in a system of its own rather than one with stations already.</summary>
+    public const double CrowdedLy = 5;
     public const int StarsPerRegion = 30;
     public const int StarCount = RegionCount * StarsPerRegion;
     /// <summary>The disc grows with the star count so the stars stay as far apart as before.</summary>

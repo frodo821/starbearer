@@ -3,14 +3,13 @@ namespace Starbearer.Sim;
 /// <summary>
 /// The factions build up their economy where it falls short, X4-style. A ware whose users across a
 /// faction have stayed short for long enough gets a new station that makes it, on one of the faction's
-/// sites (placed at generation), in the region that is shortest of it; when what that station would
-/// need is short too, the station making that comes first. Building takes materials: steel the
-/// faction's shipyards gather, as they do for fortresses. A faction builds now and then, never past
-/// its sites, so regions keep their gaps long enough for ships to fill them.
+/// regions, in the one that is shortest of it, near the stations there that want it; when what that
+/// station would need is short too, the station making that comes first. Building takes materials: steel the
+/// faction's shipyards gather, as they do for fortresses. A faction builds now and then, so regions
+/// keep their gaps long enough for ships to fill them.
 ///
 /// Where a ware is stranded instead, plenty where it is made and short where it is wanted, more makers
-/// would not help: the faction builds a gate, on the pair of its gate sites that brings the most of
-/// those makers and users closest. A gate is dear (titanium and electronics, gathered by the shipyards
+/// would not help: the faction builds a gate, one end near the makers, the other near the users. A gate is dear (titanium and electronics, gathered by the shipyards
 /// over months) and costs its upkeep for good.
 /// </summary>
 public static class Industry
@@ -78,49 +77,69 @@ public static class Industry
     }
 
     /// <summary>
-    /// How much closer a gate pair would bring a ware's makers with plenty to its users short of it,
-    /// summed over every such pair: the gain over how close they are by the routes running now.
+    /// How much closer a gate between two stars would bring a ware's makers with plenty to its users
+    /// short of it, summed over every such pair: the gain over how close they are by the routes running now.
     /// </summary>
     static double Gain(Galaxy g, Market m, int faction, string ware, int x, int y, Dictionary<(int, int), double> now)
     {
-        double Apart(int a, int b) => (g.StarAt(a).Position - g.StarAt(b).Position).Length;
-        var makers = g.Economies.Where(e => g.Alive(e.Key) && g.OwnerOf(e.Key) == faction && e.Value.Makes(ware) && m.Fill(g, e.Key, ware) >= 1).Select(e => e.Key).ToList();
-        var users = g.Economies.Where(e => g.Alive(e.Key) && g.OwnerOf(e.Key) == faction && Wants(g, m, e.Key, e.Value, ware) && m.Fill(g, e.Key, ware) < ShortFill).Select(e => e.Key).ToList();
+        double Apart(int a, int star) => (g.StarAt(a).Position - g.Stars[star].Position).Length;
+        var (makers, users) = Ends(g, m, faction, ware);
         double gain = 0;
         foreach (var s in makers)
             foreach (var t in users)
             {
-                var ly = Math.Min(Apart(s, x) + Apart(y, t), Apart(s, y) + Apart(x, t)) + Tuning.GateTradeLy;
-                var via = Math.Exp(-ly / Economy.SpreadLy);
-                gain += Math.Max(0, via - now.GetValueOrDefault((Math.Min(s, t), Math.Max(s, t))));
+                var ly = Math.Min(Apart(s, x) + Apart(t, y), Apart(s, y) + Apart(t, x)) + Tuning.GateTradeLy;
+                gain += Math.Max(0, Math.Exp(-ly / Economy.SpreadLy) - now.GetValueOrDefault((Math.Min(s, t), Math.Max(s, t))));
             }
         return gain;
     }
 
-    /// <summary>Builds the faction's gate site pair that most helps its longest-stranded ware, if any helps enough.</summary>
+    /// <summary>A ware's makers across a faction that have plenty, and the stations short of it that want it.</summary>
+    static (List<int> Makers, List<int> Users) Ends(Galaxy g, Market m, int faction, string ware) =>
+        (g.Economies.Where(e => g.Alive(e.Key) && g.OwnerOf(e.Key) == faction && e.Value.Makes(ware) && m.Fill(g, e.Key, ware) >= 1).Select(e => e.Key).ToList(),
+         g.Economies.Where(e => g.Alive(e.Key) && g.OwnerOf(e.Key) == faction && Wants(g, m, e.Key, e.Value, ware) && m.Fill(g, e.Key, ware) < ShortFill).Select(e => e.Key).ToList());
+
+    static Vec3d Middle(Galaxy g, IEnumerable<int> stations) =>
+        stations.Select(x => g.StarAt(x).Position).Aggregate((Sum: Vec3d.Zero, N: 0), (a, p) => (a.Sum + p, a.N + 1)) is var (sum, n) && n > 0 ? sum * (1.0 / n) : Vec3d.Zero;
+
+    /// <summary>
+    /// Where a faction puts a new station of a kind near a point: a star of one of its regions that it
+    /// holds alone (or nobody does), whose system suits the kind, an empty one before one with stations;
+    /// -1 if none. Gates go only where no gate stands.
+    /// </summary>
+    public static int Place(Galaxy g, int faction, StationKind kind, Vec3d near, int avoid = -1)
+    {
+        return g.Stars.Where(st => st.Id != avoid && g.RegionOwners.Length > st.Region && g.RegionOwners[st.Region] == faction
+                                   && g.Claim(st.Id) is var (holder, contested) && !contested && (holder == faction || holder < 0)
+                                   && (kind != StationKind.Gate || g.GateIn(st.Id) < 0) && Galaxy.Fits(kind, g.System(st.Id)))
+            .OrderBy(st => (st.Position - near).Length + (g.HasStation(st.Id) ? Tuning.CrowdedLy : 0)).ThenBy(st => st.Id)
+            .Select(st => st.Id).DefaultIfEmpty(-1).First();
+    }
+
+    /// <summary>
+    /// Builds a gate for the faction's longest-stranded ware it can help: one end near where it is made
+    /// in plenty, the other near where it is wanted, if they are far enough apart and the gate brings
+    /// them enough closer.
+    /// </summary>
     public static void BuildGate(Galaxy g, Market m, int faction)
     {
         var w = m.War;
         var stranded = w.Stranded[faction].Where(x => x.Value >= ShortDays).OrderByDescending(x => x.Value).ThenBy(x => x.Key).Select(x => x.Key).ToList();
         if (stranded.Count == 0) return;
-        var sites = g.Gates.Where(x => x < g.GateLinks[x] && g.OwnerOf(x) == faction && !g.Alive(x) && !w.Destroyed.Contains(x)).ToList();
-        if (sites.Count == 0) return;
-        var now = g.Neighbours.ToDictionary(n => (n.A, n.B), n => n.Gate < 0 || Gates.Open(g, m, n.Gate) ? n.Closeness : n.FallbackGate < 0 || Gates.Open(g, m, n.FallbackGate) ? n.Fallback : n.Direct);
+        var now = g.Neighbours.ToDictionary(n => (n.A, n.B), n => n.Gate < 0 || Gates.Open(g, m, n.Gate) ? n.Closeness : n.Direct);
         foreach (var ware in stranded)
         {
-            var (site, gain) = sites.Select(x => (x, Gain(g, m, faction, ware, x, g.GateLinks[x], now))).MaxBy(p => p.Item2);
-            if (gain < MinGateGain) continue;
-            var exit = g.GateLinks[site];
-            foreach (var end in new[] { site, exit })
-            {
-                m.Stock[end] = g.Economies[end].Target.ToArray();   // it opens supplied
-                w.Down.Remove(end);
-                w.Built[end] = m.Day;
-            }
+            var (makers, users) = Ends(g, m, faction, ware);
+            if (makers.Count == 0 || users.Count == 0) continue;
+            var x = Place(g, faction, StationKind.Gate, Middle(g, makers));
+            if (x < 0) continue;
+            var y = Place(g, faction, StationKind.Gate, Middle(g, users), avoid: x);
+            if (y < 0 || (g.Stars[x].Position - g.Stars[y].Position).Length < Tuning.GateMinLy) continue;
+            if (Gain(g, m, faction, ware, x, y, now) < MinGateGain) continue;
+            var id = m.Build(g, x, StationKind.Gate, faction, fill: 1, exitStar: y);   // it opens supplied
             w.GateProgress[faction] -= 1;
             w.Stranded[faction].Remove(ware);
-            w.Log.Add(new WarEvent(m.Day, "gate built", site, g.StarOf(site), faction));
-            g.GateBuilt();
+            w.Log.Add(new WarEvent(m.Day, "gate built", id, x, faction));
             return;
         }
     }
@@ -179,34 +198,30 @@ public static class Industry
         }
     }
 
-    /// <summary>The faction's free sites of a kind, where it could build one.</summary>
-    static IEnumerable<int> Sites(Galaxy g, Market m, int faction, StationKind kind) =>
-        g.Ports.Where(p => g.KindOf(p) == kind && g.OwnerOf(p) == faction && !g.Alive(p) && !m.War.Destroyed.Contains(p));
-
     static void Build(Galaxy g, Market m, int faction)
     {
         var w = m.War;
         var shortage = w.Shortage[faction];
+        var regions = Enumerable.Range(0, g.Regions.Length).Where(r => g.RegionOwners[r] == faction).ToList();
         foreach (var (ware, _) in shortage.Where(x => x.Value >= ShortDays).OrderByDescending(x => x.Value).ThenBy(x => x.Key).ToList())
         {
             var kind = MakerOf(ware)!.Value;
-            // What it would run on, if that is short too and can be built, comes first.
+            // What it would run on, if that is short too, comes first.
             var upstream = Economy.Nominal(kind).Uses.Keys
-                .Where(i => shortage.GetValueOrDefault(i) >= ShortDays / 2 && MakerOf(i) is { } k && Sites(g, m, faction, k).Any())
+                .Where(i => shortage.GetValueOrDefault(i) >= ShortDays / 2 && MakerOf(i) != null)
                 .OrderByDescending(i => shortage[i]).FirstOrDefault();
             var target = upstream ?? ware;
             var builds = MakerOf(target)!.Value;
-            // In the region that is shortest of it.
-            var site = Sites(g, m, faction, builds).OrderBy(s => FillOf(g, m, faction, target, g.StarAt(s).Region) ?? 1).ThenBy(s => s).FirstOrDefault(-1);
-            if (site < 0) continue;
-            var e = g.Economies[site];
-            m.Stock[site] = e.Target.Select(t => t * 0.5).ToArray();
-            w.Down.Remove(site);
-            w.Built[site] = m.Day;
+            // In the region shortest of it, near the stations there that want it.
+            var region = regions.OrderBy(r => FillOf(g, m, faction, target, r) ?? 1).ThenBy(r => r).First();
+            var wanting = g.Economies.Where(x => g.Alive(x.Key) && g.OwnerOf(x.Key) == faction && g.StarAt(x.Key).Region == region && Wants(g, m, x.Key, x.Value, target)).Select(x => x.Key).ToList();
+            var star = Place(g, faction, builds, wanting.Count > 0 ? Middle(g, wanting) : g.Regions[region].Center);
+            if (star < 0) continue;
+            var id = m.Build(g, star, builds, faction);
             w.Industry[faction] -= 1;
             w.LastBuilt[faction] = m.Day;
             shortage.Remove(target);
-            w.Log.Add(new WarEvent(m.Day, "built", site, g.StarOf(site), faction));
+            w.Log.Add(new WarEvent(m.Day, "built", id, star, faction));
             return;
         }
     }

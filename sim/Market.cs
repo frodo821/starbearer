@@ -27,7 +27,7 @@ public sealed class Market
     {
         var r = new Rng(g.Seed ^ 0x3A2C7E);
         var m = new Market { Day = -HistoryDays, War = WarState.Start(g) };
-        g.War = m.War;
+        g.Bind(m.War);
         foreach (var (star, e) in g.Economies)
             m.Stock[star] = e.Target.Select(t => t * r.Range(0.6, 1.3)).ToArray();
         m.AdvanceTo(g, 0);
@@ -43,6 +43,26 @@ public sealed class Market
 
     /// <summary>What a unit goes for here now, or null where the station doesn't deal in it.</summary>
     public double? Price(Galaxy g, int star, string ware) => Fill(g, star, ware) is { } f ? Economy.Price(Sim.Wares.Get(ware), f) : null;
+
+    /// <summary>
+    /// Builds a station: it joins the galaxy, opens with its stock at the given share of target, and is
+    /// dated today (a system's holder is its earliest station). A gate comes with its exit, at another star.
+    /// Returns the new station's id.
+    /// </summary>
+    public int Build(Galaxy g, int star, StationKind kind, int owner, double fill = 0.5, int exitStar = -1)
+    {
+        var id = War.NextId++;
+        var exit = exitStar >= 0 ? War.NextId++ : -1;
+        War.Added.Add(new AddedStation(id, star, kind, owner, exit));
+        if (exit >= 0) War.Added.Add(new AddedStation(exit, exitStar, kind, owner, id));
+        g.Bind(War);
+        foreach (var s in exit >= 0 ? new[] { id, exit } : new[] { id })
+        {
+            Stock[s] = g.Economies[s].Target.Select(t => t * fill).ToArray();
+            War.Built[s] = Day;
+        }
+        return id;
+    }
 
     /// <summary>Takes stock out (a sale to the ship, a job's cargo loaded). Returns what there was to take.</summary>
     public double Take(Galaxy g, int star, string ware, double units)
@@ -66,7 +86,7 @@ public sealed class Market
     /// <summary>Runs the economy on to the given galaxy day, a day at a time.</summary>
     public void AdvanceTo(Galaxy g, double day)
     {
-        g.War = War;
+        if (g.War != War) g.Bind(War);
         if (History.Count == 0) Record(g);
         while (Day + 1 <= day)
         {
@@ -83,11 +103,12 @@ public sealed class Market
         foreach (var star in g.EconomyOrder)
         {
             var e = g.Economies[star];
+            var stock = Stock.TryGetValue(star, out var st) ? st : new double[e.Wares.Length];   // one another war built
             for (int i = 0; i < e.Wares.Length; i++)
-                bytes.Add((byte)Math.Round(Math.Clamp(Stock[star][i] / e.Target[i] / Economy.Capacity, 0, 1) * 255));
+                bytes.Add((byte)Math.Round(Math.Clamp(stock[i] / e.Target[i] / Economy.Capacity, 0, 1) * 255));
         }
         History.RemoveAll(h => h.Day == Day || h.Day < Day - HistoryDays - SnapshotDays);
-        History.Add(new MarketSnapshot { Day = Day, Fills = Convert.ToBase64String(bytes.ToArray()) });
+        History.Add(new MarketSnapshot { Day = Day, Stations = g.EconomyOrder.Length, Fills = Convert.ToBase64String(bytes.ToArray()) });
     }
 
     /// <summary>
@@ -104,10 +125,11 @@ public sealed class Market
         var bytes = Convert.FromBase64String(snap.Fills);
         var known = new Market { Day = snap.Day };
         var k = 0;
-        foreach (var s in g.EconomyOrder)
+        foreach (var (s, i) in g.EconomyOrder.Select((s, i) => (s, i)))
         {
             var e = g.Economies[s];
-            known.Stock[s] = e.Target.Select(t => bytes[k++] / 255.0 * Economy.Capacity * t).ToArray();
+            // A station built after the snapshot was nothing yet: empty.
+            known.Stock[s] = i < snap.Stations ? e.Target.Select(t => bytes[k++] / 255.0 * Economy.Capacity * t).ToArray() : new double[e.Wares.Length];
         }
         return known;
     }
@@ -127,7 +149,9 @@ public sealed class Market
         var snap = History.Where(h => h.Day <= asOf + 1e-9).MaxBy(h => h.Day);
         if (snap == null) return null;
         var offset = 0;
-        foreach (var s in g.EconomyOrder) { if (s == star) break; offset += g.Economies[s].Wares.Length; }
+        var at = Array.IndexOf(g.EconomyOrder, star);
+        if (at >= snap.Stations) return null;   // built since: no news of it yet
+        foreach (var s in g.EconomyOrder.Take(at)) offset += g.Economies[s].Wares.Length;
         var b = Convert.FromBase64String(snap.Fills)[offset + i];
         return (b / 255.0 * Economy.Capacity, snap.Day);
     }
@@ -137,10 +161,9 @@ public sealed class Market
     {
         foreach (var (star, e) in g.Economies)
             if (g.Alive(star) && g.KindOf(star) != StationKind.Fortress) Produce(e, Stock[star]);
-        foreach (var (a, b, closeness, gate, direct, fallback, fallbackGate) in g.Neighbours)
+        foreach (var (a, b, closeness, gate, direct) in g.Neighbours)
             if (g.Alive(a) && g.Alive(b))
-                Even(g.Economies[a], Stock[a], g.Economies[b], Stock[b],
-                    gate < 0 || Gates.Open(g, this, gate) ? closeness : fallbackGate < 0 || Gates.Open(g, this, fallbackGate) ? fallback : direct);
+                Even(g.Economies[a], Stock[a], g.Economies[b], Stock[b], gate < 0 || Gates.Open(g, this, gate) ? closeness : direct);
         Sim.War.Step(g, this);
         Industry.Step(g, this);
         Gates.Watch(g, this);
@@ -195,5 +218,7 @@ public sealed class Market
 public sealed class MarketSnapshot
 {
     public double Day { get; set; }
+    /// <summary>How many stations, in Galaxy.EconomyOrder, the snapshot covers: those built since are not in it.</summary>
+    public int Stations { get; set; }
     public string Fills { get; set; } = "";
 }

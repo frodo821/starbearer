@@ -1,5 +1,8 @@
 namespace Starbearer.Sim;
 
+/// <summary>A station a faction built during the game: where, what, whose, and the gate it pairs with (-1 for none).</summary>
+public sealed record AddedStation(int Id, int Star, StationKind Kind, int Owner, int Link = -1);
+
 /// <summary>Something the war did on a day: a station destroyed or built, a system changing hands.</summary>
 public sealed record WarEvent(double Day, string Kind, int Station, int Star, int Faction);
 
@@ -10,14 +13,19 @@ public sealed record WarEvent(double Day, string Kind, int Station, int Star, in
 /// </summary>
 public sealed class WarState
 {
+    /// <summary>Stations destroyed. (They never come back; a faction builds anew instead.)</summary>
     public HashSet<int> Down { get; set; } = new();
+    /// <summary>Stations built during the game, in the order they went up.</summary>
+    public List<AddedStation> Added { get; set; } = new();
+    /// <summary>The id the next station built gets.</summary>
+    public int NextId { get; set; }
     /// <summary>Structure left, 1 at full; a station missing from it is whole.</summary>
     public Dictionary<int, double> Hull { get; set; } = new();
     /// <summary>The galaxy day each fortress built during the game went up; one there from the start has none.</summary>
     public Dictionary<int, double> Built { get; set; } = new();
     /// <summary>Per faction, building materials gathered toward its next fortress, as a share of one.</summary>
     public double[] Progress { get; set; } = Array.Empty<double>();
-    /// <summary>Stations destroyed: they never come back, unlike a fortress site, which its owner can build again.</summary>
+    /// <summary>Stations destroyed in the fighting (Down also holds them).</summary>
     public HashSet<int> Destroyed { get; set; } = new();
     public List<WarEvent> Log { get; set; } = new();
     /// <summary>Per faction, materials gathered toward its next station of the economy, as a share of one (see Industry).</summary>
@@ -37,14 +45,14 @@ public sealed class WarState
 
     public WarState Copy() => new()
     {
-        Down = Down.ToHashSet(), Hull = new(Hull), Built = new(Built), Progress = (double[])Progress.Clone(), Destroyed = Destroyed.ToHashSet(), Log = Log.ToList(),
+        Down = Down.ToHashSet(), Added = Added.ToList(), NextId = NextId, Hull = new(Hull), Built = new(Built), Progress = (double[])Progress.Clone(), Destroyed = Destroyed.ToHashSet(), Log = Log.ToList(),
         Stopped = Stopped.ToHashSet(), Industry = (double[])Industry.Clone(),
         Stranded = Stranded.Select(x => new Dictionary<string, double>(x)).ToList(), GateProgress = (double[])GateProgress.Clone(), Shortage = Shortage.Select(x => new Dictionary<string, double>(x)).ToList(), LastBuilt = (double[])LastBuilt.Clone(),
     };
 
     public static WarState Start(Galaxy g) => new()
     {
-        Down = g.UnbuiltSites.ToHashSet(), Progress = new double[g.Factions.Length], Industry = new double[g.Factions.Length],
+        NextId = g.NextStationId, Progress = new double[g.Factions.Length], Industry = new double[g.Factions.Length],
         Shortage = g.Factions.Select(_ => new Dictionary<string, double>()).ToList(),
         Stranded = g.Factions.Select(_ => new Dictionary<string, double>()).ToList(), GateProgress = new double[g.Factions.Length], LastBuilt = Enumerable.Repeat(double.NegativeInfinity, g.Factions.Length).ToArray(),
     };
@@ -199,7 +207,8 @@ public static class War
         w.Down.Add(station);
         w.Hull.Remove(station);
         w.Built.Remove(station);
-        if (g.KindOf(station) != StationKind.Fortress) w.Destroyed.Add(station);
+        w.Destroyed.Add(station);
+        if (g.KindOf(station) == StationKind.Gate) g.RoutesChanged();   // goods and news lose the way through it
         Array.Clear(m.Stock[station]);
         w.Log.Add(new WarEvent(m.Day, "destroyed", station, star, g.OwnerOf(station)));
         var after = g.Claim(star).Holder;
@@ -207,44 +216,46 @@ public static class War
     }
 
     /// <summary>
-    /// A faction with materials for a fortress builds one at its free site where the war needs it most:
-    /// in a system it is losing, then one an enemy holds alone, then its own.
+    /// A faction with materials for a fortress builds one where the war needs it most: in a system it
+    /// is losing, then one the enemy holds within reach of one of its own (an attack: the front moves
+    /// on as systems fall), then one of its own within reach of the enemy. Never where it already has one.
     /// </summary>
     static void Build(Galaxy g, Market m, List<int> standing)
     {
         var w = m.War;
+        var systems = g.StationStars.Values.Distinct().Where(g.HasStation).OrderBy(x => x).ToList();
+        double Apart(int a, int b) => (g.Stars[a].Position - g.Stars[b].Position).Length;
         foreach (var faction in g.Factions)
         {
-            if (w.Progress[faction.Id] < 1) continue;
-            var count = standing.Count(f => g.OwnerOf(f) == faction.Id);
-            var start = g.Ports.Count(p => g.KindOf(p) == StationKind.Fortress && g.OwnerOf(p) == faction.Id && !g.UnbuiltSites.Contains(p));
-            if (count >= Math.Max(1, start * FortressCap)) { w.Progress[faction.Id] = 1; continue; }
-            double Need(int site)
+            var f = faction.Id;
+            if (w.Progress[f] < 1) continue;
+            var count = standing.Count(x => g.OwnerOf(x) == f);
+            var start = g.Ports.Count(p => g.KindOf(p) == StationKind.Fortress && g.OwnerOf(p) == f && !g.BuiltDuringGame(p));
+            if (count >= Math.Max(1, start * FortressCap)) { w.Progress[f] = 1; continue; }
+            var ours = systems.Where(x => Sides(g, x).Contains(f)).ToList();
+            var enemy = systems.Where(x => Sides(g, x).Any(o => o != f)).ToList();
+            double Need(int star)
             {
-                var star = g.StarOf(site);
+                var here = g.StationsIn(star).ToList();
+                if (here.Any(x => g.OwnerOf(x) == f && g.KindOf(x) == StationKind.Fortress)) return -1;
                 var sides = Sides(g, star);
-                if (sides.Length > 1 && sides.Contains(faction.Id))
+                if (sides.Length > 1 && sides.Contains(f))
                 {
-                    var ours = g.StationsIn(star).Where(s => g.OwnerOf(s) == faction.Id && g.KindOf(s) == StationKind.Fortress).Sum(s => Strength(g, m, s) * w.HullOf(s));
-                    var theirs = g.StationsIn(star).Where(s => g.OwnerOf(s) != faction.Id && g.KindOf(s) == StationKind.Fortress).Sum(s => Strength(g, m, s) * w.HullOf(s));
-                    return theirs > ours ? 3 : 0.5;
+                    double Power(bool mine) => here.Where(x => (g.OwnerOf(x) == f) == mine && g.KindOf(x) == StationKind.Fortress).Sum(x => Strength(g, m, x) * w.HullOf(x));
+                    return Power(false) > Power(true) ? 3 : 0.5;
                 }
-                return sides.Length == 1 && sides[0] != faction.Id ? 2 : 1;
+                if (!sides.Contains(f)) return ours.Any(o => Apart(o, star) <= Tuning.FrontReachLy) ? 2 : -1;
+                return enemy.Any(o => Apart(o, star) <= Tuning.FrontReachLy) ? 1 : -1;
             }
-            var site = g.Ports.Where(p => g.KindOf(p) == StationKind.Fortress && g.OwnerOf(p) == faction.Id && !g.Alive(p)
-                                         && !g.StationsIn(g.StarOf(p)).Any(s => g.OwnerOf(s) == faction.Id && g.KindOf(s) == StationKind.Fortress))
-                .OrderByDescending(Need).ThenBy(p => p).FirstOrDefault(-1);
-            if (site < 0) continue;
-            w.Progress[faction.Id] -= 1;
-            var e = g.Economies[site];
-            m.Stock[site] = e.Target.Select(t => t * 0.5).ToArray();
-            var star0 = g.StarOf(site);
-            var before = g.Claim(star0).Holder;
-            w.Down.Remove(site);
-            w.Hull[site] = 0.5;
-            w.Built[site] = m.Day;
-            w.Log.Add(new WarEvent(m.Day, "built", site, star0, faction.Id));
-            if (g.Claim(star0).Holder != before && before < 0) w.Log.Add(new WarEvent(m.Day, "taken", site, star0, faction.Id));
+            var pick = systems.Select(x => (Star: x, Need: Need(x))).Where(x => x.Need > 0)
+                .OrderByDescending(x => x.Need).ThenBy(x => ours.Count == 0 ? 0 : ours.Min(o => Apart(o, x.Star))).ThenBy(x => x.Star).FirstOrDefault((-1, 0));
+            if (pick.Star < 0) continue;
+            var before = g.Claim(pick.Star).Holder;
+            w.Progress[f] -= 1;
+            var id = m.Build(g, pick.Star, StationKind.Fortress, f);
+            w.Hull[id] = 0.5;
+            w.Log.Add(new WarEvent(m.Day, "built", id, pick.Star, f));
+            if (before < 0) w.Log.Add(new WarEvent(m.Day, "taken", id, pick.Star, f));
         }
     }
 }

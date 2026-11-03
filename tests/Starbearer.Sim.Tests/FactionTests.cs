@@ -114,7 +114,7 @@ public partial class SimTests
             var g = Galaxy.Generate(seed);
             foreach (var f in g.Factions)
             {
-                var mine = g.Economies.Where(x => g.OwnerOf(x.Key) == f.Id && !g.UnbuiltSites.Contains(x.Key)).Select(x => x.Value).ToList();
+                var mine = g.Economies.Where(x => g.OwnerOf(x.Key) == f.Id).Select(x => x.Value).ToList();
                 var used = mine.SelectMany(e => e.Wares.Where(e.Uses)).Distinct();
                 Assert.All(used, w => Assert.True(mine.Any(e => e.Makes(w)), $"seed {seed}: {f.Name} uses {w} but makes none"));
             }

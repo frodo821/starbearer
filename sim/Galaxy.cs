@@ -63,16 +63,53 @@ public sealed class Galaxy
     public int StarOf(int station) => StationStars[station];
     public StationKind KindOf(int station) => Kinds[station];
     public bool IsStation(int id) => StationStars.ContainsKey(id);
-    /// <summary>The war as it stands: what is down, what is damaged. The market keeps it and hands it here.</summary>
-    public WarState War { get; set; } = new();
-    /// <summary>Fortress sites with nothing built on them at the start.</summary>
-    public HashSet<int> UnbuiltSites { get; set; } = new();
-    /// <summary>Whether a station stands: built, and not destroyed.</summary>
-    public bool Alive(int station) => !War.Down.Contains(station);
+    /// <summary>The war as it stands: what is down, what is damaged, what has been built. The market keeps it and hands it here (see Bind).</summary>
+    public WarState War { get; private set; } = new();
+    /// <summary>Stations built during the game, by any market bound so far; the bound one's are those that stand.</summary>
+    readonly HashSet<int> _built = new();
+    HashSet<int> _inWar = new();
+    /// <summary>Whether a station stands: there from the start or built in the war bound now, and not destroyed.</summary>
+    public bool Alive(int station) => !War.Down.Contains(station) && (!_built.Contains(station) || _inWar.Contains(station));
+    /// <summary>Whether a station was built during the game rather than there from the start.</summary>
+    public bool BuiltDuringGame(int station) => _built.Contains(station);
+    /// <summary>The first id a station built during the game gets.</summary>
+    public int NextStationId => StationStars.Keys.Where(k => !_built.Contains(k)).DefaultIfEmpty(FirstStationId - 1).Max() + 1;
+
+    /// <summary>Takes up a war state: stations it has built that this galaxy hasn't seen yet are added.</summary>
+    public void Bind(WarState war)
+    {
+        War = war;
+        var fresh = war.Added.Where(a => !StationStars.ContainsKey(a.Id)).ToList();
+        foreach (var a in fresh) Apply(a);
+        // Their economies once all are in: a gate's upkeep needs where its exit is.
+        if (_economies != null) foreach (var a in fresh) _economies[a.Id] = Economy.Of(this, a.Id);   // appended, so the snapshot order holds
+        if (fresh.Count > 0) { _economyOrder = null; RoutesChanged(); }
+        foreach (var a in war.Added)
+            if (StationStars[a.Id] != a.Star || Kinds[a.Id] != a.Kind) throw new InvalidOperationException($"station {a.Id} differs between wars");
+        var inWar = war.Added.Select(a => a.Id).ToHashSet();
+        if (!inWar.SetEquals(_inWar)) { _inWar = inWar; RoutesChanged(); }
+    }
+
+    /// <summary>Adds a station built during the game, and lets go of what was worked out from the old set.</summary>
+    void Apply(AddedStation a)
+    {
+        StationStars[a.Id] = a.Star;
+        Kinds[a.Id] = a.Kind;
+        if (RegionOwners.Length > 0 && a.Owner != RegionOwners[Stars[a.Star].Region]) Owners[a.Id] = a.Owner;
+        if (a.Link >= 0) { GateLinks[a.Id] = a.Link; GateLinks[a.Link] = a.Id; }
+        if (a.Kind == StationKind.Gate) Gates = Gates.Append(a.Id).ToArray();
+        else if (a.Kind == StationKind.Depot) { Depots = Depots.Append(a.Id).ToArray(); _depots = null; }
+        else Ports = Ports.Append(a.Id).ToArray();
+        _built.Add(a.Id);
+        _byStar = null;
+    }
+
+    /// <summary>Gates went up or down: goods and news find their ways again.</summary>
+    public void RoutesChanged() { _neighbours = null; _links = null; _lag = null; }
 
     /// <summary>Every station standing in a system, in id order.</summary>
     public IEnumerable<int> StationsIn(int star) => AllStationsIn(star).Where(Alive);
-    /// <summary>Every station in a system, standing or not, fortress sites included, in id order.</summary>
+    /// <summary>Every station there has been in a system, standing or not, in id order.</summary>
     public int[] AllStationsIn(int star) => (_byStar ??= StationStars.GroupBy(x => x.Value).ToDictionary(k => k.Key, k => k.Select(x => x.Key).OrderBy(x => x).ToArray()))
         .TryGetValue(star, out var ids) ? ids : Array.Empty<int>();
     Dictionary<int, int[]>? _byStar;
@@ -104,53 +141,47 @@ public sealed class Galaxy
     Dictionary<int, StationEconomy>? _economies;
     /// <summary>What each station makes and uses, by station id. Gates and depots included: they keep fuel for ships.</summary>
     public IReadOnlyDictionary<int, StationEconomy> Economies => _economies ??=
-        Ports.Concat(Depots).Concat(Gates).ToDictionary(s => s, s => Economy.Of(this, s));
+        Ports.Concat(Depots).Concat(Gates).OrderBy(s => _built.Contains(s) ? s : int.MinValue).ToDictionary(s => s, s => Economy.Of(this, s));
 
-    (int A, int B, double Closeness, int Gate, double Direct, double Fallback, int FallbackGate)[]? _neighbours;
+    (int A, int B, double Closeness, int Gate, double Direct)[]? _neighbours;
     /// <summary>
     /// Station pairs whose stock evens out, and how strongly: closer ones more. Only a faction's own
     /// stations trade: within a region, between regions along a gate route (weaker the farther the
     /// stations sit from the gates), and along the supply lines of what a faction keeps supplied from
     /// everywhere. Goods reach the enemy only in ships' holds. Gate is the gate the best route goes
-    /// through (-1 for none), counting gates a faction may yet build; Fallback the best by the gates
-    /// there from the start (FallbackGate, or -1 for straight); Direct how close they are by no gate.
-    /// Each day the first of these whose gate runs is used.
+    /// through (-1 for none), and Direct how close they are by no gate, for days that gate stands still.
+    /// Worked out over the stations standing, again whenever a station is built or a gate falls.
     /// </summary>
-    public (int A, int B, double Closeness, int Gate, double Direct, double Fallback, int FallbackGate)[] Neighbours => _neighbours ??= Economies.Keys.OrderBy(s => s)
-        .SelectMany(a => Economies.Keys.Where(b => b > a && OwnerOf(a) == OwnerOf(b)).Select(b =>
+    public (int A, int B, double Closeness, int Gate, double Direct)[] Neighbours => _neighbours ??= Economies.Keys.Where(Alive).OrderBy(s => s).ToArray() is var live
+        ? live.SelectMany(a => live.Where(b => b > a && OwnerOf(a) == OwnerOf(b)).Select(b =>
         {
             var direct = Closeness(a, b, null);
-            var pair = GateLinks.TryGetValue(a, out var x) && x == b;
-            if (pair) return (a, b, 1.0, a, 0.0, 0.0, -1);
-            var (ly, gate) = TradeLy(a, b, all: true);
+            if (GateLinks.TryGetValue(a, out var x) && x == b) return (a, b, 1.0, a, 0.0);
+            var (ly, gate) = TradeLy(a, b);
             var via = ly == null ? direct : Closeness(a, b, ly);
-            var (ly0, gate0) = TradeLy(a, b, all: false);
-            var via0 = ly0 == null ? direct : Closeness(a, b, ly0);
-            return (a, b, Math.Max(via, direct), via > direct ? gate : -1, direct, Math.Max(via0, direct), via0 > direct ? gate0 : -1);
-        }).Where(l => l.Item3 > 0))
-        .ToArray();
+            return (a, b, Math.Max(via, direct), via > direct ? gate : -1, direct);
+        }).Where(l => l.Item3 > 0)).ToArray() : default!;
 
     (int A, int B, double Closeness)[]? _links;
     /// <summary>
     /// Every pair news travels between directly: within a region, each pair of linked gates, and a
     /// supply line of a fortress, an armory or a fuel plant, to every station that deals in what it needs.
     /// </summary>
-    (int A, int B, double Closeness)[] Links => _links ??= Economies.Keys.OrderBy(s => s)
-        .SelectMany(a => Economies.Keys.Where(b => b > a).Select(b => (a, b, Closeness(a, b, null))).Where(l => l.Item3 > 0))
-        .ToArray();
+    (int A, int B, double Closeness)[] Links => _links ??= Economies.Keys.Where(Alive).OrderBy(s => s).ToArray() is var live
+        ? live.SelectMany(a => live.Where(b => b > a).Select(b => (a, b, Closeness(a, b, null))).Where(l => l.Item3 > 0)).ToArray() : default!;
 
     /// <summary>
     /// How far goods go between two stations by way of a gate: to it, and on from its exit, with the
     /// passage counted as Tuning.GateTradeLy more, and the gate. Null where no gate route is shorter than the way straight there.
     /// </summary>
-    (double? Ly, int Gate) TradeLy(int a, int b, bool all)
+    (double? Ly, int Gate) TradeLy(int a, int b)
     {
         double Apart(int x, int y) => (StarAt(x).Position - StarAt(y).Position).Length;
         var direct = Apart(a, b);
         (double? Ly, int Gate) best = (null, -1);
         foreach (var (gate, exit) in GateLinks)
         {
-            if (!all && UnbuiltSites.Contains(gate)) continue;
+            if (!Alive(gate) || !Alive(exit)) continue;
             var ly = Apart(a, gate) + Apart(exit, b) + Tuning.GateTradeLy;
             if (ly < direct && (best.Ly == null || ly < best.Ly)) best = (ly, gate);
         }
@@ -180,11 +211,9 @@ public sealed class Galaxy
     }
 
     double[,]? _lag;
-    /// <summary>A gate went up: news finds the new way from now on.</summary>
-    public void GateBuilt() => _lag = null;
     int[]? _economyOrder;
 
-    /// <summary>Stations in the fixed order market snapshots keep them.</summary>
+    /// <summary>Stations in the order market snapshots keep them: those from the start, then those built after, as built.</summary>
     public int[] EconomyOrder => _economyOrder ??= Economies.Keys.ToArray();
 
     /// <summary>
@@ -202,7 +231,6 @@ public sealed class Galaxy
             var edges = Enumerable.Range(0, n).Select(_ => new List<(int To, double Days)>()).ToArray();
             foreach (var (a, b, _) in Links)
             {
-                if (GateLinks.TryGetValue(a, out var pair) && pair == b && (!Alive(a) || !Alive(b))) continue;   // no news by a gate not yet built
                 var days = GateLinks.TryGetValue(a, out var x) && x == b ? Economy.GateRelayDays
                     : (StarAt(a).Position - StarAt(b).Position).Length / Economy.NewsLyPerDay;
                 edges[index[a]].Add((index[b], days));
@@ -248,7 +276,7 @@ public sealed class Galaxy
     static List<Center> Moons(Center system) => system.Children.SelectMany(p => p.Children).Where(m => m.Edge * 0.25 > Tuning.HostClearance).ToList();
 
     /// <summary>Whether a system has the body a kind of station works: gas harvesting needs a giant, ice a moon.</summary>
-    static bool Fits(StationKind kind, Center system) => kind switch
+    internal static bool Fits(StationKind kind, Center system) => kind switch
     {
         StationKind.GasHarvester => Planets(system).Any(p => p.Kind == BodyKind.Giant),
         _ => true,   // ice is cut from a moon where there is one, else from the outer belt
@@ -559,9 +587,9 @@ public sealed class Galaxy
     /// <summary>
     /// The war's places, drawn last so the rest of the galaxy stays as it was: an armory in each region
     /// whose faction's weapon is made (a particle beam burns hydrogen as it comes), and the fronts. A
-    /// front is a pair of regions of different factions a gate joins; on each side, the systems nearest
-    /// the other get a fortress site for each faction. The nearest two are battlefields from the start,
-    /// a fortress of each side built there; the rest wait for a faction to build on them.
+    /// front is a pair of regions of different factions a gate joins; on each side, the system nearest
+    /// the other (not a gate's) is a battlefield from the start, with a fortress of each side. Where the
+    /// war goes from there is the factions' doing (see War.Build).
     /// </summary>
     static void PlaceWar(Rng r, Galaxy g)
     {
@@ -594,73 +622,15 @@ public sealed class Galaxy
             {
                 var enemy = g.Stars.Where(s => s.Region == away).ToList();
                 var near = g.Stars.Where(s => s.Region == home && g.GateIn(s.Id) < 0 && !used.Contains(s.Id))
-                    .OrderBy(s => enemy.Min(e => (e.Position - s.Position).Length)).Take(Tuning.FrontSystems).ToList();
-                for (int i = 0; i < near.Count; i++)
+                    .OrderBy(s => enemy.Min(e => (e.Position - s.Position).Length)).Take(Tuning.Battlefields).ToList();
+                foreach (var star in near)
                 {
-                    used.Add(near[i].Id);
-                    var defend = Add(near[i].Id, StationKind.Fortress, g.RegionOwners[home]);
-                    var attack = Add(near[i].Id, StationKind.Fortress, g.RegionOwners[away]);
-                    if (i >= Tuning.Battlefields) { g.UnbuiltSites.Add(defend); g.UnbuiltSites.Add(attack); }
+                    used.Add(star.Id);
+                    Add(star.Id, StationKind.Fortress, g.RegionOwners[home]);
+                    Add(star.Id, StationKind.Fortress, g.RegionOwners[away]);
                 }
-            }
-        // Room to grow: in each region a site for each economic kind, on a free star whose system suits it,
-        // for its faction to build on when it runs short of what that kind makes (see Industry).
-        var economic = Enumerable.Range(0, (int)StationKind.Depot).Select(i => (StationKind)i).ToArray();
-        foreach (var region in g.Regions)
-            foreach (var kind in economic)
-            {
-                var free = g.Stars.Where(s => s.Region == region.Id && g.AllStationsIn(s.Id).Length == 0 && Fits(kind, g.System(s.Id))).ToList();
-                if (free.Count == 0) continue;
-                g.UnbuiltSites.Add(Add(free[r.Index(free.Count)].Id, kind, g.RegionOwners[region.Id]));
             }
         g.Ports = g.Ports.Concat(added).ToArray();
-        PlaceGateSites(r, g, ref next);
-        g.War = WarState.Start(g);
-    }
-
-    /// <summary>
-    /// Where each faction may one day build a gate of its own: in each of its regions a few free stars
-    /// spread away from the gates already there, and of the pairs of them far enough apart to be worth a
-    /// gate, the longest few that share no end. Nothing stands on them until a faction builds (see Industry).
-    /// </summary>
-    static void PlaceGateSites(Rng r, Galaxy g, ref int next)
-    {
-        var gates = new List<int>();
-        foreach (var f in g.Factions)
-        {
-            var anchors = new List<Star>();
-            foreach (var region in Enumerable.Range(0, g.Regions.Length).Where(x => g.RegionOwners[x] == f.Id))
-            {
-                var taken = g.Gates.Where(x => g.StarAt(x).Region == region).Select(x => g.StarAt(x).Position).ToList();
-                var free = g.Stars.Where(s => s.Region == region && g.AllStationsIn(s.Id).Length == 0).ToList();
-                for (int i = 0; i < Tuning.GateAnchorsPerRegion && free.Count > 0; i++)
-                {
-                    var pick = taken.Count == 0 ? free[r.Index(free.Count)] : free.MaxBy(s => taken.Min(p => (p - s.Position).Length))!;
-                    anchors.Add(pick); taken.Add(pick.Position); free.Remove(pick);
-                }
-            }
-            var pairs = anchors.SelectMany((a, i) => anchors.Skip(i + 1).Select(b => (A: a, B: b, Ly: (a.Position - b.Position).Length)))
-                .Where(p => p.Ly >= Tuning.GateSiteMinLy).OrderByDescending(p => p.Ly).ToList();
-            var used = new HashSet<int>();
-            foreach (var (a, b, _) in pairs)
-            {
-                if (gates.Count(x => g.OwnerOf(x) == f.Id) >= Tuning.GateSitesPerFaction * 2) break;
-                if (used.Contains(a.Id) || used.Contains(b.Id)) continue;
-                used.Add(a.Id); used.Add(b.Id);
-                var (x, y) = (next++, next++);
-                foreach (var (id, star) in new[] { (x, a.Id), (y, b.Id) })
-                {
-                    g.StationStars[id] = star;
-                    g.Kinds[id] = StationKind.Gate;
-                    if (f.Id != g.RegionOwners[g.Stars[star].Region]) g.Owners[id] = f.Id;
-                    g.UnbuiltSites.Add(id);
-                    gates.Add(id);
-                }
-                g.GateLinks[x] = y; g.GateLinks[y] = x;
-                g._byStar = null;
-            }
-        }
-        g.Gates = g.Gates.Concat(gates).ToArray();
     }
 
     public double Density(Vec3d p)

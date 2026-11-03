@@ -12,13 +12,15 @@ public partial class SimTests
     }
 
     [Fact]
-    public void EveryRegionHasSitesToGrowOn()
+    public void ANewStationGoesToAFreeSystemOfTheFactionsThatSuitsIt()
     {
-        var g = Galaxy.Generate(5);
-        var sites = g.UnbuiltSites.Where(x => g.KindOf(x) < StationKind.Depot).ToList();
-        Assert.All(g.Regions, r => Assert.True(sites.Count(x => g.StarAt(x).Region == r.Id) >= 5));
-        Assert.All(sites, x => Assert.Equal(g.RegionOwners[g.StarAt(x).Region], g.OwnerOf(x)));
-        Assert.All(sites, x => Assert.False(g.Alive(x)));
+        var (g, _, f) = ReadyToBuild();
+        var region = Array.IndexOf(g.RegionOwners, f);
+        var star = Industry.Place(g, f, StationKind.GasHarvester, g.Regions[region].Center);
+        Assert.True(star >= 0);
+        Assert.Equal(f, g.RegionOwners[g.Stars[star].Region]);
+        Assert.Contains(g.System(star).Children, p => p.Kind == BodyKind.Giant);
+        Assert.False(g.Claim(star).Contested);
         Assert.Equal(StationKind.Refinery, Industry.MakerOf("steel"));
         Assert.Null(Industry.MakerOf("missiles"));   // war goods are the armories'
     }
@@ -60,19 +62,6 @@ public partial class SimTests
 public partial class SimTests
 {
     [Fact]
-    public void GateSitesWaitUnbuiltAndPassNothing()
-    {
-        var (s, g) = SaveData.NewGalaxy(5);
-        var m = s.MarketIn(g);
-        var sites = g.Gates.Where(x => g.UnbuiltSites.Contains(x)).ToList();
-        Assert.NotEmpty(sites);
-        Assert.All(sites, x => Assert.Contains(g.GateLinks[x], sites));
-        Assert.All(sites, x => Assert.True(g.GateSpan(x) >= Tuning.GateSiteMinLy));
-        Assert.All(sites, x => Assert.False(Gates.Open(g, m, x)));
-        Assert.All(g.Regions, r => Assert.DoesNotContain(g.LinkedRegions(r.Id), x => g.Gates.Where(g.Alive).All(gt => g.StarAt(gt).Region != x)));
-    }
-
-    [Fact]
     public void AStrandedWareGetsAGateBetweenWhereItIsMadeAndWanted()
     {
         var (s, g) = SaveData.NewGalaxy(5);
@@ -91,6 +80,8 @@ public partial class SimTests
         Assert.Equal(f, built.Faction);
         Assert.Equal(before + 2, g.Gates.Count(g.Alive));
         Assert.True(Gates.Open(g, m, built.Station));
+        Assert.True(g.GateSpan(built.Station) >= Tuning.GateMinLy);
+        Assert.Contains(g.Neighbours, n => n.Gate == built.Station || n.Gate == g.GateLinks[built.Station]);   // goods take it
         Assert.True(m.War.GateProgress[f] < 1);
         Assert.Contains("ゲートを建てた", War.Describe(g, built));
     }
