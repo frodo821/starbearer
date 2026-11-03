@@ -74,7 +74,7 @@ public partial class Autotest : Node
 
     double Off(Vec3d dir) => Math.Acos(Math.Clamp(_g.Helm.Nose.Dot(dir), -1, 1));
 
-    int _heldTarget, _stop, _bought, _gate, _exit, _firstShip;
+    int _heldTarget, _stop, _bought, _gate, _exit, _firstShip, _capital, _neighbour;
     ShipClass? _boughtClass;
     (Vec3d, float) _chartBefore;
     int _parkedAt;
@@ -963,6 +963,35 @@ public partial class Autotest : Node
         {
             Check("the toll is settled at the next dock", Math.Abs(_g.Save!.Credits - (_credits + _g.Earned - _toll)) < 1e-9 && _g.PortReport.Any(l => l.StartsWith("通行税")));
             Press(Key.Enter);
+        });
+        Do(() =>
+        {
+            // A faction's capital, as its friend: state work on the board, and other stations in its system.
+            var g = _g.G!;
+            _capital = War.Capital(g, 0);
+            _g.Purchase(s => s.Standing[0] = Factions.FriendlyAt + 1);
+            _g.DockAtForTest(_capital);
+        });
+        Do(() =>
+        {
+            Check("a friend finds state work at the capital", _g.Screen == Screen.Port && _g.Offers.Any(m => m.State));
+            Shot("14_capital_port");
+            Press(Key.Enter);
+        });
+        Do(() => Press(Key.U));
+        Do(() =>
+        {
+            var g = _g.G!;
+            var v = _g.V!;
+            Check("the capital's system has several stations", g.StationsIn(v.SystemStar).Count() >= 3 && v.LocalStation!.Id == _capital);
+            _neighbour = g.StationsIn(v.SystemStar).First(x => x != _capital);
+            Click(MouseButton.Left, _g.HudForTest.PointOfStationForTest(g.StationAt(_neighbour)));
+        });
+        Do(() =>
+        {
+            var v = _g.V!;
+            Check("a tap on another station of the system makes it the one to deal with", v.LocalStation!.Id == _neighbour && v.Goal == v.LocalStation);
+            Shot("14a_hub_stations");
         });
         Do(() => _g.GoBrokeForTest());
         Do(() =>

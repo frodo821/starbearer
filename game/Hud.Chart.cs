@@ -160,7 +160,8 @@ public partial class Hud
             }
             var at = SystemPoint(star, host + st.Position(v.AbsoluteTime));
             DrawRect(new Rect2(at - new Vector2(3, 3), 6, 6), Good);
-            Text(at + new Vector2(7, -5), Missions.ShortName(g.KindOf(id)) + (star == v.TargetStar ? "（目的地）" : ""), Good, 12);
+            var name = g.StationsIn(star).Count() > 1 ? Missions.KindLabel(g.KindOf(id)) : Missions.ShortName(g.KindOf(id));   // several: told apart
+            Text(at + new Vector2(7, -5), name + (star == v.TargetStar ? "（目的地）" : ""), Good, 12);
         }
     }
 

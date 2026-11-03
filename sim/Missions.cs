@@ -2,13 +2,18 @@ namespace Starbearer.Sim;
 
 /// <summary>
 /// What a station does: what it makes and uses, and so which jobs its board offers. The economic kinds
-/// come first, up to Depot; the ones after it each have a role of their own. Harvesters need the body
+/// come first, up to Depot; the ones after it each have a role of their own. Capital is last so the
+/// numbers of the rest stay as saves keep them. Harvesters need the body
 /// their work needs: gas a giant, ice a moon; mines work the belt around the star.
 /// </summary>
-public enum StationKind { Mine, IceMine, GasHarvester, Refinery, ChemPlant, FuelPlant, Farm, Clinic, Factory, City, Depot, Shipyard, Colony, Armory, Fortress, Gate }
+public enum StationKind { Mine, IceMine, GasHarvester, Refinery, ChemPlant, FuelPlant, Farm, Clinic, Factory, City, Depot, Shipyard, Colony, Armory, Fortress, Gate, Capital }
 
 /// <summary>A job from a mission board: carry Cargo to Target for Pay, less whatever the cargo loses.</summary>
-public sealed record Mission(string Id, int Origin, int Target, Cargo Cargo, double Pay);
+public sealed record Mission(string Id, int Origin, int Target, Cargo Cargo, double Pay)
+{
+    /// <summary>State work from a capital, given only to a company its faction counts a friend.</summary>
+    public bool State { get; init; }
+}
 
 /// <summary>
 /// A load in the hold: a job's cargo, or goods bought to trade (a lot, with no destination: its
@@ -32,6 +37,21 @@ public static class Missions
     const int PortOffers = 5, SmallOffers = 3;
     /// <summary>Colonies need more than they make: jobs go there more often, and pay more for it.</summary>
     const double ColonyPull = 2, ColonyPay = 1.25;
+    /// <summary>A capital draws jobs as a colony does, and pays a little more.</summary>
+    const double CapitalPull = 2, CapitalPay = 1.3;
+    /// <summary>How many state jobs a capital offers a friend, how much more they pay than a one-off item, and the least distance they go.</summary>
+    const int StateOffers = 2;
+    const double StatePay = 2, StateMinLy = 15;
+
+    /// <summary>What a capital sends, sealed, to its faction's stations far off.</summary>
+    static readonly Cargo[] StateItems =
+    {
+        new("外交文書", 0.1, 0.7, 180, 1), new("政府の機密資料", 0.2, 0.6, 200, 1), new("勲章と辞令", 0.1, 0.7, 150, 1),
+        new("要人の私物", 0.4, 0.55, 190, 2), new("暗号機", 0.5, 0.6, 220, 2), new("戦時国債の証書", 0.1, 0.8, 160, 1),
+    };
+
+    static double Pull(StationKind kind) => kind switch { StationKind.Colony => ColonyPull, StationKind.Capital => CapitalPull, _ => 1 };
+    static double Demand(StationKind kind) => kind switch { StationKind.Colony => ColonyPay, StationKind.Capital => CapitalPay, _ => 1 };
 
     /// <summary>One-off things that exist only as jobs: no station makes or stocks them.</summary>
     static readonly Cargo[] Specials =
@@ -59,6 +79,7 @@ public static class Missions
         StationKind.Armory => "軍需工場",
         StationKind.Fortress => "要塞",
         StationKind.Gate => "ゲート",
+        StationKind.Capital => "首都",
         _ => "補給ステーション",
     };
 
@@ -71,6 +92,7 @@ public static class Missions
         StationKind.Armory => "軍需工場",
         StationKind.Fortress => "要塞",
         StationKind.Gate => "ゲート",
+        StationKind.Capital => "首都",
         _ => "港",
     };
 
@@ -81,31 +103,35 @@ public static class Missions
         StationKind.Colony => "●",
         StationKind.Gate => "◎",
         StationKind.Fortress => "■",
+        StationKind.Capital => "★",
         _ => "◆",
     };
 
-    /// <summary>The marks after a star's name on the chart, one per station standing there: ◆ port, ◇ depot, ▲ shipyard, ● colony, ■ fortress, ◎ gate; none without a station.</summary>
+    /// <summary>The marks after a star's name on the chart, one per station standing there: ◆ port, ◇ depot, ▲ shipyard, ● colony, ■ fortress, ◎ gate, ★ capital; none without a station.</summary>
     public static string Mark(Galaxy g, int star) =>
         g.HasStation(star) ? " " + string.Concat(g.StationsIn(star).Select(id => MarkOf(g.KindOf(id)))) : "";
 
     /// <summary>A station as the player reads it: its system and what it is, e.g. "Ruka 造船所".</summary>
-    public static string Label(Galaxy g, int station) => $"{g.StarAt(station).Name} {(g.KindOf(station) < StationKind.Depot ? Name(g.KindOf(station)) : ShortName(g.KindOf(station)))}";
+    public static string Label(Galaxy g, int station) => $"{g.StarAt(station).Name} {KindLabel(g.KindOf(station))}";
+
+    /// <summary>What a station is, told apart from the others in its system: the full name for a plant of the economy, the short one for the rest.</summary>
+    public static string KindLabel(StationKind kind) => kind < StationKind.Depot ? Name(kind) : ShortName(kind);
 
     /// <summary>Pay grows with the straight-line distance. Whether the way there is worth flying is the pilot's call.</summary>
     static double PayFor(Galaxy g, int from, int to, Cargo cargo)
     {
         var ly = (g.StarAt(to).Position - g.StarAt(from).Position).Length;
-        var demand = g.KindOf(to) == StationKind.Colony ? ColonyPay : 1;
-        return Math.Round(cargo.Reward * Math.Max(0.4, ly / Tuning.StandardHaulLy) * demand);
+        return Math.Round(cargo.Reward * Math.Max(0.4, ly / Tuning.StandardHaulLy) * Demand(g.KindOf(to)));
     }
 
     /// <summary>
     /// What a station offers. First a one-off item, so any ship finds something to carry; then its wares,
     /// each from its spare stock to a station within reach that uses the ware and is short of it, the
     /// widest price gaps first. Pay is that gap, at least a fifth of the ware's price, plus a share for
-    /// the distance. What is left over goes to one-off items. Gates post no jobs.
+    /// the distance. What is left over goes to one-off items. Gates post no jobs. A capital adds state
+    /// work for a friend of its faction: sealed items to its stations far off, at several times the pay.
     /// </summary>
-    public static List<Mission> Board(Galaxy g, Market market, int station, int deliveries, IEnumerable<Consignment> hold)
+    public static List<Mission> Board(Galaxy g, Market market, int station, int deliveries, IEnumerable<Consignment> hold, bool friend = false)
     {
         var r = new Rng(g.Seed * 7919 + g.SeedKey(station) * 104729 + (ulong)deliveries * 31);
         var kind = g.KindOf(station);
@@ -115,7 +141,7 @@ public static class Missions
         var reach = g.LinkedRegions(region).Append(region).ToHashSet();
         var places = g.Economies.Keys.Where(s => s != station && g.Alive(s) && reach.Contains(g.StarAt(s).Region)).ToArray();
         var stations = places.Where(s => g.KindOf(s) is not (StationKind.Gate or StationKind.Fortress))
-            .OrderBy(s => r.Unit() / (g.KindOf(s) == StationKind.Colony ? ColonyPull : 1)).ToArray();
+            .OrderBy(s => r.Unit() / Pull(g.KindOf(s))).ToArray();
         if (stations.Length == 0) return new();
         var count = kind is StationKind.Depot or StationKind.Shipyard ? SmallOffers : PortOffers;
         var here = g.Economies[station];
@@ -150,11 +176,22 @@ public static class Missions
             spare[ware] -= units;
             var w = Wares.Get(ware);
             var ly = (g.StarAt(to).Position - g.StarAt(station).Position).Length;
-            var demand = g.KindOf(to) == StationKind.Colony ? ColonyPay : 1;
-            var pay = units * (Math.Max(gap, w.Price * GapFloor) + w.Price * DistancePay * Math.Max(0.4, ly / Tuning.StandardHaulLy)) * demand;
+            var pay = units * (Math.Max(gap, w.Price * GapFloor) + w.Price * DistancePay * Math.Max(0.4, ly / Tuning.StandardHaulLy)) * Demand(g.KindOf(to));
             offers.Add(new Mission($"{station}-{deliveries}-{offers.Count}", station, to, w.Load(units), Math.Round(pay)));
         }
         for (int i = offers.Count; i < count; i++) Special(i);
+        if (kind == StationKind.Capital && friend)
+        {
+            var owner = g.OwnerOf(station);
+            var far = g.Economies.Keys.Where(s => g.Alive(s) && g.OwnerOf(s) == owner && g.KindOf(s) is not (StationKind.Gate or StationKind.Fortress or StationKind.Capital)
+                                                  && (g.StarAt(s).Position - g.StarAt(station).Position).Length >= StateMinLy)
+                .OrderBy(s => r.Unit()).Take(StateOffers).ToList();
+            foreach (var to in far)
+            {
+                var item = StateItems[r.Index(StateItems.Length)];
+                offers.Add(new Mission($"{station}-{deliveries}-s{offers.Count}", station, to, item, Math.Round(PayFor(g, station, to, item) * StatePay)) { State = true });
+            }
+        }
         var taken = hold.Select(c => c.Mission.Id).ToHashSet();
         return offers.Where(m => !taken.Contains(m.Id)).ToList();
     }
@@ -170,10 +207,11 @@ public static class Missions
     /// </summary>
     public static List<Mission> OffersFor(SaveData s, Galaxy g)
     {
-        var key = $"{s.PortStation}:{s.Deliveries}:{s.TotalDays:F4}";
+        var friend = Factions.Toward(s, g, s.PortStation) == Stance.Friendly;
+        var key = $"{s.PortStation}:{s.Deliveries}:{s.TotalDays:F4}:{friend}";   // becoming a friend opens a capital's state work
         if (s.OffersAt != key)
         {
-            s.Offers = Board(g, s.MarketIn(g), s.PortStation, s.Deliveries, s.Hold);
+            s.Offers = Board(g, s.MarketIn(g), s.PortStation, s.Deliveries, s.Hold, friend);
             s.OffersAt = key;
         }
         return s.Offers;

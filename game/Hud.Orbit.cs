@@ -219,7 +219,7 @@ public partial class Hud
                     var (sh, sp) = (OrbitPoint(x.Ship), OrbitPoint(x.Station));
                     DrawCircle(sh, 3, new Color(1f, 0.8f, 0.4f));
                     DrawRect(new Rect2(sp - new Vector2(4, 4), 8, 8), new Color(Good, 0.55f));
-                    Text(sp + new Vector2(8, 14), $"到着時の{Main.NameOf(watched)}", new Color(Good, 0.8f), 12);
+                    Text(sp + new Vector2(8, 14), $"到着時の{Game.NameOf(watched)}", new Color(Good, 0.8f), 12);
                 }
                 if (fc.Closest is { } a) DrawClosest(a, OrbitPoint);
             }
@@ -322,29 +322,63 @@ public partial class Hud
             .OrderBy(x => x.d).Select(x => (IOrbiter?)x.c).FirstOrDefault();
     }
 
-    /// <summary>Where the system's station is on the orbit chart, if it has one.</summary>
-    Vector2? StationPoint()
+    /// <summary>Where the station the ship deals with is on the orbit chart, if the system has one.</summary>
+    Vector2? StationPoint() => Game.V!.LocalStation is { } st ? StationPoint(st) : null;
+
+    /// <summary>Where a station of this system is on the orbit chart.</summary>
+    Vector2 StationPoint(Station st)
     {
         var v = Game.V!;
-        if (v.LocalStation is not { } st) return null;
         var t = v.AbsoluteTime;
         var host = (st.Host ?? Game.G!.System(v.SystemStar)).StarPosition(t) - v.Primary.StarPosition(t);
         return OrbitPoint(host + st.Position(t));
     }
 
     public Vector2? StationPointForTest => StationPoint();
+    public Vector2 PointOfStationForTest(Station st) => StationPoint(st);
 
+    /// <summary>The system's stations, the one the ship deals with first.</summary>
+    IEnumerable<Station> SystemStations()
+    {
+        var v = Game.V!;
+        var local = v.LocalStation;
+        return Game.G!.StationsIn(v.SystemStar).Select(Game.G.StationAt).OrderBy(st => st.Id == local?.Id ? 0 : 1).ThenBy(st => st.Id);
+    }
+
+    /// <summary>The station under a tap, if any, nearest first.</summary>
+    Station? StationUnder(Vector2 at) => Game.Chart.PixelsPerAu < 35 ? null
+        : SystemStations().Select(st => (st, d: StationPoint(st).DistanceTo(at))).Where(x => x.d < 14).OrderBy(x => x.d).Select(x => x.st).FirstOrDefault();
+
+    /// <summary>
+    /// Every station of the system: the one the ship deals with bright, with its orbit, the rest dim, so
+    /// one can be picked. A station a job in the hold is bound for says so.
+    /// </summary>
     void DrawLocalStation()
     {
         var v = Game.V!;
-        if (v.LocalStation is not { } st) return;
+        var g = Game.G!;
         var t = v.AbsoluteTime;
-        var host = (st.Host ?? Game.G!.System(v.SystemStar)).StarPosition(t) - v.Primary.StarPosition(t);
-        var (u, w, rad) = (st.U, st.W, st.Radius);
-        Polyline3(a => host + (u * Math.Cos(a) + w * Math.Sin(a)) * rad, new Color(Good, 0.35f), 1);
-        var sp = StationPoint()!.Value;
+        var bound = v.Hold.Where(c => c.IsJob).Select(c => c.Mission.Target).ToHashSet();
+        var many = g.StationsIn(v.SystemStar).Count() > 1;
+        foreach (var other in SystemStations().Skip(1).Reverse())
+        {
+            var host = (other.Host ?? g.System(v.SystemStar)).StarPosition(t) - v.Primary.StarPosition(t);
+            Polyline3(a => host + (other.U * Math.Cos(a) + other.W * Math.Sin(a)) * other.Radius, new Color(Good, 0.12f), 1);
+            var op = StationPoint(other);
+            var col = new Color(Good, 0.55f);
+            DrawRect(new Rect2(op - new Vector2(3, 3), 6, 6), col);
+            Text(op + new Vector2(7, -5), Missions.KindLabel(g.KindOf(other.Id)) + (bound.Contains(other.Id) ? "（届け先）" : ""), col, 12);
+        }
+        if (v.LocalStation is not { } st) return;
+        {
+            var host = (st.Host ?? g.System(v.SystemStar)).StarPosition(t) - v.Primary.StarPosition(t);
+            var (u, w, rad) = (st.U, st.W, st.Radius);
+            Polyline3(a => host + (u * Math.Cos(a) + w * Math.Sin(a)) * rad, new Color(Good, 0.35f), 1);
+        }
+        var sp = StationPoint(st);
         DrawRect(new Rect2(sp - new Vector2(4, 4), 8, 8), Good);
-        Text(sp + new Vector2(8, -6), Missions.ShortName(Game.G!.KindOf(v.LocalStation!.Id)) + (v.SystemStar == v.TargetStar ? "（目的地）" : ""), Good, 13);
+        var tag = bound.Contains(st.Id) ? "（届け先）" : !many && v.SystemStar == v.TargetStar ? "（目的地）" : "";
+        Text(sp + new Vector2(8, -6), (many ? Missions.KindLabel(g.KindOf(st.Id)) : Missions.ShortName(g.KindOf(st.Id))) + tag, Good, 13);
         if (st.Host?.Key != v.Primary.Key) return;
         // Drop line from the ship to the station's plane, so height reads in 3D.
         var height = v.SubPosition.Dot(st.PlaneNormal);

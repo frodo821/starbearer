@@ -23,6 +23,9 @@ public partial class Hud
             if (NodePoint(n) is { } np && np.DistanceTo(at) < 14) { Game.SelectNode(n); return; }
         // An apsis marker puts a node right on it.
         if (ApsisAt(at) is { } apsis) { Game.AddNode(apsis); return; }
+        // A tap on a station not yet the target picks it: in a system with several, that is how the pilot
+        // chooses one. The target itself is left to the path it sits on.
+        if (StationUnder(at) is { } station && station != v.Goal) { Game.SetTarget(station); return; }
         // A tap on a body targets it; on the target again, lets it go.
         if (OrbiterAt(at) is { } picked) { Game.SetTarget(picked == v.Goal ? null : picked); return; }
         if (Game.SubForecast is { } fc && EarliestNear(fc, at, 14) is { } time) { Game.AddNode(time); return; }

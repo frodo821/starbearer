@@ -56,7 +56,8 @@ public partial class Main
         Replan();
     }
 
-    public static string NameOf(IOrbiter? o) => o switch { Center c => c.Name, Station => "港", _ => "" };
+    /// <summary>A target as the pilot reads it: a body by name, a station by what it is.</summary>
+    public string NameOf(IOrbiter? o) => o switch { Center c => c.Name, Station st when G!.IsStation(st.Id) => Missions.KindLabel(G.KindOf(st.Id)), Station => "港", _ => "" };
 
     /// <summary>Why there is nothing to steer for from here.</summary>
     string NoWaypoint => V!.Goal switch
@@ -75,12 +76,13 @@ public partial class Main
         Replan();
     }
 
-    /// <summary>The station, then every planet and moon of the system, round again.</summary>
+    /// <summary>The stations (the one the ship deals with first), then every planet and moon of the system, round again.</summary>
     public List<IOrbiter> TargetChoices()
     {
         var v = V!;
         var list = new List<IOrbiter>();
         if (v.LocalStation is { } st) list.Add(st);
+        list.AddRange(G!.StationsIn(v.SystemStar).Where(id => id != v.LocalStation?.Id).Select(G.StationAt));
         list.AddRange(G!.System(v.SystemStar).Tree.Skip(1).Where(c => c.Key != v.Primary.Key));
         return list;
     }

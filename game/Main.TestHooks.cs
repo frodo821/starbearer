@@ -33,6 +33,7 @@ public partial class Main
         var host = st.Host!;
         v.PlaceForTest(G.StarAt(depot).Position + (host.StarPosition(v.AbsoluteTime) + st.Position(v.AbsoluteTime)) * Sublight.Scale, host.StarVelocity(v.AbsoluteTime) + st.Velocity(v.AbsoluteTime));
         v.Descend();
+        v.SetGoal(st);   // in a system of several, this one
         v.AdvanceSublight(0.01, Vec3d.Zero);
         Dock();
     }

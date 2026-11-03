@@ -87,6 +87,8 @@ public static class Economy
         StationKind.Clinic => (new[] { From(new[] { R("organics", 0.5), R("water", 0.3) }, R("medical", 0.8)) }, Array.Empty<Line>(), 0),
         StationKind.Factory => (new[] { From(new[] { R("silicon_carbide", 0.7), R("titanium", 0.4) }, R("electronics", 1.0)) }, Array.Empty<Line>(), 0),
         StationKind.City => (new[] { Use(R("food", 1.2), R("water", 0.6), R("oxygen", 0.6), R("medical", 0.12), R("electronics", 0.08)) }, Array.Empty<Line>(), 0),
+        // A faction's seat: a city many times over, and what its offices and garrison run on.
+        StationKind.Capital => (new[] { Use(R("food", 2), R("water", 1), R("oxygen", 1), R("medical", 0.3), R("electronics", 0.2)) }, Array.Empty<Line>(), 0),
         StationKind.Colony => (new[] { Use(R("food", 0.6), R("water", 0.5), R("oxygen", 0.5), R("medical", 0.08), R("steel", 0.2)) }, Array.Empty<Line>(), 0),
         StationKind.Armory => (ArmoryLines(weapon), Array.Empty<Line>(), 0),
         // A fortress's lines are its upkeep in war: the war burns them (see War.Step), steel toward the next fortress.
@@ -150,6 +152,7 @@ public static class Economy
         StationKind.Refinery or StationKind.Factory => new[] { R("fission_fuel", 0.05) },
         StationKind.Gate => new[] { R("fusion_fuel", 0.15) },
         StationKind.Fortress => new[] { R("fusion_fuel", 0.1) },
+        StationKind.Capital => new[] { R("fusion_fuel", 0.2) },
         StationKind.City or StationKind.Colony or StationKind.Shipyard => new[] { R("fusion_fuel", 0.1) },
         _ => new[] { R("fusion_fuel", 0.05) },
     };

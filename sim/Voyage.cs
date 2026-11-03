@@ -79,10 +79,20 @@ public sealed class Voyage
     public Star System => G.Stars[SystemStar];
     /// <summary>
     /// The station the ship deals with in this system: the one picked as target, else the one it set out
-    /// from or came through, else the system's first. Null in a system without one.
+    /// from or came through, else the one a job in the hold is bound for, else the system's first that
+    /// isn't a fortress. Null in a system without one.
     /// </summary>
-    public Station? LocalStation => _station is int id && G.StarOf(id) == SystemStar ? G.StationAt(id) : G.MainStation(SystemStar);
+    public Station? LocalStation => _station is int id && G.StarOf(id) == SystemStar && G.Alive(id) ? G.StationAt(id)
+        : DefaultStation(SystemStar) is int d ? G.StationAt(d) : null;
     int? _station;
+
+    int? DefaultStation(int star)
+    {
+        var here = G.StationsIn(star).ToList();
+        if (here.Count == 0) return null;
+        var bound = Hold.Where(c => c.IsJob).Select(c => c.Mission.Target).FirstOrDefault(here.Contains, -1);
+        return bound >= 0 ? bound : here.Where(s => G.KindOf(s) != StationKind.Fortress).DefaultIfEmpty(here[0]).First();
+    }
 
     /// <summary>A ship with one load, as the tools and tests fly it. origin is a station id, target a star.</summary>
     public Voyage(Galaxy g, int origin, int target, Cargo cargo, double[] closestApproach, ulong rngSeed, double epoch = 0, ShipState? ship = null, ShipClass? shipClass = null)
@@ -90,7 +100,10 @@ public sealed class Voyage
 
     public Voyage(Galaxy g, int origin, int target, IEnumerable<Consignment> hold, double[] closestApproach, ulong rngSeed, double epoch = 0, ShipState? ship = null, ShipClass? shipClass = null)
     {
-        G = g; OriginStation = origin; _station = origin; TargetStar = target; Hold = hold.Select(c => c.Copy()).ToList();
+        G = g; OriginStation = origin; TargetStar = target; Hold = hold.Select(c => c.Copy()).ToList();
+        // Leaving with a job for another station of this system, that station is what the ship deals with next.
+        _station = Hold.Where(c => c.IsJob).Select(c => c.Mission.Target)
+            .FirstOrDefault(t => t != origin && g.IsStation(t) && g.StarOf(t) == g.StarOf(origin) && g.Alive(t), origin);
         Class = shipClass ?? Ships.Courier;
         Fuel = ship?.Fuel ?? Class.Tank;
         Hull = ship?.Hull ?? 1;

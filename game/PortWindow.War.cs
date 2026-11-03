@@ -19,12 +19,15 @@ public partial class PortWindow
         var box = Column(1180);
         var m = s.MarketIn(g);
         box.AddChild(Text("戦況", 20, Good));
-        box.AddChild(Wrapped("要塞は兵器の弾薬と燃料が足りているほど強い。補給の差で勝敗が決まる。要塞に弾薬・燃料・食品・鋼鉄（次の要塞の建材）を売ると、その勢力のスタンディングが大きく上がる", 13, Dim));
+        box.AddChild(Wrapped("要塞は兵器の弾薬と燃料が足りているほど強い。補給の差で勝敗が決まる。要塞に弾薬・燃料・食品・鋼鉄（次の要塞の建材）を売ると、その勢力のスタンディングが大きく上がる。首都が無傷なら要塞は全力で撃ち、傷つくと火力が落ちる。陥落すると遷都まで大きく落ちる", 13, Dim));
         foreach (var f in g.Factions)
         {
             var forts = War.Fortresses(g).Where(x => g.OwnerOf(x) == f.Id).ToList();
             var held = g.Stars.Count(x => g.Claim(x.Id).Holder == f.Id);
-            box.AddChild(Wrapped($"{f.Name}   主力兵器 {War.WeaponName(f.Weapon)}（{Wares.Get(f.Weapon).Name}を消費）   要塞 {forts.Count}   領有 {held} 星系   次の要塞の建材 {Math.Min(1, m.War.Progress.ElementAtOrDefault(f.Id)):P0}", 16, Palette.Faction(f.Id)));
+            var capital = War.Capital(g, f.Id);
+            var seat = capital >= 0 ? $"首都 {g.StarAt(capital).Name}（構造 {m.War.HullOf(capital):P0}）"
+                : m.War.CapitalFell.TryGetValue(f.Id, out var fell) ? $"首都陥落（遷都まで {Math.Max(0, fell + War.RelocateDays - m.Day):F0} 日）" : "首都なし";
+            box.AddChild(Wrapped($"{f.Name}   主力兵器 {War.WeaponName(f.Weapon)}（{Wares.Get(f.Weapon).Name}を消費）   {seat}   火力 ×{War.Command(g, m, f.Id):F2}   要塞 {forts.Count}   領有 {held} 星系   次の要塞の建材 {Math.Min(1, m.War.Progress.ElementAtOrDefault(f.Id)):P0}", 16, Palette.Faction(f.Id)));
         }
         box.AddChild(new HSeparator());
         box.AddChild(Text("係争中の星系", 17, Good));

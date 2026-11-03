@@ -77,6 +77,10 @@ public sealed partial class Galaxy
         (galaxy.Factions, galaxy.RegionOwners) = Sim.Factions.Divide(r, galaxy, names, Tuning.FactionCount);
         CoverEachFaction(galaxy);
         PlaceWar(r, galaxy);
+        // Drawn from a stream of their own, so the rest of the galaxy comes out as it did before them.
+        var hubs = new Rng(seed ^ 0x5EED_4B1B);
+        PlaceHubs(hubs, galaxy);
+        PlaceCapitals(hubs, galaxy);
         return galaxy;
     }
 
@@ -239,7 +243,6 @@ public sealed partial class Galaxy
     static void CoverEachFaction(Galaxy g)
     {
         var economic = Economy.EconomicKinds;
-        var next = g.StationStars.Keys.Max() + 1;
         foreach (var f in g.Factions)
         {
             var regions = Enumerable.Range(0, g.Regions.Length).Where(r => g.RegionOwners[r] == f.Id).ToList();
@@ -253,11 +256,7 @@ public sealed partial class Galaxy
                         .ThenBy(st => st.Id).FirstOrDefault())
                     .FirstOrDefault(st => st != null);
                 if (star == null) continue;
-                var id = next++;
-                g.StationStars[id] = star.Id;
-                g.Kinds[id] = missing;
-                g.Ports = g.Ports.Append(id).ToArray();
-                g._byStar = null;
+                g.AddAtStart(star.Id, missing);
             }
         }
     }
@@ -272,18 +271,7 @@ public sealed partial class Galaxy
     static void PlaceWar(Rng r, Galaxy g)
     {
         if (g.Factions.Length < 2) return;
-        var next = g.StationStars.Keys.Max() + 1;
-        var added = new List<int>();
-        int Add(int star, StationKind kind, int owner)
-        {
-            var id = next++;
-            g.StationStars[id] = star;
-            g.Kinds[id] = kind;
-            if (owner != g.RegionOwners[g.Stars[star].Region]) g.Owners[id] = owner;
-            g._byStar = null;
-            added.Add(id);
-            return id;
-        }
+        int Add(int star, StationKind kind, int owner) => g.AddAtStart(star, kind, owner);
         foreach (var region in g.Regions)
         {
             var f = g.RegionOwners[region.Id];
@@ -308,6 +296,84 @@ public sealed partial class Galaxy
                     Add(star.Id, StationKind.Fortress, g.RegionOwners[away]);
                 }
             }
-        g.Ports = g.Ports.Concat(added).ToArray();
+    }
+
+    /// <summary>
+    /// Adds a station while the galaxy is being made, with the next id, owned by the given faction (its
+    /// region's by default). Returns its id.
+    /// </summary>
+    int AddAtStart(int star, StationKind kind, int owner = -1)
+    {
+        var id = StationStars.Keys.Max() + 1;
+        StationStars[id] = star;
+        Kinds[id] = kind;
+        if (owner >= 0 && RegionOwners.Length > 0 && owner != RegionOwners[Stars[star].Region]) Owners[id] = owner;
+        if (kind == StationKind.Depot) { Depots = Depots.Append(id).ToArray(); _depots = null; }
+        else if (kind == StationKind.Gate) Gates = Gates.Append(id).ToArray();
+        else Ports = Ports.Append(id).ToArray();
+        _byStar = null;
+        return id;
+    }
+
+    /// <summary>
+    /// A few systems in each region are hubs, rich in bodies, where several stations work side by side:
+    /// one there already, and one to three more of other kinds that deal with it and each other (a
+    /// refinery by its mine, a factory by the refinery, a city to feed). Never a gate's system, nor a
+    /// battlefield. Ships find short hauls between them, by sublight alone.
+    /// </summary>
+    static void PlaceHubs(Rng r, Galaxy g)
+    {
+        foreach (var region in g.Regions)
+        {
+            var candidates = g.Stars.Where(s => s.Region == region.Id && g.StationsIn(s.Id).Count() == 1 && g.GateIn(s.Id) < 0
+                                                && g.StationsIn(s.Id).All(x => g.KindOf(x) is not (StationKind.Fortress or StationKind.Armory)))
+                .OrderByDescending(s => g.System(s.Id).Tree.Count() + r.Range(0, 3)).ThenBy(s => s.Id).ToList();
+            var hubs = 1 + (r.Unit() < 0.5 ? 1 : 0);
+            foreach (var star in candidates.Take(hubs))
+            {
+                var more = 1 + r.Index(3);
+                for (int i = 0; i < more; i++)
+                    if (HubKind(r, g, star.Id) is { } kind) g.AddAtStart(star.Id, kind);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Each faction's capital: deep in its territory, far from the enemy's regions, in a system rich in
+    /// bodies, one with stations already where it can (never a gate's, nor the war's). The capital
+    /// system is a hub: with fewer than two other stations there, it gets more that deal with them.
+    /// </summary>
+    static void PlaceCapitals(Rng r, Galaxy g)
+    {
+        foreach (var f in g.Factions)
+        {
+            var enemy = g.Stars.Where(s => g.RegionOwners[s.Region] != f.Id).Select(s => s.Position).ToList();
+            var star = g.Stars.Where(s => g.RegionOwners[s.Region] == f.Id && g.GateIn(s.Id) < 0
+                                          && g.StationsIn(s.Id).All(x => g.KindOf(x) is not (StationKind.Fortress or StationKind.Armory)))
+                .OrderByDescending(s => enemy.Select(e => (e - s.Position).Length).DefaultIfEmpty(0).Min()
+                                        + g.System(s.Id).Tree.Count() + (g.HasStation(s.Id) ? 6 : 0) + r.Range(0, 4))
+                .ThenBy(s => s.Id).FirstOrDefault();
+            if (star == null) continue;
+            g.AddAtStart(star.Id, StationKind.Capital, f.Id);
+            while (g.StationsIn(star.Id).Count() < 3 && HubKind(r, g, star.Id) is { } kind) g.AddAtStart(star.Id, kind);
+        }
+    }
+
+    /// <summary>
+    /// The kind a hub takes next: one not there yet, that its system suits, dealing most with what is
+    /// there (what one makes the other uses), give or take a little luck. Null if none suits.
+    /// </summary>
+    static StationKind? HubKind(Rng r, Galaxy g, int star)
+    {
+        var here = g.StationsIn(star).Select(g.KindOf).ToList();
+        double Deals(StationKind a, StationKind b)
+        {
+            var (ma, ua) = Economy.Nominal(a);
+            var (mb, ub) = Economy.Nominal(b);
+            return ma.Keys.Count(w => w != Wares.ShipFuel && ub.ContainsKey(w)) + mb.Keys.Count(w => w != Wares.ShipFuel && ua.ContainsKey(w));   // all burn fuel
+        }
+        var pool = Economy.EconomicKinds.Where(k => !here.Contains(k) && Fits(k, g.System(star))).ToList();
+        if (pool.Count == 0) return null;
+        return pool.MaxBy(k => here.Sum(h => Deals(k, h)) + r.Range(0, 1.5));
     }
 }

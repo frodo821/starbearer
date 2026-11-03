@@ -32,6 +32,43 @@ public partial class SimTests
     }
 
     [Fact]
+    public void EachRegionHasHubsOfStationsThatDealWithEachOther()
+    {
+        for (ulong seed = 1; seed <= 5; seed++)
+        {
+            var g = Galaxy.Generate(seed);
+            foreach (var region in g.Regions)
+            {
+                var hubs = g.Stars.Where(s => s.Region == region.Id && g.StationsIn(s.Id).Count(x => g.KindOf(x) != StationKind.Fortress) > 1).ToList();
+                Assert.InRange(hubs.Count, 1, 3);
+                foreach (var hub in hubs)
+                {
+                    var kinds = g.StationsIn(hub.Id).Select(g.KindOf).ToList();
+                    Assert.True(kinds.Count <= 4, "at most four stations");
+                    Assert.Equal(kinds.Count, kinds.Distinct().Count());   // told apart by what they are
+                    Assert.True(g.GateIn(hub.Id) < 0, "never a gate's system");
+                }
+            }
+        }
+    }
+
+    [Fact]
+    public void AShipDealsWithTheStationItsJobIsBoundForInASystemOfSeveral()
+    {
+        var g = Galaxy.Generate(2);
+        var hub = g.Stars.First(s => g.StationsIn(s.Id).Count(x => g.KindOf(x) != StationKind.Fortress) > 1).Id;
+        var (a, b) = (g.StationsIn(hub).First(), g.StationsIn(hub).Last());
+        // Leaving one with a job for the other, the other is the one to rendezvous with.
+        var job = new Consignment { Mission = new Mission("x", a, b, Box, 10) };
+        var v = new Voyage(g, a, hub, new[] { job }, Unseen(g), 1);
+        Assert.Equal(b, v.LocalStation!.Id);
+        Assert.Equal(g.StarOf(a), v.SystemStar);
+        // Picking the first again as target makes it the one dealt with.
+        v.SetGoal(g.StationAt(a));
+        Assert.Equal(a, v.LocalStation!.Id);
+    }
+
+    [Fact]
     public void GatesPairRegionsSoAllCanBeReached()
     {
         for (ulong seed = 1; seed <= 5; seed++)

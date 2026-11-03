@@ -41,6 +41,8 @@ public sealed class WarState
     public HashSet<int> Stopped { get; set; } = new();
     /// <summary>Per faction, the day it last built a station of the economy.</summary>
     public double[] LastBuilt { get; set; } = Array.Empty<double>();
+    /// <summary>Factions whose capital has fallen and who have not moved their seat yet, with the day it fell.</summary>
+    public Dictionary<int, double> CapitalFell { get; set; } = new();
 
     public double HullOf(int station) => Hull.TryGetValue(station, out var h) ? h : 1;
 
@@ -49,6 +51,7 @@ public sealed class WarState
         Down = Down.ToHashSet(), Added = Added.ToList(), NextId = NextId, Hull = new(Hull), Built = new(Built), Progress = (double[])Progress.Clone(), Destroyed = Destroyed.ToHashSet(), Log = Log.ToList(),
         Stopped = Stopped.ToHashSet(), Industry = (double[])Industry.Clone(),
         Stranded = Stranded.Select(x => new Dictionary<string, double>(x)).ToList(), GateProgress = (double[])GateProgress.Clone(), Shortage = Shortage.Select(x => new Dictionary<string, double>(x)).ToList(), LastBuilt = (double[])LastBuilt.Clone(),
+        CapitalFell = new(CapitalFell),
     };
 
     public static WarState Start(Galaxy g) => new()

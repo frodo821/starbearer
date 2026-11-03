@@ -135,7 +135,7 @@ public partial class PortWindow : PanelContainer
             var refusal = bays.Refusal(s.Hold, c);
             var info = new VBoxContainer();
             var owner = Factions.OwnerName(g, m.Target);
-            info.AddChild(Text($"{c.Name}  →  {g.StarAt(m.Target).Name}（{Missions.Name(g.KindOf(m.Target))}）" + (owner != "" ? $"  {owner}" : ""), 17));
+            info.AddChild(Text((m.State ? "特命  " : "") + $"{c.Name}  →  {g.StarAt(m.Target).Name}（{Missions.Name(g.KindOf(m.Target))}）" + (owner != "" ? $"  {owner}" : ""), 17, m.State ? Palette.Good : null));
             if (!Factions.Admits(s, g, m.Target)) info.AddChild(Text($"届け先の {owner} は敵対している: 入港できない", 13, Warn));
             info.AddChild(Text($"{Cargos.Name(c.Kind)}   直線 {far:F1} ly   容積 {Missions.Cubic(c.Volume)}   質量 {c.Mass:F1}   耐熱 {c.HeatTolerance:F2}", 14, Dim));
             if (refusal != null) info.AddChild(Text($"積めない: {refusal}", 13, Warn));
@@ -143,6 +143,8 @@ public partial class PortWindow : PanelContainer
             box.AddChild(Row(info, Text($"報酬 {m.Pay:F0}", 17, Good), take));
             return take;
         }).ToArray();
+        if (g.KindOf(s.PortStation) == StationKind.Capital && Factions.Toward(s, g, s.PortStation) != Stance.Friendly)
+            box.AddChild(Wrapped($"首都は友好（{Factions.FriendlyAt:+0} 以上）の会社に特命の仕事を出す: 遠くの自勢力の港へ封緘品を運ぶ。報酬が高い", 14, Dim));
         return box;
     }
 

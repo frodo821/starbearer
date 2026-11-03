@@ -10,14 +10,17 @@ public enum Stance { Hostile, Neutral, Friendly }
 /// Who owns what, and how the company stands with each owner. A station's owner never changes. A system
 /// belongs to the faction whose station there came first; with more than one faction there it is
 /// contested. Standing runs from Floor to Ceiling: serving a faction (jobs delivered to it, goods sold
-/// to it) raises it, and serving its enemy lowers it. A hostile faction turns the ship away from its
-/// stations and its gates; the far side of a gate doesn't ask.
+/// to it) raises it, and serving its enemy lowers it, the more at its capital. A hostile faction turns the
+/// ship away from its stations and its gates; the far side of a gate doesn't ask. A friendly one's capital
+/// hands out its state work.
 /// </summary>
 public static class Factions
 {
     public const double Floor = -8, Ceiling = 8, FriendlyAt = 2, HostileAt = -2;
     /// <summary>Standing per credit of service, the share an enemy loses of it, and how much more war goods count.</summary>
     public const double PerCredit = 1.0 / 1500, EnemyShare = 0.5, MilitaryWeight = 4;
+    /// <summary>How much more a service to a faction's capital counts: it is seen where it matters.</summary>
+    public const double CapitalWeight = 1.5;
 
     static readonly string[] Suffixes = { "連邦", "共和国", "同盟", "帝国", "連合" };
 
@@ -61,7 +64,7 @@ public static class Factions
         var owner = g.OwnerOf(station);
         if (owner < 0 || value <= 0) return 0;
         if (s.Standing.Length < g.Factions.Length) s.Standing = s.Standing.Concat(new double[g.Factions.Length - s.Standing.Length]).ToArray();
-        var gain = value * PerCredit * (ware != null && Military.Contains(ware) ? MilitaryWeight : 1);
+        var gain = value * PerCredit * (ware != null && Military.Contains(ware) ? MilitaryWeight : 1) * (g.KindOf(station) == StationKind.Capital ? CapitalWeight : 1);
         var before = s.Standing[owner];
         for (int f = 0; f < g.Factions.Length; f++)
             s.Standing[f] = Math.Clamp(s.Standing[f] + (f == owner ? gain : -gain * EnemyShare), Floor, Ceiling);

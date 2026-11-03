@@ -20,7 +20,7 @@ foreach (var ship in classes)
         for (int a = 0; a + 1 < g.Ports.Length; a++)
         {
             int o = g.Ports[a], t = g.Ports[a + 1];
-            if (g.StarAt(o).Region != g.StarAt(t).Region) continue;   // jobs stay in their region
+            if (g.StarAt(o).Region != g.StarAt(t).Region || g.StarOf(o) == g.StarOf(t)) continue;   // jobs stay in their region; a hub's own are sublight only
             n++;
             var r = Autopilot.Fly(g, o, g.StarOf(t), cargo, ship: ship);
             var key = r.Delivered ? "delivered" : $"{r.Death}/{(r.Note.StartsWith("overshot") ? "overshot" : r.Note)}";

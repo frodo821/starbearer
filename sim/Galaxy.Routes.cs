@@ -30,7 +30,7 @@ public sealed partial class Galaxy
     (int A, int B, double Closeness)[]? _links;
     /// <summary>
     /// Every pair news travels between directly: within a region, each pair of linked gates, and a
-    /// supply line of a fortress, an armory or a fuel plant, to every station that deals in what it needs.
+    /// supply line of a fortress, an armory, a fuel plant, a gate or a capital, to every station that deals in what it needs.
     /// </summary>
     (int A, int B, double Closeness)[] Links => _links ??= Economies.Keys.Where(Alive).OrderBy(s => s).ToArray() is var live
         ? live.SelectMany(a => live.Where(b => b > a).Select(b => (a, b, Closeness(a, b, null))).Where(l => l.Item3 > 0)).ToArray() : default!;
@@ -56,8 +56,8 @@ public sealed partial class Galaxy
     /// <summary>How far a gate reaches: from its system to its exit's.</summary>
     public double GateSpan(int gate) => (StarAt(gate).Position - StarAt(GateLinks[gate]).Position).Length;
 
-    /// <summary>What a faction keeps supplied from all its stations, not just its neighbours: the war, the fuel everything burns, and its gates.</summary>
-    static bool SuppliedFar(StationKind kind) => kind is StationKind.Fortress or StationKind.Armory or StationKind.FuelPlant or StationKind.Gate;
+    /// <summary>What a faction keeps supplied from all its stations, not just its neighbours: the war, the fuel everything burns, its gates and its capital.</summary>
+    static bool SuppliedFar(StationKind kind) => kind is StationKind.Fortress or StationKind.Armory or StationKind.FuelPlant or StationKind.Gate or StationKind.Capital;
 
     /// <summary>
     /// How strongly two stations even out: by distance within a region, or along a gate route (gateLy)

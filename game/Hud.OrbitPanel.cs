@@ -32,12 +32,12 @@ public partial class Hud
             var rel = (goalSpeed - v.SubVelocity).Length;
             var refused = goal is Station && v.CanDock && !Game.DockAdmitted;
             var dockable = goal is Station && v.CanDock && !refused;
-            Line($"目標 {Main.NameOf(goal)}  {d:F4} AU   相対 {rel:F4}" + (dockable ? "   入港可 U" : refused ? "   入港拒否" : ""), dockable ? Good : refused ? Warn : goal is Station && d < Tuning.DockRange * 10 ? Warn : Ink);
+            Line($"目標 {Game.NameOf(goal)}  {d:F4} AU   相対 {rel:F4}" + (dockable ? "   入港可 U" : refused ? "   入港拒否" : ""), dockable ? Good : refused ? Warn : goal is Station && d < Tuning.DockRange * 10 ? Warn : Ink);
         }
         if (watched != null)
         {
-            var name = Main.NameOf(watched);
-            if (watched != goal) Line($"基準 {name} ({Main.NameOf(goal)} への経由)", Dim);
+            var name = Game.NameOf(watched);
+            if (watched != goal) Line($"基準 {name} ({Game.NameOf(goal)} への経由)", Dim);
             var incl = Sublight.RelativeInclination(watched, v.SubPosition, v.SubVelocity);
             var last = Game.SubForecast?.Stages.LastOrDefault();   // the plan within this star's reach
             var planned = last is { Node: not null } ls ? Sublight.RelativeInclination(watched, ls.Position, ls.Velocity + Sublight.Impulse(ls.Position, ls.Velocity, ls.Node)) : incl;
@@ -59,7 +59,7 @@ public partial class Hud
         {
             var e3 = now.After;
             var stop = e3.Bound ? $"近 {e3.Periapsis:F2} 遠 {e3.Apoapsis:F2}" : "脱出軌道";
-            Line($"今止めると {stop}" + (now.Closest is { } ca ? $"  {Main.NameOf(now.Watched)}まで {ca.Distance:F3}" : ""), Color.Color8(255, 255, 255));
+            Line($"今止めると {stop}" + (now.Closest is { } ca ? $"  {Game.NameOf(now.Watched)}まで {ca.Distance:F3}" : ""), Color.Color8(255, 255, 255));
         }
         if (Game.PlanDeviation() is { } dev)
             Line($"計画固定中  ずれ {dev:F3} AU   「再計画」で作り直す", dev > 0.05 ? Warn : Good);

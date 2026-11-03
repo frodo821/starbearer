@@ -8,6 +8,10 @@ namespace Starbearer.Sim;
 /// it, so even sides wear each other down slowly, and the better supplied wins.
 /// A station at no structure is destroyed, and the ships left there with it. Steel the fortresses and
 /// shipyards take in builds the faction's next one, where the war needs it (see Build).
+///
+/// A faction's capital commands its fortresses: they fire at full only while it stands whole. It is
+/// armoured and mends slowly, but it can fall; then the faction's fire drops until, some months on, it
+/// moves its seat to the safest system it still holds.
 /// </summary>
 public static class War
 {
@@ -21,6 +25,25 @@ public static class War
     public const double YardSteel = 0.1 * Economy.Scale;
     /// <summary>A faction keeps no more fortresses standing than this many times what it started with.</summary>
     public const double FortressCap = 1.5;
+    /// <summary>Fire on a capital is divided by this; it mends this much structure a day.</summary>
+    public const double CapitalArmor = 2, CapitalRepair = 0.002;
+    /// <summary>How hard a faction's fortresses fire with its capital fallen, and days until it moves its seat.</summary>
+    public const double FallenCommand = 0.7, RelocateDays = 60;
+
+    /// <summary>A faction's capital standing, or -1.</summary>
+    public static int Capital(Galaxy g, int faction) =>
+        g.Ports.Where(p => g.KindOf(p) == StationKind.Capital && g.OwnerOf(p) == faction && g.Alive(p)).DefaultIfEmpty(-1).First();
+
+    /// <summary>
+    /// How hard a faction's fortresses fire, by its capital: from 0.8 to full as its structure goes, and
+    /// FallenCommand with it gone. A faction that never had one (a galaxy made by hand) fires at full.
+    /// </summary>
+    public static double Command(Galaxy g, Market m, int faction)
+    {
+        var capital = Capital(g, faction);
+        if (capital >= 0) return 0.8 + 0.2 * m.War.HullOf(capital);
+        return m.War.CapitalFell.ContainsKey(faction) ? FallenCommand : 1;
+    }
 
     /// <summary>What a weapon is called, by the ware it burns.</summary>
     public static string WeaponName(string ware) => ware switch
@@ -81,6 +104,7 @@ public static class War
             if (f >= 0 && w.Progress[f] < 1) w.Progress[f] += m.Take(g, yard, "steel", YardSteel) / SteelPerFortress;
         }
         // Fire, in every system where more than one faction stands.
+        var command = g.Factions.Select(f => Command(g, m, f.Id)).ToArray();
         var hit = new Dictionary<int, double>();
         foreach (var star in g.StationStars.Values.Distinct().OrderBy(s => s))
         {
@@ -90,15 +114,16 @@ public static class War
             var luck = new Rng(g.Seed * 6364136223846793005UL + (ulong)star * 1442695040888963407UL + (ulong)(m.Day + 1000));
             foreach (var side in sides)
             {
-                var fire = here.Where(s => g.OwnerOf(s) != side && strength.ContainsKey(s)).Sum(s => strength[s]) * FireRate * (1 + luck.Range(-FireSpread, FireSpread));
+                var fire = here.Where(s => g.OwnerOf(s) != side && strength.ContainsKey(s)).Sum(s => strength[s] * command[g.OwnerOf(s)]) * FireRate * (1 + luck.Range(-FireSpread, FireSpread));
                 if (fire <= 0) continue;
                 var mine = here.Where(s => g.OwnerOf(s) == side).ToList();
                 var forts = mine.Where(strength.ContainsKey).ToList();
                 var target = (forts.Count > 0 ? forts : mine).OrderBy(w.HullOf).ThenBy(s => s).First();
-                hit[target] = hit.GetValueOrDefault(target) + fire;
+                hit[target] = hit.GetValueOrDefault(target) + fire / (g.KindOf(target) == StationKind.Capital ? CapitalArmor : 1);
             }
         }
         foreach (var f in strength.Keys) w.Hull[f] = Math.Min(1, w.HullOf(f) + FireRate * RepairShare * strength[f]);
+        foreach (var c in g.Ports.Where(p => g.KindOf(p) == StationKind.Capital && g.Alive(p) && w.HullOf(p) < 1)) w.Hull[c] = Math.Min(1, w.HullOf(c) + CapitalRepair);
         foreach (var (s, damage) in hit.OrderBy(x => x.Key))
         {
             var left = w.HullOf(s) - damage;
@@ -107,6 +132,30 @@ public static class War
         }
         foreach (var key in w.Hull.Where(x => x.Value >= 1).Select(x => x.Key).ToList()) w.Hull.Remove(key);
         Build(g, m, strength.Keys.ToList());
+        Relocate(g, m);
+    }
+
+    /// <summary>
+    /// A faction whose capital fell long enough ago moves its seat: to the system it holds alone that is
+    /// farthest from the enemy, among those with a station of its own, more stations first where it is a close call.
+    /// </summary>
+    static void Relocate(Galaxy g, Market m)
+    {
+        var w = m.War;
+        foreach (var (f, fell) in w.CapitalFell.OrderBy(x => x.Key).ToList())
+        {
+            if (m.Day - fell < RelocateDays || Capital(g, f) >= 0) continue;
+            var systems = g.StationStars.Values.Distinct().Where(g.HasStation).OrderBy(x => x).ToList();
+            var enemy = systems.Where(x => War.Sides(g, x).Any(o => o != f)).Select(x => g.Stars[x].Position).ToList();
+            var star = systems.Where(x => g.Claim(x) is (var holder, false) && holder == f && g.GateIn(x) < 0)
+                .Select(x => (Star: x, Score: enemy.Select(e => (e - g.Stars[x].Position).Length).DefaultIfEmpty(0).Min() + 3 * g.StationsIn(x).Count()))
+                .OrderByDescending(x => x.Score).ThenBy(x => x.Star).Select(x => x.Star).DefaultIfEmpty(-1).First();
+            if (star < 0) continue;   // nothing of its own left to move to
+            var id = m.Build(g, star, StationKind.Capital, f);
+            w.Hull[id] = 0.5;
+            w.CapitalFell.Remove(f);
+            w.Log.Add(new WarEvent(m.Day, "capital moved", id, star, f));
+        }
     }
 
     /// <summary>
@@ -124,6 +173,8 @@ public static class War
     public static string Describe(Galaxy g, WarEvent e) => e.Kind switch
     {
         "destroyed" => $"{Missions.Label(g, e.Station)}（{g.Factions[e.Faction].Name}）が破壊された",
+        "capital fell" => $"{g.Factions[e.Faction].Name} の首都 {g.Stars[e.Star].Name} が陥落した。遷都まで要塞の火力が落ちる",
+        "capital moved" => $"{g.Factions[e.Faction].Name} が {g.Stars[e.Star].Name} に遷都した",
         "built" => $"{g.Factions[e.Faction].Name} が {g.Stars[e.Star].Name} に{(g.KindOf(e.Station) == StationKind.Fortress ? "要塞" : Missions.Name(g.KindOf(e.Station)))}を建てた",
         "taken" => $"{g.Stars[e.Star].Name} 星系が {g.Factions[e.Faction].Name} 領になった",
         "gate down" => $"{g.Stars[e.Star].Name} のゲートが止まった（維持の品物が尽きた）。{g.Stars[g.StarOf(g.GateLinks[e.Station])].Name} との間は通れない",
@@ -148,6 +199,7 @@ public static class War
         var w = m.War;
         var star = g.StarOf(station);
         var before = g.Claim(star).Holder;
+        if (g.KindOf(station) == StationKind.Capital) { kind = "capital fell"; w.CapitalFell[g.OwnerOf(station)] = m.Day; }
         w.Down.Add(station);
         w.Hull.Remove(station);
         w.Built.Remove(station);
@@ -162,7 +214,7 @@ public static class War
 
     /// <summary>
     /// A faction with materials for a fortress builds one where the war needs it most: in a system it
-    /// is losing, then one the enemy holds within reach of one of its own (an attack: the front moves
+    /// is losing (its capital's above all), then one the enemy holds within reach of one of its own (an attack: the front moves
     /// on as systems fall), then one of its own within reach of the enemy. Never where it already has one.
     /// </summary>
     static void Build(Galaxy g, Market m, List<int> standing)
@@ -186,6 +238,7 @@ public static class War
                 var sides = Sides(g, star);
                 if (sides.Length > 1 && sides.Contains(f))
                 {
+                    if (here.Any(x => g.OwnerOf(x) == f && g.KindOf(x) == StationKind.Capital)) return 4;   // the seat comes first
                     double Power(bool mine) => here.Where(x => (g.OwnerOf(x) == f) == mine && g.KindOf(x) == StationKind.Fortress).Sum(x => Strength(g, m, x) * w.HullOf(x));
                     return Power(false) > Power(true) ? 3 : 0.5;
                 }

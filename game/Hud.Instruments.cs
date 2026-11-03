@@ -41,7 +41,7 @@ public partial class Hud
         if (v.Phase == Phase.Sublight)
         {
             if (Game.IgnitionIn is { } ignition) return ("次の点火推奨", ignition);
-            if (Game.SubCurrent is { Closest: { } c } now) return ($"{Main.NameOf(now.Watched)}への最接近", c.Time - v.AbsoluteTime);
+            if (Game.SubCurrent is { Closest: { } c } now) return ($"{Game.NameOf(now.Watched)}への最接近", c.Time - v.AbsoluteTime);
             return ("", null);
         }
         if (Game.Forecast is not { } fc) return ("", null);

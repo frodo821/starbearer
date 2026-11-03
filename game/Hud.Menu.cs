@@ -85,13 +85,14 @@ public partial class Hud
         if (o is Station here) yield return new("港の情報（市場・仕事）", () => Game.ShowStationInfo(here.Id));
         if (o is Station) yield return new("合流案", () => Game.PlanFor(o, Key.M));
         if (Game.Owns(Modules.Transfer)) yield return new("計算機で計画", () => Game.PlanFor(o, Key.T));
-        if (o is Station && v.AtGate && !v.Docked && !v.Class.Gates)
+        var atGate = o is Station gate && gate.Id == v.LocalStation?.Id && v.AtGate;   // the gate the ship is at, not another station
+        if (atGate && !v.Docked && !v.Class.Gates)
             yield return new($"{v.Class.Name} はゲートを通れない", null);
-        else if (o is Station && v.AtGate && !v.Docked && !Game.GateOpen && v.GateBooked == null)
+        else if (atGate && !v.Docked && !Game.GateOpen && v.GateBooked == null)
             yield return new("ゲートは止まっている（維持の品物が尽きた）", null);
-        else if (o is Station && v.AtGate && !v.Docked && !Game.GateAdmitted && v.GateBooked == null)
+        else if (atGate && !v.Docked && !Game.GateAdmitted && v.GateBooked == null)
             yield return new($"{Factions.OwnerName(Game.G!, v.LocalStation!.Id)} は通航を拒否している", null);
-        else if (o is Station && v.AtGate && !v.Docked)
+        else if (atGate && !v.Docked)
             yield return new(v.GateBooked != null ? "通過の予約を取消" : $"通過を予約（通行税 {Game.GateToll:F0}）", Game.ToggleGate);
     }
 
@@ -132,8 +133,9 @@ public partial class Hud
     public void OrbitMenu(Vector2 at)
     {
         var v = Game.V!;
-        if (v.LocalStation is { } st && StationPoint() is { } sp && sp.DistanceTo(at) < 14)
-            OpenMenu(at, Missions.ShortName(Game.G!.KindOf(st.Id)) + (v.SystemStar == v.TargetStar ? "（目的地）" : ""), OrbiterMenu(st));
+        if (StationUnder(at) is { } st)
+            OpenMenu(at, Missions.KindLabel(Game.G!.KindOf(st.Id)) + (Factions.OwnerName(Game.G, st.Id) is { Length: > 0 } owner ? $"（{owner}）" : "")
+                + (v.Hold.Any(c => c.IsJob && c.Mission.Target == st.Id) ? "  届け先" : v.SystemStar == v.TargetStar ? "  目的地" : ""), OrbiterMenu(st));
         else if (OrbiterAt(at) is Center body)
             OpenMenu(at, body.Name, OrbiterMenu(body));
         else if (Game.Chart.PixelsPerAu < 35 && PickStar(at) is int star && star != v.SystemStar)
