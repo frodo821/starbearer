@@ -131,7 +131,8 @@ public static class Missions
     /// the distance. What is left over goes to one-off items. Gates post no jobs. A capital adds state
     /// work for a friend of its faction: sealed items to its stations far off, at several times the pay.
     /// </summary>
-    public static List<Mission> Board(Galaxy g, Market market, int station, int deliveries, IEnumerable<Consignment> hold, bool friend = false)
+    /// <param name="firstJob">The company's very first board: its first offer goes to another station of this system, a haul by sublight alone to learn on.</param>
+    public static List<Mission> Board(Galaxy g, Market market, int station, int deliveries, IEnumerable<Consignment> hold, bool friend = false, bool firstJob = false)
     {
         var r = new Rng(g.Seed * 7919 + g.SeedKey(station) * 104729 + (ulong)deliveries * 31);
         var kind = g.KindOf(station);
@@ -160,9 +161,10 @@ public static class Missions
                 }
         }
         var offers = new List<Mission>();
+        var nextDoor = stations.Where(s => g.StarOf(s) == g.StarOf(station)).ToArray();
         void Special(int i)
         {
-            var to = stations[i % stations.Length];
+            var to = i == 0 && firstJob && nextDoor.Length > 0 ? nextDoor[0] : stations[i % stations.Length];
             var item = Specials[r.Index(Specials.Length)];
             offers.Add(new Mission($"{station}-{deliveries}-{i}", station, to, item, PayFor(g, station, to, item)));
         }
@@ -211,7 +213,7 @@ public static class Missions
         var key = $"{s.PortStation}:{s.Deliveries}:{s.TotalDays:F4}:{friend}";   // becoming a friend opens a capital's state work
         if (s.OffersAt != key)
         {
-            s.Offers = Board(g, s.MarketIn(g), s.PortStation, s.Deliveries, s.Hold, friend);
+            s.Offers = Board(g, s.MarketIn(g), s.PortStation, s.Deliveries, s.Hold, friend, firstJob: s.Deliveries == 0 && s.TotalDays == 0);
             s.OffersAt = key;
         }
         return s.Offers;

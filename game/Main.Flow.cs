@@ -1,3 +1,4 @@
+using System.Linq;
 using System;
 using System.Threading.Tasks;
 using Godot;
@@ -104,7 +105,10 @@ public partial class Main
         Screen = Screen.Orbit;
         MapOpen = false;
         Helm.Reset(PlanDir); CameraFollow = false;
-        Message = s.Hold.Count == 0 ? "空荷で停泊中。Enter で港を開いてミッションを請ける" : "港に停泊中。星図と計画で発進の時機を選び、U で出港する";
+        var neighbours = G!.StationsIn(G.StarOf(s.PortStation)).Count() - 1;
+        Message = s.Hold.Count == 0 && s.Deliveries == 0 && s.TotalDays == 0 && neighbours > 0
+            ? $"この星系には港がほかに {neighbours} つある。Enter で港を開き、最初の仕事（同じ星系の港へ）を請ける。FTL なしで、軌道を合わせて届けられる"
+            : s.Hold.Count == 0 ? "空荷で停泊中。Enter で港を開いてミッションを請ける" : "港に停泊中。星図と計画で発進の時機を選び、U で出港する";
         _forecastDirty = true;
     }
 

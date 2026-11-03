@@ -101,9 +101,7 @@ public sealed class Voyage
     public Voyage(Galaxy g, int origin, int target, IEnumerable<Consignment> hold, double[] closestApproach, ulong rngSeed, double epoch = 0, ShipState? ship = null, ShipClass? shipClass = null)
     {
         G = g; OriginStation = origin; TargetStar = target; Hold = hold.Select(c => c.Copy()).ToList();
-        // Leaving with a job for another station of this system, that station is what the ship deals with next.
-        _station = Hold.Where(c => c.IsJob).Select(c => c.Mission.Target)
-            .FirstOrDefault(t => t != origin && g.IsStation(t) && g.StarOf(t) == g.StarOf(origin) && g.Alive(t), origin);
+        _station = NextDoor(origin);
         Class = shipClass ?? Ships.Courier;
         Fuel = ship?.Fuel ?? Class.Tank;
         Hull = ship?.Hull ?? 1;
@@ -122,6 +120,10 @@ public sealed class Voyage
     }
 
     void SyncTruePosition() => TruePosition = JumpState.Position;
+
+    /// <summary>Leaving a station with a job for another of its system, that one is what the ship deals with next; else the station itself.</summary>
+    int NextDoor(int station) => Hold.Where(c => c.IsJob).Select(c => c.Mission.Target)
+        .FirstOrDefault(t => t != station && G.IsStation(t) && G.StarOf(t) == G.StarOf(station) && G.Alive(t), station);
 
     /// <summary>The station relative to the ship's current primary, whichever body the station circles.</summary>
     public (Vec3d Position, Vec3d Velocity) StationNow()
@@ -251,6 +253,7 @@ public sealed class Voyage
     {
         if (!Docked) return;
         Hold = hold.Select(c => c.Copy()).ToList();
+        if (_station == OriginStation) _station = NextDoor(OriginStation);   // a job taken at the port for next door
         Fuel = ship.Fuel;
         Hull = ship.Hull;
         LifeSupply = ship.Life + (Time - _dockedDays);

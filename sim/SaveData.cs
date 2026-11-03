@@ -61,12 +61,31 @@ public sealed class SaveData
     /// <summary>Whether this build can carry on from the save: one made by an older build describes another galaxy.</summary>
     public bool Current => Format == CurrentFormat;
 
+    /// <summary>
+    /// Where a company starts: in a hub, so its first job can be a short haul to another station of the
+    /// same system, by sublight alone, before any jump. The hub with the most stations, then the one
+    /// farthest from the fighting, never a capital's, a gate's or a battlefield; at a station there with
+    /// a full board. A galaxy without one starts at its first port.
+    /// </summary>
+    public static int StartingPort(Galaxy g)
+    {
+        var fronts = War.Fronts(g).Select(x => g.Stars[x].Position).ToList();
+        double FromWar(int star) => fronts.Select(f => (f - g.Stars[star].Position).Length).DefaultIfEmpty(double.MaxValue).Min();
+        bool Board(int s) => g.KindOf(s) is not (StationKind.Depot or StationKind.Shipyard or StationKind.Gate or StationKind.Fortress or StationKind.Capital);
+        var hub = g.StationStars.Values.Distinct()
+            .Where(star => g.StationsIn(star).Count() > 1 && g.GateIn(star) < 0 && War.Sides(g, star).Length <= 1
+                           && g.StationsIn(star).All(x => g.KindOf(x) is not (StationKind.Capital or StationKind.Fortress)) && g.StationsIn(star).Any(Board))
+            .OrderByDescending(star => g.StationsIn(star).Count()).ThenByDescending(FromWar).ThenBy(star => star)
+            .Select(star => (int?)star).FirstOrDefault();
+        return hub is { } h ? g.StationsIn(h).First(Board) : g.Ports[0];
+    }
+
     public static (SaveData Save, Galaxy Galaxy) NewGalaxy(ulong seed)
     {
         var g = Galaxy.Generate(seed);
         return (new SaveData
         {
-            Format = CurrentFormat, Seed = seed, Fleet = new() { new OwnedShip { Id = 1, Station = g.Ports[0] } },
+            Format = CurrentFormat, Seed = seed, Fleet = new() { new OwnedShip { Id = 1, Station = StartingPort(g) } },
             ClosestApproach = Enumerable.Repeat(double.MaxValue, g.Stars.Length).ToArray(),
             Market = Market.Open(g),
         }, g);

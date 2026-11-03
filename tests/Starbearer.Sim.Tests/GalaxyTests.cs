@@ -69,6 +69,26 @@ public partial class SimTests
     }
 
     [Fact]
+    public void ACompanyStartsInAHubWithItsFirstJobNextDoor()
+    {
+        for (ulong seed = 1; seed <= 5; seed++)
+        {
+            var (s, g) = SaveData.NewGalaxy(seed);
+            var here = g.StarOf(s.PortStation);
+            Assert.True(g.StationsIn(here).Count() > 1, "a hub");
+            Assert.False(g.Claim(here).Contested);
+            Assert.DoesNotContain(g.StationsIn(here), x => g.KindOf(x) is StationKind.Capital or StationKind.Fortress);
+            Assert.True(g.GateIn(here) < 0);
+            var first = Missions.OffersFor(s, g)[0];
+            Assert.Equal(here, g.StarOf(first.Target));
+            Assert.NotEqual(s.PortStation, first.Target);
+            // Only the first board: after a delivery, the first offer goes anywhere.
+            s.Deliveries = 1;
+            Assert.Contains(Missions.OffersFor(s, g), m => g.StarOf(m.Target) != here);
+        }
+    }
+
+    [Fact]
     public void GatesPairRegionsSoAllCanBeReached()
     {
         for (ulong seed = 1; seed <= 5; seed++)

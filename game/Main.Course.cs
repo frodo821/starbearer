@@ -20,7 +20,8 @@ public partial class Main
 
     /// <summary>
     /// Holds the chosen course, cargo bound there or not, until the ship docks there. With none, the
-    /// first job in the hold sets it, and with no job either the instruments steer for the nearest station.
+    /// first job in the hold for another system sets it; with jobs only for this system, here is where the
+    /// ship is bound; and with no job at all the instruments steer for the nearest station.
     /// </summary>
     void SteerForCourse()
     {
@@ -28,7 +29,8 @@ public partial class Main
         var v = V!;
         if (s.Course == v.SystemStar && v.Docked) s.Course = -1;   // arrived
         if (s.Course < 0 && s.Hold.FirstOrDefault(c => c.IsJob && G!.StarOf(c.Mission.Target) != v.SystemStar) is { } job) s.Course = G!.StarOf(job.Mission.Target);
-        v.TargetStar = s.Course >= 0 ? s.Course : NearestStation();
+        var nextDoor = s.Hold.Any(c => c.IsJob && G!.StarOf(c.Mission.Target) == v.SystemStar);
+        v.TargetStar = s.Course >= 0 ? s.Course : nextDoor ? v.SystemStar : NearestStation();
     }
 
     /// <summary>The course was picked by the pilot, not set by a job in the hold.</summary>

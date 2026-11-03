@@ -74,6 +74,7 @@ public partial class Autotest : Node
 
     double Off(Vec3d dir) => Math.Acos(Math.Clamp(_g.Helm.Nose.Dot(dir), -1, 1));
 
+    IOrbiter? _nextChoice;
     int _heldTarget, _stop, _bought, _gate, _exit, _firstShip, _capital, _neighbour;
     ShipClass? _boughtClass;
     (Vec3d, float) _chartBefore;
@@ -170,7 +171,30 @@ public partial class Autotest : Node
         {
             Check("the port opens while docked", _g.Screen == Screen.Port && _g.VisitingPort);
             Check("a station's board offers jobs", _g.HudForTest.Port.TakeButtons.Length > 0);
+            var g = _g.G!;
+            var here = g.StarOf(_g.Save!.PortStation);
+            Check("the company starts in a system of several stations, its first job next door", g.StationsIn(here).Count() > 1 && g.StarOf(_g.Offers[0].Target) == here);
+            // The first job, next door: take it and leave the port.
+            _neighbour = _g.Offers[0].Target;
             Click(MouseButton.Left, _g.HudForTest.Port.TakeButtons[0].GetGlobalRect().GetCenter());
+            Press(Key.Enter);
+        });
+        Do(() =>
+        {
+            var v = _g.V!;
+            Check("aboard with the first job, the station next door is the one to deal with", v.Docked && v.LocalStation!.Id == _neighbour && v.Goal == v.LocalStation);
+            Shot("01g_first_job_next_door");
+            Press(Key.U);
+        });
+        Do(() => _g.DockAtForTest(_neighbour));
+        Do(() =>
+        {
+            Check("the first job is delivered next door, with no jump", _g.Screen == Screen.Port && _g.Save!.Deliveries == 1 && _g.Save.PortStation == _neighbour && _g.Save.Hold.Count == 0);
+            // The flight below is to another system: take the first job bound out of this one.
+            var g = _g.G!;
+            var here = g.StarOf(_g.Save.PortStation);
+            var away = _g.Offers.ToList().FindIndex(m => g.StarOf(m.Target) != here);
+            Click(MouseButton.Left, _g.HudForTest.Port.TakeButtons[away].GetGlobalRect().GetCenter());
         });
         Do(() =>
         {
@@ -271,12 +295,14 @@ public partial class Autotest : Node
         Do(() =>
         {
             Check("planning has no keys of its own", _g.V!.Goal == _g.V.LocalStation);
+            _nextChoice = _g.TargetChoices()[1];
             _g.CommandForTest(Key.C);
         });
         Do(() =>
         {
             var v = _g.V!;
-            Check("the target button moves the target on to a body", v.Goal is Center);
+            // In a system of several stations, the next is another station; past them, the bodies.
+            Check("the target button moves the target on to the next choice", v.Goal == _nextChoice);
             // A body circling the ship's primary, so its nodes and closest approach are worked out from here.
             _picked = _g.TargetChoices().OfType<Center>().FirstOrDefault(c => Sublight.Waypoint(v.Primary, c) == c);
             _g.SetTarget(v.LocalStation);   // C may have landed on it already, and a tap on the target lets it go
@@ -730,7 +756,7 @@ public partial class Autotest : Node
             Key_(Key.X, false);
             Shot("09_delivered");
             Check("docking delivers the cargo", _g.Screen == Screen.Port);
-            Check("checkpoint moved to the target", _g.Save!.PortStation != _port && _g.Save.Deliveries == 1);
+            Check("checkpoint moved to the target", _g.Save!.PortStation != _port && _g.Save.Deliveries == 2);
             _g.Purchase(s => { s.Modules.Clear(); s.Credits = 200; });   // saved, so a reload sees it
             Press(Key.Key1);
         });
@@ -747,7 +773,7 @@ public partial class Autotest : Node
         });
         Do(() =>
         {
-            Check("save reloads from disk", _g.Save!.Deliveries == 1 && _g.Save.Modules.Count == _bought && _g.Screen == Screen.Orbit);
+            Check("save reloads from disk", _g.Save!.Deliveries == 2 && _g.Save.Modules.Count == _bought && _g.Screen == Screen.Orbit);
             // A stop at the region's shipyard on the way somewhere else.
             var g = _g.G!;
             var here = _g.V!.SystemStar;
@@ -762,7 +788,7 @@ public partial class Autotest : Node
         Do(() =>
         {
             Shot("10_layover");
-            Check("docking elsewhere is a stop, not a delivery", _g.Screen == Screen.Port && _g.Save!.Deliveries == 1 && _g.Save.Hold.Single().Mission.Id == _heldJob);
+            Check("docking elsewhere is a stop, not a delivery", _g.Screen == Screen.Port && _g.Save!.Deliveries == 2 && _g.Save.Hold.Single().Mission.Id == _heldJob);
             _credits = _g.Save!.Credits;
             _heldFuel = _g.Save.HeldFuel;
             Press(Key.Key3);
