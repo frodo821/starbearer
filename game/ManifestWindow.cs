@@ -17,6 +17,13 @@ public partial class ManifestWindow : PanelContainer
     static readonly Color Good = Palette.Good, Warn = Palette.Warn;
     static readonly Color Dim = Ui.PanelDim;
     double _sinceBuilt;
+    /// <summary>The list's scroller, and where it stood: a rebuild puts the list back where the pilot left it.</summary>
+    ScrollContainer? _scroll;
+    int _scrolledTo = -1;
+    /// <summary>Seconds since the list last moved under the pilot's hand: a rebuild waits while they scroll.</summary>
+    double _sinceScrolled = double.MaxValue;
+    /// <summary>Where to put the list back once it has its height, or -1.</summary>
+    int _restore = -1;
 
     /// <summary>Set at each Rebuild: the buttons that steer for each job's destination, in hold order (goods of one's own have none).</summary>
     public Button[] CourseButtons { get; private set; } = Array.Empty<Button>();
@@ -41,12 +48,21 @@ public partial class ManifestWindow : PanelContainer
         if (!Visible) return;
         // Integrity and distances change as the ship flies.
         _sinceBuilt += delta;
-        if (_sinceBuilt > 1) Rebuild();
+        _sinceScrolled += delta;
+        if (_scroll != null && _restore >= 0 && _scroll.GetVScrollBar().MaxValue > 0)
+        {
+            _scroll.ScrollVertical = _restore;
+            _scrolledTo = _scroll.ScrollVertical;
+            _restore = -1;
+        }
+        if (_scroll != null && _restore < 0 && _scroll.ScrollVertical != _scrolledTo) { _scrolledTo = _scroll.ScrollVertical; _sinceScrolled = 0; }
+        if (_sinceBuilt > 1 && _sinceScrolled > 1.5) Rebuild();
     }
 
     public void Rebuild()
     {
         _sinceBuilt = 0;
+        var keep = _scroll?.ScrollVertical ?? 0;
         Ui.Clear(_root);
         var g = _game.G!; var v = _game.V!; var s = _game.Save!;
         var ship = s.Ship;
@@ -68,6 +84,9 @@ public partial class ManifestWindow : PanelContainer
         jobs.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         scroll.AddChild(jobs);
         _root.AddChild(scroll);
+        _scroll = scroll;
+        _scrolledTo = keep;
+        _restore = keep;   // the new list has no height until it is laid out: put it back where it was once it has
         var here = v.EstimatedPosition;
         foreach (var lot in v.Hold.Where(c => !c.IsJob))
         {
