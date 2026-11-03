@@ -1,0 +1,124 @@
+name: release
+
+# A tag v* builds the game for Windows, Linux and macOS with Godot (.NET) and publishes them as a
+# GitHub release. The tests run first; a failing test stops the release.
+#
+# Each file published carries a build provenance attestation: check one with
+# `gh attestation verify <file> --repo frodo821/starbearer`.
+#
+# macOS: the app is signed ad hoc only, not notarized. On first launch macOS refuses it; open it from
+# the context menu (Open), or run `xattr -dr com.apple.quarantine Starbearer.app`.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag to release (must exist)
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  GODOT_VERSION: 4.7.2
+  TAG: ${{ github.event.inputs.tag || github.ref_name }}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - run: dotnet test tests/Starbearer.Sim.Tests --configuration Release
+
+  export:
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write       # to publish the release
+      id-token: write       # to sign the attestation
+      attestations: write   # to store it
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Cache Godot and its export templates
+        id: godot-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/godot
+            ~/.local/share/godot/export_templates/${{ env.GODOT_VERSION }}.stable.mono
+          key: godot-mono-${{ env.GODOT_VERSION }}
+
+      - name: Install Godot (.NET) and export templates
+        if: steps.godot-cache.outputs.cache-hit != 'true'
+        run: |
+          base="https://github.com/godotengine/godot-builds/releases/download/${GODOT_VERSION}-stable"
+          mkdir -p ~/godot
+          curl -fsSL -o /tmp/godot.zip "$base/Godot_v${GODOT_VERSION}-stable_mono_linux_x86_64.zip"
+          unzip -q /tmp/godot.zip -d ~/godot
+          curl -fsSL -o /tmp/templates.tpz "$base/Godot_v${GODOT_VERSION}-stable_mono_export_templates.tpz"
+          unzip -q /tmp/templates.tpz -d /tmp/templates
+          dest=~/.local/share/godot/export_templates/${GODOT_VERSION}.stable.mono
+          mkdir -p "$dest"
+          mv /tmp/templates/templates/* "$dest"/
+
+      - name: Put Godot on the path
+        run: |
+          bin=~/godot/"Godot_v${GODOT_VERSION}-stable_mono_linux_x86_64/Godot_v${GODOT_VERSION}-stable_mono_linux.x86_64"
+          chmod +x "$bin"
+          sudo ln -sf "$bin" /usr/local/bin/godot
+          godot --version
+
+      - name: Stamp the version
+        run: |
+          version="${TAG#v}"
+          perl -0pi -e 's/^(config\/name="Starbearer")$/$1\nconfig\/version="'"$version"'"/m' project.godot
+          grep -n '^config/' project.godot
+
+      - name: Import assets
+        run: godot --headless --path . --import
+
+      - name: Export
+        run: |
+          mkdir -p build/windows build/linux build/macos
+          godot --headless --path . --export-release "Windows" build/windows/Starbearer.exe
+          godot --headless --path . --export-release "Linux" build/linux/Starbearer.x86_64
+          godot --headless --path . --export-release "macOS" build/macos/Starbearer.zip
+          ls -lR build
+
+      - name: Package
+        run: |
+          mkdir -p dist
+          (cd build/windows && zip -qr "../../dist/Starbearer-${TAG}-windows-x86_64.zip" .)
+          (cd build/linux && tar -czf "../../dist/Starbearer-${TAG}-linux-x86_64.tar.gz" .)
+          cp build/macos/Starbearer.zip "dist/Starbearer-${TAG}-macos-universal.zip"
+          ls -l dist
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: dist/*
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/* --clobber
+          else
+            gh release create "$TAG" dist/* --title "Starbearer $TAG" --generate-notes
+          fi

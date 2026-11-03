@@ -1,0 +1,33 @@
+name: test
+
+# The sim's tests, and a build of the game against the sim. The in-engine smoke run (--autotest)
+# draws to the screen and takes screenshots, so it stays a local check.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Sim tests
+        run: dotnet test tests/Starbearer.Sim.Tests --configuration Release --logger "console;verbosity=normal"
+
+      - name: Build the game
+        run: dotnet build Starbearer.csproj --configuration Release
+
+      - name: Build the balance tool
+        run: dotnet build tests/balance --configuration Release
