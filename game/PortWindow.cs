@@ -116,7 +116,7 @@ public partial class PortWindow : PanelContainer
         if (_game.GateExit is var exit and >= 0)
         {
             box.AddChild(Text($"ゲートの行き先: {g.StarAt(exit).Name}（{g.Regions[g.StarAt(exit).Region].Name} 宙域）", 17));
-            box.AddChild(Wrapped($"出港してから「ゲート通過」で予約し、ゲートまで寄ると向こうへ出る。速さはそのまま\n通行税は船・モジュール・積荷の価値の {Tuning.GateTollRate:P0}（今なら {_game.GateToll:F0}）、次の入港で精算", 14, Dim));
+            box.AddChild(Wrapped($"出港してから「ゲート通過」で予約し、ゲートまで寄ると向こうへ出る。速さはそのまま\n通行税は、ゲートが省く分の FTL 燃料代の {Tuning.GateTollShare:P0}（距離と、積荷・燃料込みの船の質量で決まる。今なら {_game.GateToll:F0}）、次の入港で精算", 14, Dim));
             var m = s.MarketIn(g);
             var here = s.PortStation;
             box.AddChild(Wrapped(Gates.Open(g, m, here) ? "ゲートは動いている" : "ゲートは止まっている: 維持の品物が尽きた。ここか向こうの端に届けば動き出す", 15, Gates.Open(g, m, here) ? Good : Warn));

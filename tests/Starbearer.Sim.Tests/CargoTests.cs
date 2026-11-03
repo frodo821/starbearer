@@ -116,17 +116,13 @@ public partial class SimTests
     }
 
     [Fact]
-    public void APressurizerIsFittedPerFluidBayAndCountsInTheToll()
+    public void APressurizerIsFittedPerFluidBay()
     {
         var courier = new SaveData { Credits = 1000 };
         Assert.False(Modules.FitPressurizer(courier));   // no fluid bay to fit it to
         Assert.Equal(1000, courier.Credits);
         var s = new SaveData { Credits = 1000 };
-        var (v, _, _) = AtGate();
-        var bare = Gates.Toll(s, v);
         s.Pressurized.Add(0);
-        Assert.Equal(Math.Round(Tuning.GateTollRate * (Ships.Courier.Price + Modules.PressurizerPrice)), Gates.Toll(s, v));
-        Assert.True(Gates.Toll(s, v) > bare);
         var back = SaveData.FromJson(s.ToJson())!;
         Assert.Equal(new[] { 0 }, back.Pressurized);
         Assert.Equal(Ships.Courier.Id, back.Ship.Class);

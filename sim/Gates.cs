@@ -40,9 +40,15 @@ public static class Gates
     public static bool Open(Galaxy g, Market m, int gate) =>
         g.Alive(gate) && Powered(g, m, gate) && (!g.GateLinks.TryGetValue(gate, out var exit) || g.Alive(exit) && Powered(g, m, exit));
 
-    /// <summary>What a passage costs: a share of what goes through, the ship, its modules and its cargo.</summary>
-    public static double Toll(SaveData s, Voyage v) =>
-        Math.Round(Tuning.GateTollRate * (s.Ship.Type.Price * v.Hull
-            + Modules.Value(s.Ship)
-            + v.Hold.Sum(c => c.Value)));
+    /// <summary>
+    /// What a passage through this system's gate costs: a share of the fuel it saves, by how far the
+    /// gate reaches and how heavy the ship is as it goes through (cargo and fuel aboard), more for a
+    /// hull that drags more. Zero where the ship is at no gate.
+    /// </summary>
+    public static double Toll(Galaxy g, Voyage v)
+    {
+        if (v.LocalStation is not { } st || !g.GateLinks.TryGetValue(st.Id, out _)) return 0;
+        var saved = Tuning.FtlFuelPerLyMass * g.GateSpan(st.Id) * v.Mass * v.Class.Drag;
+        return Math.Round(Tuning.GateTollShare * Tuning.FuelPrice * saved);
+    }
 }

@@ -94,7 +94,7 @@ public partial class Main
     public bool GateOpen => V?.LocalStation is { } st && Gates.Open(G!, Save!.MarketIn(G!), st.Id);
 
     /// <summary>What a passage through this system's gate would cost now.</summary>
-    public double GateToll => Gates.Toll(Save!, V!);
+    public double GateToll => Gates.Toll(G!, V!);
 
     /// <summary>Books the passage through this system's gate, or lets the booking go. The toll is settled at the next dock.</summary>
     public void ToggleGate()

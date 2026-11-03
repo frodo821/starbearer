@@ -24,7 +24,12 @@ public static class Tuning
     public const double FuelPrice = 30;            // per unit of fuel
     public const double LifePricePerDay = 0.1;
     public const double HullRepairPrice = 60;      // for a whole hull
-    public const double GateTollRate = 0.08;       // share of ship, modules and cargo a gate charges
+    /// <summary>
+    /// A gate charges this share of the fuel the passage saves: what a ship of its mass burns crossing
+    /// the span in hyperspace, FtlFuelPerLyMass a ly per unit of mass (as flown, climbing out of the
+    /// well and braking at the end included). So a gate is always the cheaper way, by half.
+    /// </summary>
+    public const double GateTollShare = 0.5, FtlFuelPerLyMass = 0.014;
     public const double PortWaitDays = 10;         // a wait at the port, for stock to come back
     public const double DepartureFuelFloor = 0.8;  // below this a ship can't reach another station
 

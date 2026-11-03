@@ -51,14 +51,19 @@ public partial class SimTests
     }
 
     [Fact]
-    public void TheTollIsAShareOfShipModulesAndCargo()
+    public void TheTollIsHalfTheFuelThePassageSaves()
     {
         var (v, _, _) = AtGate();
-        var bare = Gates.Toll(new SaveData(), v);
-        Assert.Equal(Math.Round(Tuning.GateTollRate * Ships.Courier.Price), bare);
-        var rich = new SaveData();
-        rich.Modules.Add(Modules.Transfer);
-        Assert.True(Gates.Toll(rich, v) > bare);
+        var g = v.G;
+        var gate = v.LocalStation!.Id;
+        var toll = Gates.Toll(g, v);
+        var fuel = Tuning.FtlFuelPerLyMass * g.GateSpan(gate) * v.Mass * v.Class.Drag;
+        Assert.Equal(Math.Round(Tuning.GateTollShare * Tuning.FuelPrice * fuel), toll);
+        Assert.True(toll < Tuning.FuelPrice * fuel, "cheaper than flying it");
+        Assert.True(toll < Ships.Courier.Tank * Tuning.FuelPrice, "a small ship pays less than a tank");
+        // A heavier ship pays more: the same gate with a hold of cargo.
+        var loaded = new Voyage(g, gate, v.TargetStar, new[] { new Consignment { Mission = new Mission("m", gate, gate, new Cargo("lead", 1.5, 0.9, 100), 100) } }, Unseen(g), 1);
+        Assert.True(Gates.Toll(g, loaded) > toll);
     }
 
     [Fact]
