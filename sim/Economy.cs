@@ -54,14 +54,16 @@ public static class Economy
     /// </summary>
     static (Line[] Always, Line[] Options, int Picks) Plan(StationKind kind, string weapon = "shells") => kind switch
     {
-        StationKind.Mine => (Array.Empty<Line>(), new[] { Make(R("iron_ore", 2)), Make(R("titanium_ore", 1)), Make(R("silica", 1.5)), Make(R("uranium_ore", 0.4)) }, 2),
+        // Every belt gives every ore, and each is rich in one of them.
+        StationKind.Mine => (new[] { Make(R("iron_ore", 2.5), R("titanium_ore", 1), R("silica", 1.5), R("uranium_ore", 0.4)) },
+            new[] { Make(R("iron_ore", 1)), Make(R("titanium_ore", 0.6)), Make(R("silica", 1)), Make(R("uranium_ore", 0.3)) }, 1),
         StationKind.IceMine => (new[] { Make(R("water", 6)), Make(R("organics", 1.2)) }, Array.Empty<Line>(), 0),
-        StationKind.GasHarvester => (new[] { Make(R("deuterium", 0.6)) }, new[] { Make(R("hydrogen", 2)), Make(R("methane", 1.5)), Make(R("ammonia", 1)) }, 2),
+        StationKind.GasHarvester => (new[] { Make(R("deuterium", 0.8)), Make(R("hydrogen", 2)), Make(R("ammonia", 1.4)) }, new[] { Make(R("methane", 1.2)) }, 1),
         StationKind.Refinery => (new[]
         {
-            From(new[] { R("iron_ore", 2), R("hydrogen", 0.6) }, R("steel", 2)),   // reduced with hydrogen
+            From(new[] { R("iron_ore", 2.5), R("hydrogen", 0.75) }, R("steel", 2.5)),   // reduced with hydrogen
             From(new[] { R("titanium_ore", 1) }, R("titanium", 0.6)),
-            From(new[] { R("silica", 1), R("methane", 0.4) }, R("silicon_carbide", 0.6)),
+            From(new[] { R("silica", 1.6), R("methane", 0.6) }, R("silicon_carbide", 1.2)),
         }, Array.Empty<Line>(), 0),
         StationKind.ChemPlant => (new[]
         {
@@ -71,11 +73,11 @@ public static class Economy
         StationKind.FuelPlant => (new[]
         {
             From(new[] { R("deuterium", 1) }, R("fusion_fuel", 2.5)),
-            From(new[] { R("uranium_ore", 0.5) }, R("fission_fuel", 0.25)),
+            From(new[] { R("uranium_ore", 0.3) }, R("fission_fuel", 0.15)),
         }, Array.Empty<Line>(), 0),
         StationKind.Farm => (new[] { From(new[] { R("water", 1), R("organics", 0.6), R("ammonia", 0.3) }, R("food", 2)) }, Array.Empty<Line>(), 0),
-        StationKind.Clinic => (new[] { From(new[] { R("organics", 0.5), R("water", 0.3) }, R("medical", 0.6)) }, Array.Empty<Line>(), 0),
-        StationKind.Factory => (new[] { From(new[] { R("silicon_carbide", 0.6), R("titanium", 0.35) }, R("electronics", 0.6)) }, Array.Empty<Line>(), 0),
+        StationKind.Clinic => (new[] { From(new[] { R("organics", 0.5), R("water", 0.3) }, R("medical", 0.8)) }, Array.Empty<Line>(), 0),
+        StationKind.Factory => (new[] { From(new[] { R("silicon_carbide", 0.7), R("titanium", 0.4) }, R("electronics", 1.0)) }, Array.Empty<Line>(), 0),
         StationKind.City => (new[] { Use(R("food", 1.2), R("water", 0.6), R("oxygen", 0.6), R("medical", 0.12), R("electronics", 0.08)) }, Array.Empty<Line>(), 0),
         StationKind.Colony => (new[] { Use(R("food", 0.6), R("water", 0.5), R("oxygen", 0.5), R("medical", 0.08), R("steel", 0.2)) }, Array.Empty<Line>(), 0),
         StationKind.Armory => (ArmoryLines(weapon), Array.Empty<Line>(), 0),
@@ -91,16 +93,19 @@ public static class Economy
         "missiles" => 0.12, "shells" => 0.3, "slugs" => 0.4, "laser_optics" => 0.08, _ => 0.6,
     };
 
-    /// <summary>An armory makes its faction's ammunition, and explosives from ammonia where the shot needs them.</summary>
+    /// <summary>
+    /// An armory makes its faction's ammunition, about 1.6 times what three fortresses fire, and
+    /// explosives from ammonia where the shot needs them.
+    /// </summary>
     static Line[] ArmoryLines(string weapon)
     {
-        var explosives = From(new[] { R("ammonia", 0.6) }, R("explosives", 0.5));
+        var explosives = From(new[] { R("ammonia", 0.75) }, R("explosives", 0.6));
         return weapon switch
         {
-            "missiles" => new[] { explosives, From(new[] { R("steel", 0.25), R("electronics", 0.1), R("hydrazine", 0.2), R("explosives", 0.25) }, R("missiles", 0.5)) },
-            "shells" => new[] { explosives, From(new[] { R("steel", 0.4), R("explosives", 0.4) }, R("shells", 1.2)) },
-            "slugs" => new[] { From(new[] { R("steel", 0.8) }, R("slugs", 1.6)) },
-            "laser_optics" => new[] { From(new[] { R("silicon_carbide", 0.4), R("electronics", 0.12) }, R("laser_optics", 0.32)) },
+            "missiles" => new[] { explosives, From(new[] { R("steel", 0.3), R("electronics", 0.06), R("hydrazine", 0.24), R("explosives", 0.3) }, R("missiles", 0.6)) },
+            "shells" => new[] { explosives, From(new[] { R("steel", 0.5), R("explosives", 0.5) }, R("shells", 1.45)) },
+            "slugs" => new[] { From(new[] { R("steel", 0.95) }, R("slugs", 1.9)) },
+            "laser_optics" => new[] { From(new[] { R("silica", 0.6), R("electronics", 0.075) }, R("laser_optics", 0.4)) },
             _ => Array.Empty<Line>(),
         };
     }

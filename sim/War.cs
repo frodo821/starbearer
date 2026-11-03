@@ -35,16 +35,21 @@ public sealed class WarState
 /// The war, abstractly. Every faction is at war with every other. In a system where more than one has a
 /// station, their fortresses trade fire each day: each side hits the other's weakest fortress, or with
 /// none left its other stations, as hard as its fortresses are supplied with their weapon's ammunition
-/// and fuel. A supplied fortress repairs as fast as an equal one damages it, so supply decides who wins.
-/// A station at no structure is destroyed, and the ships left there with it. Steel the fortresses take
-/// in builds the faction's next one, at its sites near the front.
+/// and fuel, give or take the day's luck. A supplied fortress repairs most of what an equal one does to
+/// it, so even sides wear each other down slowly, and the better supplied wins.
+/// A station at no structure is destroyed, and the ships left there with it. Steel the fortresses and
+/// shipyards take in builds the faction's next one, at its sites near the front.
 /// </summary>
 public static class War
 {
-    /// <summary>Structure a fully supplied fortress knocks off, and repairs on itself, a day.</summary>
-    public const double FireRate = 0.01;
+    /// <summary>Structure a fully supplied fortress knocks off a day; it repairs this share of that on itself.</summary>
+    public const double FireRate = 0.01, RepairShare = 0.75;
+    /// <summary>How much a day's fire varies, either way: the fortunes of war.</summary>
+    public const double FireSpread = 0.4;
     /// <summary>Steel a fortress goes through toward the next one; how much makes one.</summary>
     public const double SteelPerFortress = 40;
+    /// <summary>Steel a shipyard puts toward its faction's next fortress a day, as far as its stock goes.</summary>
+    public const double YardSteel = 0.1;
     /// <summary>A faction keeps no more fortresses standing than this many times what it started with.</summary>
     public const double FortressCap = 1.5;
 
@@ -84,7 +89,7 @@ public static class War
         if (w.Progress.Length < g.Factions.Length) w.Progress = w.Progress.Concat(new double[g.Factions.Length - w.Progress.Length]).ToArray();
         var strength = Fortresses(g).ToDictionary(f => f, f => Strength(g, m, f));
         // Upkeep: each line of a fortress burns what it can of its rate, its weapon only while it fights,
-        // and its steel goes toward the next one.
+        // and its steel goes toward the next one until there is enough for it.
         foreach (var f in strength.Keys)
         {
             var e = g.Economies[f];
@@ -93,11 +98,21 @@ public static class War
             foreach (var (ware, rate) in e.Lines.SelectMany(l => l.In).Concat(e.Upkeep))
             {
                 if (ware == g.Factions[g.OwnerOf(f)].Weapon && !fighting) continue;
+                if (ware == "steel" && w.Progress[g.OwnerOf(f)] >= 1) continue;
                 var i = e.IndexOf(ware);
                 var used = Math.Min(rate, stock[i]);
                 stock[i] -= used;
                 if (ware == "steel") w.Progress[g.OwnerOf(f)] += used / SteelPerFortress;
             }
+        }
+        // Shipyards turn steel into fortresses too, so a faction driven from the front can come back.
+        foreach (var yard in g.Ports.Where(p => g.KindOf(p) == StationKind.Shipyard && g.Alive(p) && g.OwnerOf(p) >= 0))
+        {
+            if (w.Progress[g.OwnerOf(yard)] >= 1) continue;
+            var i = g.Economies[yard].IndexOf("steel");
+            var used = Math.Min(YardSteel, m.Stock[yard][i]);
+            m.Stock[yard][i] -= used;
+            w.Progress[g.OwnerOf(yard)] += used / SteelPerFortress;
         }
         // Fire, in every system where more than one faction stands.
         var hit = new Dictionary<int, double>();
@@ -106,9 +121,10 @@ public static class War
             var sides = Sides(g, star);
             if (sides.Length < 2) continue;
             var here = g.StationsIn(star).ToList();
+            var luck = new Rng(g.Seed * 6364136223846793005UL + (ulong)star * 1442695040888963407UL + (ulong)(m.Day + 1000));
             foreach (var side in sides)
             {
-                var fire = here.Where(s => g.OwnerOf(s) != side && strength.ContainsKey(s)).Sum(s => strength[s]) * FireRate;
+                var fire = here.Where(s => g.OwnerOf(s) != side && strength.ContainsKey(s)).Sum(s => strength[s]) * FireRate * (1 + luck.Range(-FireSpread, FireSpread));
                 if (fire <= 0) continue;
                 var mine = here.Where(s => g.OwnerOf(s) == side).ToList();
                 var forts = mine.Where(strength.ContainsKey).ToList();
@@ -116,7 +132,7 @@ public static class War
                 hit[target] = hit.GetValueOrDefault(target) + fire;
             }
         }
-        foreach (var f in strength.Keys) w.Hull[f] = Math.Min(1, w.HullOf(f) + FireRate * strength[f]);
+        foreach (var f in strength.Keys) w.Hull[f] = Math.Min(1, w.HullOf(f) + FireRate * RepairShare * strength[f]);
         foreach (var (s, damage) in hit.OrderBy(x => x.Key))
         {
             var left = w.HullOf(s) - damage;

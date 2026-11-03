@@ -32,7 +32,7 @@ public sealed class Galaxy
     /// <summary>What each station is, by station id.</summary>
     public Dictionary<int, StationKind> Kinds { get; init; } = new();
     /// <summary>Station ids of the small resupply stations. Their boards have only small jobs.</summary>
-    public int[] Depots { get; init; } = Array.Empty<int>();
+    public int[] Depots { get; set; } = Array.Empty<int>();
     /// <summary>Station ids of the gates. Gates post no jobs and take no deliveries.</summary>
     public int[] Gates { get; init; } = Array.Empty<int>();
     /// <summary>Where each gate leads: the station id of the gate it is paired with.</summary>
@@ -118,17 +118,21 @@ public sealed class Galaxy
     (int A, int B, double Closeness)[]? _links;
     /// <summary>
     /// Every pair news and goods travel between: within a region, each pair of linked gates, and a
-    /// fortress's supply lines, to every station that deals in what it needs, weaker with distance.
+    /// supply line of a fortress, an armory or a fuel plant, to every station that deals in what it needs,
+    /// weaker with distance.
     /// </summary>
     (int A, int B, double Closeness)[] Links => _links ??= Economies.Keys.OrderBy(s => s)
         .SelectMany(a => Economies.Keys.Where(b => b > a).Select(b => (a, b, Closeness(a, b))).Where(l => l.Item3 > 0))
         .ToArray();
 
+    /// <summary>What a faction keeps supplied from all its stations, not just its neighbours: the war, and the fuel everything burns.</summary>
+    static bool SuppliedFar(StationKind kind) => kind is StationKind.Fortress or StationKind.Armory or StationKind.FuelPlant;
+
     double Closeness(int a, int b)
     {
         if (GateLinks.TryGetValue(a, out var x) && x == b) return 1;
         var ly = (StarAt(a).Position - StarAt(b).Position).Length;
-        if (Kinds[a] == StationKind.Fortress || Kinds[b] == StationKind.Fortress)
+        if (SuppliedFar(Kinds[a]) || SuppliedFar(Kinds[b]))
             return Economies[a].Wares.Any(w => w != Wares.ShipFuel && Economies[b].IndexOf(w) >= 0) || Kinds[a] == Kinds[b]
                 ? Math.Max(Tuning.SupplyLine * Math.Exp(-ly / Tuning.SupplyLy), StarAt(a).Region == StarAt(b).Region ? Math.Exp(-ly / Economy.SpreadLy) : 0) : 0;
         return StarAt(a).Region == StarAt(b).Region ? Math.Exp(-ly / Economy.SpreadLy) : 0;
@@ -321,6 +325,7 @@ public sealed class Galaxy
         };
         foreach (var (star, c) in systems) galaxy._systems[star] = c;   // built already, to fit the stations
         (galaxy.Factions, galaxy.RegionOwners) = Sim.Factions.Divide(r, galaxy, names, Tuning.FactionCount);
+        CoverEachFaction(galaxy);
         PlaceWar(r, galaxy);
         return galaxy;
     }
@@ -421,7 +426,8 @@ public sealed class Galaxy
 
     /// <summary>
     /// A region has room for only part of the chains, so each economic kind missing from the whole galaxy
-    /// takes the place of one that has the most of its kind, keeping each region's guaranteed ones.
+    /// takes the place of one that has the most of its kind, keeping each region's guaranteed ones and
+    /// every fuel plant: a region without one runs dry of what ships burn.
     /// Then every ware is made somewhere, and the gaps between regions are what ships carry across.
     /// </summary>
     static void SpreadEveryKind(Rng r, Dictionary<int, StationKind> kinds, Func<int, Center> system)
@@ -431,7 +437,7 @@ public sealed class Galaxy
         foreach (var missing in economic.Where(k => !kinds.ContainsValue(k)).OrderBy(_ => r.Next()).ToList())
         {
             var counts = kinds.Values.GroupBy(k => k).ToDictionary(k => k.Key, k => k.Count());
-            var spare = kinds.Where(x => (!must.Contains(x.Value) || counts[x.Value] > 4) && x.Value is not (StationKind.Gate or StationKind.Colony or StationKind.Shipyard)
+            var spare = kinds.Where(x => (!must.Contains(x.Value) || counts[x.Value] > 4) && x.Value is not (StationKind.Gate or StationKind.Colony or StationKind.Shipyard or StationKind.FuelPlant)
                     && Fits(missing, system(x.Key)))
                 .OrderByDescending(x => x.Value == StationKind.Depot ? 0 : counts[x.Value]).ThenBy(x => x.Key).ToList();
             if (spare.Count == 0) continue;
@@ -473,6 +479,33 @@ public sealed class Galaxy
             list[j] = new Region(j, name, centers[j]);
         }
         return (list, member);
+    }
+
+    /// <summary>
+    /// Goods cross to the enemy only in ships' holds, so each faction makes every ware at home: each
+    /// economic kind a faction lacks takes the place of one of its stations it has most of (a depot
+    /// only when it has no spare), never its last of a kind, on a star whose system suits it.
+    /// </summary>
+    static void CoverEachFaction(Galaxy g)
+    {
+        var economic = Enumerable.Range(0, (int)StationKind.Depot).Select(i => (StationKind)i).ToArray();
+        foreach (var f in g.Factions)
+        {
+            bool Mine(int s) => g.RegionOwners[g.StarAt(s).Region] == f.Id;
+            foreach (var missing in economic)
+            {
+                var mine = g.Kinds.Where(x => Mine(x.Key)).ToList();
+                if (mine.Any(x => x.Value == missing)) continue;
+                var counts = mine.GroupBy(x => x.Value).ToDictionary(k => k.Key, k => k.Count());
+                var spare = mine.Where(x => (x.Value == StationKind.Depot || x.Value < StationKind.Depot && x.Value != StationKind.FuelPlant && counts[x.Value] > 1) && Fits(missing, g.System(g.StarOf(x.Key))))
+                    .OrderByDescending(x => x.Value == StationKind.Depot ? 0 : counts[x.Value]).ThenBy(x => x.Key).ToList();
+                if (spare.Count == 0) continue;
+                var id = spare[0].Key;
+                var was = g.Kinds[id];
+                g.Kinds[id] = missing;
+                if (was == StationKind.Depot) { g.Depots = g.Depots.Where(d => d != id).ToArray(); g.Ports = g.Ports.Append(id).ToArray(); g._depots = null; }
+            }
+        }
     }
 
     /// <summary>

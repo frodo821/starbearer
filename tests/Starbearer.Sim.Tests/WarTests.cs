@@ -40,13 +40,13 @@ public partial class SimTests
     {
         var (s, g, m, star, defender, attacker) = AtTheFront();
         var (sd, gd, md, _, d2, a2) = AtTheFront();
-        // Both supplied: neither gives ground over a month.
+        // Both supplied: they wear each other down only slowly.
         for (int day = 1; day <= 30; day++)
         {
             foreach (var f in new[] { d2, a2 }) { var e = gd.Economies[f]; md.Stock[f] = e.Target.ToArray(); }
             md.AdvanceTo(gd, day);
         }
-        Assert.True(gd.War.HullOf(d2) > 0.95 && gd.War.HullOf(a2) > 0.95);
+        Assert.True(gd.War.HullOf(d2) > 0.85 && gd.War.HullOf(a2) > 0.85, $"{gd.War.HullOf(d2)} {gd.War.HullOf(a2)}");
 
         // The defender's ammunition cut off: the attacker wears it down and then whatever else of its side is there.
         s.Fleet.Add(new OwnedShip { Id = 2, Station = defender });

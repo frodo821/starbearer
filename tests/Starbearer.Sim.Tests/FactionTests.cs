@@ -103,3 +103,22 @@ public partial class SimTests
         Assert.Equal(t.Standing, back.Standing);
     }
 }
+
+public partial class SimTests
+{
+    [Fact]
+    public void EachFactionMakesWhatItUsesAndEveryRegionMakesFuel()
+    {
+        for (ulong seed = 1; seed <= 12; seed++)
+        {
+            var g = Galaxy.Generate(seed);
+            foreach (var f in g.Factions)
+            {
+                var mine = g.Economies.Where(x => g.OwnerOf(x.Key) == f.Id && !g.UnbuiltSites.Contains(x.Key)).Select(x => x.Value).ToList();
+                var used = mine.SelectMany(e => e.Wares.Where(e.Uses)).Distinct();
+                Assert.All(used, w => Assert.True(mine.Any(e => e.Makes(w)), $"seed {seed}: {f.Name} uses {w} but makes none"));
+            }
+            Assert.All(g.Regions, r => Assert.Contains(g.Ports, p => g.StarAt(p).Region == r.Id && g.KindOf(p) == StationKind.FuelPlant));
+        }
+    }
+}
