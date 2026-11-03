@@ -55,6 +55,8 @@ public partial class StationInfoWindow : PanelContainer
         }
         if (War.Sides(g, st.Id).Length > 1)
             _root.AddChild(Text($"戦闘中の星系   この港の構造 {g.War.HullOf(StationId):P0}" + (g.KindOf(StationId) == StationKind.Fortress ? $"   補給 {War.Strength(g, m, StationId):P0}" : ""), 14, Palette.Warn));
+        if (g.GateLinks.ContainsKey(StationId) && !Gates.Open(g, m, StationId))
+            _root.AddChild(Text("ゲートは止まっている（維持の品物が尽きた）", 14, Palette.Warn));
         var far = (st.Position - g.StarAt(here).Position).Length;
         _root.AddChild(Text(known == null ? "この港の知らせはまだ届いていない"
             : (age < 0.5 ? "いまの様子" : $"{age:F0} 日前の知らせ（{g.StarAt(here).Name} から {far:F0} ly）") + "。着いたときには変わっている", 13, Dim));

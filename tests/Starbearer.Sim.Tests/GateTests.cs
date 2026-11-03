@@ -80,3 +80,42 @@ public partial class SimTests
         Assert.True(crossing > 0, "some jobs cross to another region");
     }
 }
+
+public partial class SimTests
+{
+    [Fact]
+    public void AGateBurnsPartsAndPowerByHowFarItReachesAndStopsWithout()
+    {
+        var (s, g) = SaveData.NewGalaxy(5);
+        var m = s.MarketIn(g);
+        var (near, far) = (g.Gates.MinBy(g.GateSpan), g.Gates.MaxBy(g.GateSpan));
+        double Rate(int gate, string ware) => g.Economies[gate].Upkeep.Single(u => u.Ware == ware).Rate;
+        Assert.True(Rate(far, "electronics") > Rate(near, "electronics"));
+        Assert.Equal(Rate(far, "fission_fuel") / Rate(near, "fission_fuel"), g.GateSpan(far) / g.GateSpan(near), 6);
+        Assert.True(Gates.Open(g, m, far));
+        // An end out of its parts stops the pair, both ways; the news says so.
+        var exit = g.GateLinks[far];
+        Array.Clear(m.Stock[exit]);
+        Assert.False(Gates.Open(g, m, far));
+        Assert.False(Gates.Open(g, m, exit));
+        Gates.Watch(g, m);   // its supply lines would fill it again within the day
+        Assert.Contains(m.War.Log, e => e.Kind == "gate down" && e.Station == exit);
+        Assert.Contains("止まった", War.Describe(g, m.War.Log.Last(e => e.Kind == "gate down")));
+        // Supplied again, it runs.
+        var e = g.Economies[exit];
+        m.Stock[exit] = e.Target.ToArray();
+        m.AdvanceTo(g, 2);
+        Assert.True(Gates.Open(g, m, far));
+        Assert.Contains(m.War.Log, x => x.Kind == "gate up");
+    }
+
+    [Fact]
+    public void GoodsGoThroughARunningGateAndNotAStoppedOne()
+    {
+        var g = Galaxy.Generate(5);
+        bool Plain(int x) => g.KindOf(x) is not (StationKind.Fortress or StationKind.Armory or StationKind.FuelPlant or StationKind.Gate);
+        var routed = g.Neighbours.First(n => n.Gate >= 0 && Plain(n.A) && Plain(n.B) && g.StarAt(n.A).Region != g.StarAt(n.B).Region);
+        Assert.True(routed.Closeness > routed.Direct);
+        Assert.Equal(0, routed.Direct);   // across regions there is no way but the gate
+    }
+}

@@ -88,6 +88,9 @@ public partial class Main
     /// <summary>Whether this system's gate lets the ship in: its owner must not be hostile. The exit doesn't ask.</summary>
     public bool GateAdmitted => V?.LocalStation is { } st && Factions.Admits(Save!, G!, st.Id);
 
+    /// <summary>Whether this system's gate pair is running: both ends have their upkeep, as of the checkpoint.</summary>
+    public bool GateOpen => V?.LocalStation is { } st && Gates.Open(G!, Save!.MarketIn(G!), st.Id);
+
     /// <summary>What a passage through this system's gate would cost now.</summary>
     public double GateToll => Gates.Toll(Save!, V!);
 
@@ -99,6 +102,7 @@ public partial class Main
         if (!v.Class.Gates) { Message = $"{v.Class.Name} はゲートを通れない"; return; }
         if (v.Docked) { Message = "出港してからゲートへ向かう"; return; }
         if (v.GateBooked != null) { v.CancelGate(); Message = "ゲート通過の予約を取り消した"; return; }
+        if (!GateOpen) { Message = "ゲートは止まっている: 維持の品物（燃料・電子機器・核分裂燃料）が尽きた。どちらかの端に届けば動き出す"; return; }
         if (!GateAdmitted) { Message = $"{Factions.OwnerName(G!, v.LocalStation!.Id)} はゲートの通航を拒否している（敵対）"; return; }
         var toll = GateToll;
         if (Save!.Credits - v.TollsDue < toll) { Message = $"通行税 {toll:F0} を払えない"; return; }

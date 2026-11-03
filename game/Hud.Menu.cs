@@ -82,6 +82,8 @@ public partial class Hud
         if (Game.Owns(Modules.Transfer)) yield return new("計算機で計画", () => Game.PlanFor(o, Key.T));
         if (o is Station && v.AtGate && !v.Docked && !v.Class.Gates)
             yield return new($"{v.Class.Name} はゲートを通れない", null);
+        else if (o is Station && v.AtGate && !v.Docked && !Game.GateOpen && v.GateBooked == null)
+            yield return new("ゲートは止まっている（維持の品物が尽きた）", null);
         else if (o is Station && v.AtGate && !v.Docked && !Game.GateAdmitted && v.GateBooked == null)
             yield return new($"{Factions.OwnerName(Game.G!, v.LocalStation!.Id)} は通航を拒否している", null);
         else if (o is Station && v.AtGate && !v.Docked)

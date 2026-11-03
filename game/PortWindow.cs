@@ -139,7 +139,11 @@ public partial class PortWindow : PanelContainer
         {
             box.AddChild(Text($"ゲートの行き先: {g.StarAt(exit).Name}（{g.Regions[g.StarAt(exit).Region].Name} 宙域）", 17));
             box.AddChild(Text($"出港してから「ゲート通過」で予約し、ゲートまで寄ると向こうへ出る。速さはそのまま\n通行税は船・モジュール・積荷の価値の {Tuning.GateTollRate:P0}（今なら {_game.GateToll:F0}）、次の入港で精算", 14, Dim));
-            box.AddChild(Text("ゲートは仕事を出さない", 15, Dim));
+            var m = s.MarketIn(g);
+            var here = s.PortStation;
+            box.AddChild(Text(Gates.Open(g, m, here) ? "ゲートは動いている" : "ゲートは止まっている: 維持の品物が尽きた。ここか向こうの端に届けば動き出す", 15, Gates.Open(g, m, here) ? Good : Warn));
+            box.AddChild(Text("維持（1日、この端）: " + string.Join("、", g.Economies[here].Upkeep.Select(u => $"{Wares.Get(u.Ware).Name} {u.Rate:F2}（在庫 {m.StockOf(g, here, u.Ware):F0}）")) + $"。結ぶ距離 {g.GateSpan(here):F0} ly に比例する", 14, Dim));
+            box.AddChild(Text("ゲートは仕事を出さない。維持の品物は市場で売れる", 15, Dim));
             TakeButtons = Array.Empty<Button>();
             return box;
         }

@@ -60,7 +60,7 @@ public static class Economy
     static (Line[] Always, Line[] Options, int Picks) Plan(StationKind kind, string weapon = "shells") => kind switch
     {
         // Every belt gives every ore, and each is rich in one of them.
-        StationKind.Mine => (new[] { Make(R("iron_ore", 2.5), R("titanium_ore", 1), R("silica", 1.5), R("uranium_ore", 0.4)) },
+        StationKind.Mine => (new[] { Make(R("iron_ore", 2.5), R("titanium_ore", 1), R("silica", 1.5), R("uranium_ore", 0.6)) },
             new[] { Make(R("iron_ore", 1)), Make(R("titanium_ore", 0.6)), Make(R("silica", 1)), Make(R("uranium_ore", 0.3)) }, 1),
         StationKind.IceMine => (new[] { Make(R("water", 6)), Make(R("organics", 1.2)) }, Array.Empty<Line>(), 0),
         StationKind.GasHarvester => (new[] { Make(R("deuterium", 0.8)), Make(R("hydrogen", 2)), Make(R("ammonia", 1.4)) }, new[] { Make(R("methane", 1.2)) }, 1),
@@ -78,7 +78,7 @@ public static class Economy
         StationKind.FuelPlant => (new[]
         {
             From(new[] { R("deuterium", 1) }, R("fusion_fuel", 2.5)),
-            From(new[] { R("uranium_ore", 0.3) }, R("fission_fuel", 0.15)),
+            From(new[] { R("uranium_ore", 0.4) }, R("fission_fuel", 0.3)),
         }, Array.Empty<Line>(), 0),
         StationKind.Farm => (new[] { From(new[] { R("water", 1), R("organics", 0.6), R("ammonia", 0.3) }, R("food", 2)) }, Array.Empty<Line>(), 0),
         StationKind.Clinic => (new[] { From(new[] { R("organics", 0.5), R("water", 0.3) }, R("medical", 0.8)) }, Array.Empty<Line>(), 0),
@@ -157,7 +157,7 @@ public static class Economy
         var weapon = kind is StationKind.Armory or StationKind.Fortress && g.OwnerOf(station) is var f and >= 0 ? g.Factions[f].Weapon : "shells";
         static (string, double)[] Scaled((string W, double Q)[] x) => x.Select(r => (r.W, r.Q * Scale)).ToArray();
         var lines = LinesFor(kind, new Rng(g.Seed * 40503 + g.SeedKey(station)), weapon).Select(l => new Line(Scaled(l.In), Scaled(l.Out))).ToArray();
-        var upkeep = Scaled(UpkeepFor(kind));
+        var upkeep = Scaled(kind == StationKind.Gate && g.GateLinks.ContainsKey(station) ? Gates.Upkeep(g.GateSpan(station)) : UpkeepFor(kind));
         var flow = new Dictionary<string, double>();
         void Add(string w, double rate) => flow[w] = flow.GetValueOrDefault(w) + rate;
         foreach (var l in lines) { foreach (var (w, q) in l.In) Add(w, q); foreach (var (w, q) in l.Out) Add(w, q); }

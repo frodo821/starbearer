@@ -106,15 +106,23 @@ public sealed class Galaxy
     public IReadOnlyDictionary<int, StationEconomy> Economies => _economies ??=
         Ports.Concat(Depots).Concat(Gates).ToDictionary(s => s, s => Economy.Of(this, s));
 
-    (int A, int B, double Closeness)[]? _neighbours;
+    (int A, int B, double Closeness, int Gate, double Direct)[]? _neighbours;
     /// <summary>
     /// Station pairs whose stock evens out, and how strongly: closer ones more. Only a faction's own
     /// stations trade: within a region, between regions along a gate route (weaker the farther the
     /// stations sit from the gates), and along the supply lines of what a faction keeps supplied from
-    /// everywhere. Goods reach the enemy only in ships' holds.
+    /// everywhere. Goods reach the enemy only in ships' holds. Gate is the gate a route goes through
+    /// (-1 for none), and Direct how close they are without it, for when that gate stands still.
     /// </summary>
-    public (int A, int B, double Closeness)[] Neighbours => _neighbours ??= Economies.Keys.OrderBy(s => s)
-        .SelectMany(a => Economies.Keys.Where(b => b > a && OwnerOf(a) == OwnerOf(b)).Select(b => (a, b, Closeness(a, b, TradeLy(a, b)))).Where(l => l.Item3 > 0))
+    public (int A, int B, double Closeness, int Gate, double Direct)[] Neighbours => _neighbours ??= Economies.Keys.OrderBy(s => s)
+        .SelectMany(a => Economies.Keys.Where(b => b > a && OwnerOf(a) == OwnerOf(b)).Select(b =>
+        {
+            var direct = Closeness(a, b, null);
+            var pair = GateLinks.TryGetValue(a, out var x) && x == b;
+            var (ly, gate) = TradeLy(a, b);
+            var via = ly == null ? direct : Closeness(a, b, ly);
+            return (a, b, Math.Max(via, direct), pair ? a : via > direct ? gate : -1, pair ? 0 : direct);
+        }).Where(l => l.Item3 > 0))
         .ToArray();
 
     (int A, int B, double Closeness)[]? _links;
@@ -128,23 +136,26 @@ public sealed class Galaxy
 
     /// <summary>
     /// How far goods go between two stations by way of a gate: to it, and on from its exit, with the
-    /// passage counted as Tuning.GateTradeLy more. Null where no gate route is shorter than the way straight there.
+    /// passage counted as Tuning.GateTradeLy more, and the gate. Null where no gate route is shorter than the way straight there.
     /// </summary>
-    double? TradeLy(int a, int b)
+    (double? Ly, int Gate) TradeLy(int a, int b)
     {
         double Apart(int x, int y) => (StarAt(x).Position - StarAt(y).Position).Length;
         var direct = Apart(a, b);
-        double? best = null;
+        (double? Ly, int Gate) best = (null, -1);
         foreach (var (gate, exit) in GateLinks)
         {
             var ly = Apart(a, gate) + Apart(exit, b) + Tuning.GateTradeLy;
-            if (ly < direct && (best == null || ly < best)) best = ly;
+            if (ly < direct && (best.Ly == null || ly < best.Ly)) best = (ly, gate);
         }
         return best;
     }
 
-    /// <summary>What a faction keeps supplied from all its stations, not just its neighbours: the war, and the fuel everything burns.</summary>
-    static bool SuppliedFar(StationKind kind) => kind is StationKind.Fortress or StationKind.Armory or StationKind.FuelPlant;
+    /// <summary>How far a gate reaches: from its system to its exit's.</summary>
+    public double GateSpan(int gate) => (StarAt(gate).Position - StarAt(GateLinks[gate]).Position).Length;
+
+    /// <summary>What a faction keeps supplied from all its stations, not just its neighbours: the war, the fuel everything burns, and its gates.</summary>
+    static bool SuppliedFar(StationKind kind) => kind is StationKind.Fortress or StationKind.Armory or StationKind.FuelPlant or StationKind.Gate;
 
     /// <summary>
     /// How strongly two stations even out: by distance within a region, or along a gate route (gateLy)
@@ -507,27 +518,31 @@ public sealed class Galaxy
 
     /// <summary>
     /// Goods cross to the enemy only in ships' holds, so each faction makes every ware at home: each
-    /// economic kind a faction lacks takes the place of one of its stations it has most of (a depot
-    /// only when it has no spare), never its last of a kind, on a star whose system suits it.
+    /// economic kind a faction lacks gets a new station, in its region with the fewest stations, on the
+    /// free star there farthest from the rest whose system suits it.
     /// </summary>
     static void CoverEachFaction(Galaxy g)
     {
         var economic = Enumerable.Range(0, (int)StationKind.Depot).Select(i => (StationKind)i).ToArray();
+        var next = g.StationStars.Keys.Max() + 1;
         foreach (var f in g.Factions)
         {
-            bool Mine(int s) => g.RegionOwners[g.StarAt(s).Region] == f.Id;
+            var regions = Enumerable.Range(0, g.Regions.Length).Where(r => g.RegionOwners[r] == f.Id).ToList();
             foreach (var missing in economic)
             {
-                var mine = g.Kinds.Where(x => Mine(x.Key)).ToList();
-                if (mine.Any(x => x.Value == missing)) continue;
-                var counts = mine.GroupBy(x => x.Value).ToDictionary(k => k.Key, k => k.Count());
-                var spare = mine.Where(x => (x.Value == StationKind.Depot || x.Value < StationKind.Depot && x.Value != StationKind.FuelPlant && counts[x.Value] > 1) && Fits(missing, g.System(g.StarOf(x.Key))))
-                    .OrderByDescending(x => x.Value == StationKind.Depot ? 0 : counts[x.Value]).ThenBy(x => x.Key).ToList();
-                if (spare.Count == 0) continue;
-                var id = spare[0].Key;
-                var was = g.Kinds[id];
+                if (g.Kinds.Any(x => x.Value == missing && g.OwnerOf(x.Key) == f.Id)) continue;
+                var placed = g.StationStars.Values.ToHashSet();
+                var star = regions.OrderBy(r => g.StationStars.Values.Count(st => g.Stars[st].Region == r)).ThenBy(r => r)
+                    .Select(r => g.Stars.Where(st => st.Region == r && !placed.Contains(st.Id) && Fits(missing, g.System(st.Id)))
+                        .OrderByDescending(st => placed.Where(p => g.Stars[p].Region == r).Select(p => (g.Stars[p].Position - st.Position).Length).DefaultIfEmpty(0).Min())
+                        .ThenBy(st => st.Id).FirstOrDefault())
+                    .FirstOrDefault(st => st != null);
+                if (star == null) continue;
+                var id = next++;
+                g.StationStars[id] = star.Id;
                 g.Kinds[id] = missing;
-                if (was == StationKind.Depot) { g.Depots = g.Depots.Where(d => d != id).ToArray(); g.Ports = g.Ports.Append(id).ToArray(); g._depots = null; }
+                g.Ports = g.Ports.Append(id).ToArray();
+                g._byStar = null;
             }
         }
     }
