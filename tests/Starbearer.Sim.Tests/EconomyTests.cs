@@ -84,6 +84,25 @@ public partial class SimTests
     }
 
     [Fact]
+    public void AFullByproductDoesNotStopALine()
+    {
+        var (g, m, star, e) = StationOf(StationKind.ChemPlant);
+        var alone = new Market { Stock = { [star] = (double[])m.Stock[star].Clone() } };
+        var solo = new Galaxy { Seed = g.Seed, Stars = g.Stars, Nebulae = g.Nebulae, Ports = new[] { star }, Kinds = g.Kinds, StationStars = g.StationStars };
+        double S(string w) => alone.StockOf(solo, star, w);
+        double Full(string w) => e.Target[e.IndexOf(w)] * Economy.Capacity;
+        foreach (var w in e.Wares) alone.Take(solo, star, w, 1e9);
+        alone.Put(solo, star, Wares.ShipFuel, 100);
+        alone.Put(solo, star, "water", 100);
+        alone.Put(solo, star, "hydrogen", Full("hydrogen"));   // no room for the hydrogen water splits off
+        alone.AdvanceTo(solo, 1);
+        const double k = Economy.Scale;
+        Assert.Equal(2.0 * k, S("oxygen"), 9);                  // the oxygen comes all the same
+        Assert.Equal(Full("hydrogen"), S("hydrogen"), 9);       // and the hydrogen is let go
+        Assert.Equal(100 - 1.5 * k, S("water"), 9);
+    }
+
+    [Fact]
     public void NeighboursEvenOutWhatTheyBothHold()
     {
         var g = Galaxy.Generate(5);

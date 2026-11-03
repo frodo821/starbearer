@@ -186,14 +186,17 @@ public sealed class Market
         {
             var rate = power;
             foreach (var (w, q) in line.In) rate = Math.Min(rate, stock[e.IndexOf(w)] / q);
+            // A line runs while any of what it makes has room; what has none is let go. A full byproduct
+            // (a chemical plant's hydrogen, a mine's uranium) doesn't stop the rest.
+            if (line.Out.Length > 0)
+                rate = Math.Min(rate, line.Out.Max(o => Math.Max(0, (e.Target[e.IndexOf(o.Ware)] * Economy.Capacity - stock[e.IndexOf(o.Ware)]) / o.Rate)));
+            if (rate <= 0) continue;
+            foreach (var (w, q) in line.In) { var i = e.IndexOf(w); stock[i] = Math.Max(0, stock[i] - q * rate); }
             foreach (var (w, q) in line.Out)
             {
                 var i = e.IndexOf(w);
-                rate = Math.Min(rate, Math.Max(0, (e.Target[i] * Economy.Capacity - stock[i]) / q));
+                stock[i] = Math.Max(stock[i], Math.Min(e.Target[i] * Economy.Capacity, stock[i] + q * rate));
             }
-            if (rate <= 0) continue;
-            foreach (var (w, q) in line.In) { var i = e.IndexOf(w); stock[i] = Math.Max(0, stock[i] - q * rate); }
-            foreach (var (w, q) in line.Out) stock[e.IndexOf(w)] += q * rate;
         }
     }
 
