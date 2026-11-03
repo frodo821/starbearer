@@ -5,6 +5,13 @@ namespace Starbearer.Sim;
 /// <summary>Checkpoint taken while docked. A flight is never saved: that could lock in a doomed trajectory.</summary>
 public sealed class SaveData
 {
+    /// <summary>
+    /// What this build's saves are. A galaxy is made again from its seed on loading, so a change to how
+    /// galaxies are made (or to what a save holds) leaves older saves describing another galaxy: raise
+    /// this with any such change. A save from before the field is format 0.
+    /// </summary>
+    public const int CurrentFormat = 1;
+    public int Format { get; set; }
     public ulong Seed { get; set; }
     public int Deliveries { get; set; }
     public int Retries { get; set; }
@@ -51,12 +58,15 @@ public sealed class SaveData
     public string ToJson() => JsonSerializer.Serialize(this, Options);
     public static SaveData? FromJson(string json) => JsonSerializer.Deserialize<SaveData>(json, Options);
 
+    /// <summary>Whether this build can carry on from the save: one made by an older build describes another galaxy.</summary>
+    public bool Current => Format == CurrentFormat;
+
     public static (SaveData Save, Galaxy Galaxy) NewGalaxy(ulong seed)
     {
         var g = Galaxy.Generate(seed);
         return (new SaveData
         {
-            Seed = seed, Fleet = new() { new OwnedShip { Id = 1, Station = g.Ports[0] } },
+            Format = CurrentFormat, Seed = seed, Fleet = new() { new OwnedShip { Id = 1, Station = g.Ports[0] } },
             ClosestApproach = Enumerable.Repeat(double.MaxValue, g.Stars.Length).ToArray(),
             Market = Market.Open(g),
         }, g);

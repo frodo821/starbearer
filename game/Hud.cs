@@ -92,6 +92,7 @@ public partial class Hud : Control
         if (Game.HasSave) Centered(500, "Enter  続きから      N  新しい銀河", Ink, 22);
         else Centered(500, "Enter  新しい銀河", Ink, 22);
         if (Game.LoadFailed) Centered(550, "読み込みに失敗した", Warn, 16);
+        if (Game.SaveRefused is { } why) Centered(580, why, Warn, 16);
     }
 
     void DrawDead()

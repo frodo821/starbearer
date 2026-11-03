@@ -84,6 +84,16 @@ public partial class SimTests
     }
 
     [Fact]
+    public void ASaveFromAnOlderBuildIsToldApart()
+    {
+        var (s, _) = SaveData.NewGalaxy(3);
+        Assert.True(SaveData.FromJson(s.ToJson())!.Current);
+        // One written before saves carried a format describes another galaxy than its seed now makes.
+        var old = s.ToJson().Replace($"\"Format\":{SaveData.CurrentFormat},", "");
+        Assert.False(SaveData.FromJson(old)!.Current);
+    }
+
+    [Fact]
     public void AFullByproductDoesNotStopALine()
     {
         var (g, m, star, e) = StationOf(StationKind.ChemPlant);

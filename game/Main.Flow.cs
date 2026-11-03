@@ -22,6 +22,7 @@ public partial class Main
 
     void Begin(ulong seed) => Load("銀河を生成しています", () => SaveData.NewGalaxy(seed), made =>
     {
+        SaveRefused = null;
         Save = made.Save;
         WriteSave();
         ShowGalaxy(made.Galaxy);
@@ -63,10 +64,23 @@ public partial class Main
         _sky.Setup(g);
     }
 
+    /// <summary>Why the save on disk can't be carried on from, or null if it can (or there is none).</summary>
+    public string? SaveRefused { get; private set; }
+
     public void Continue()
     {
         using var f = FileAccess.Open(SavePath, FileAccess.ModeFlags.Read);
-        Save = SaveData.FromJson(f.GetAsText());
+        SaveData? save;
+        try { save = SaveData.FromJson(f.GetAsText()); }
+        catch (System.Text.Json.JsonException) { save = null; }
+        // An older build's save describes another galaxy than its seed makes now: say so, rather than load it wrong.
+        if (save is not { Current: true })
+        {
+            SaveRefused = save == null ? "セーブを読めない" : "古い版のセーブで、この版では続けられない（銀河の作りが変わった）。N で新しい銀河を始める";
+            return;
+        }
+        SaveRefused = null;
+        Save = save;
         Board();
     }
 
