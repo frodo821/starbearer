@@ -188,6 +188,7 @@ public static class War
         "built" => $"{g.Factions[e.Faction].Name} が {g.Stars[e.Star].Name} に{(g.KindOf(e.Station) == StationKind.Fortress ? "要塞" : Missions.Name(g.KindOf(e.Station)))}を建てた",
         "taken" => $"{g.Stars[e.Star].Name} 星系が {g.Factions[e.Faction].Name} 領になった",
         "gate down" => $"{g.Stars[e.Star].Name} のゲートが止まった（維持の品物が尽きた）。{g.Stars[g.StarOf(g.GateLinks[e.Station])].Name} との間は通れない",
+        "collapsed" => $"{g.Stars[e.Star].Name} のゲートが、対の端を失って崩れた",
         "gate built" => $"{g.Factions[e.Faction].Name} が {g.Stars[e.Star].Name} と {g.Stars[g.StarOf(g.GateLinks[e.Station])].Name} の間にゲートを建てた",
         "gate up" => $"{g.Stars[e.Star].Name} と {g.Stars[g.StarOf(g.GateLinks[e.Station])].Name} の間のゲートが動き出した",
         _ => e.Kind,
@@ -199,7 +200,11 @@ public static class War
     /// <summary>The systems being fought over, nearest the given star first.</summary>
     public static IEnumerable<int> Fronts(Galaxy g) => g.StationStars.Values.Distinct().Where(s => Sides(g, s).Length > 1).OrderBy(s => s);
 
-    static void Destroy(Galaxy g, Market m, int station)
+    /// <summary>
+    /// A station falls: it is down for good, its stock gone, and the system may change hands. A gate
+    /// takes its other end with it: the pair is one field, and half of it holds nothing open.
+    /// </summary>
+    static void Destroy(Galaxy g, Market m, int station, string kind = "destroyed")
     {
         var w = m.War;
         var star = g.StarOf(station);
@@ -210,9 +215,10 @@ public static class War
         w.Destroyed.Add(station);
         if (g.KindOf(station) == StationKind.Gate) g.RoutesChanged();   // goods and news lose the way through it
         Array.Clear(m.Stock[station]);
-        w.Log.Add(new WarEvent(m.Day, "destroyed", station, star, g.OwnerOf(station)));
+        w.Log.Add(new WarEvent(m.Day, kind, station, star, g.OwnerOf(station)));
         var after = g.Claim(star).Holder;
         if (after != before && after >= 0) w.Log.Add(new WarEvent(m.Day, "taken", station, star, after));
+        if (g.GateLinks.TryGetValue(station, out var exit) && g.Alive(exit)) Destroy(g, m, exit, "collapsed");
     }
 
     /// <summary>

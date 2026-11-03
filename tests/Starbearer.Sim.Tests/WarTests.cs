@@ -122,8 +122,10 @@ public partial class SimTests
             m.AdvanceTo(g, day);
         }
         Assert.False(g.Alive(gate));
-        Assert.False(Gates.Open(g, m, g.GateLinks[gate]));
+        Assert.False(g.Alive(g.GateLinks[gate]));   // its other end falls with it
         Assert.Contains(m.War.Log, e => e.Kind == "destroyed" && e.Station == gate);
+        Assert.Contains(m.War.Log, e => e.Kind == "collapsed" && e.Station == g.GateLinks[gate]);
+        Assert.Contains("崩れた", War.Describe(g, m.War.Log.Last(e => e.Kind == "collapsed")));
         Assert.DoesNotContain(g.Neighbours, n => n.Gate == gate || n.Gate == g.GateLinks[gate]);
     }
 
