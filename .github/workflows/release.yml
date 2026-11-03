@@ -1,7 +1,8 @@
 name: release
 
 # A tag v* builds the game for Windows, Linux and macOS with Godot (.NET) and publishes them as a
-# GitHub release. The tests run first; a failing test stops the release.
+# GitHub release (a pre-release for a tag with a hyphen, like v0.2.0-rc.1). The tests run first; a
+# failing test stops the release.
 #
 # Each file published carries a build provenance attestation: check one with
 # `gh attestation verify <file> --repo frodo821/starbearer`.
@@ -120,5 +121,7 @@ jobs:
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" dist/* --clobber
           else
-            gh release create "$TAG" dist/* --title "Starbearer $TAG" --generate-notes
+            # A tag with a hyphen (v0.2.0-rc.1) is a pre-release.
+            pre=""; case "$TAG" in *-*) pre="--prerelease";; esac
+            gh release create "$TAG" dist/* --title "Starbearer $TAG" --generate-notes $pre
           fi
