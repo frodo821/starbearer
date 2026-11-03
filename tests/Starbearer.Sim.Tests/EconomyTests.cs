@@ -63,17 +63,18 @@ public partial class SimTests
         double S(string w) => alone.StockOf(solo, star, w);
         foreach (var w in e.Wares) alone.Take(solo, star, w, 1e9);
         alone.Put(solo, star, "fission_fuel", 10);
-        alone.Put(solo, star, "silicon_carbide", 0.35);   // half a day of it
+        const double k = Economy.Scale;
+        alone.Put(solo, star, "silicon_carbide", 0.7 * k / 2);   // half a day of it
         alone.Put(solo, star, "titanium", 100);
         alone.AdvanceTo(solo, 1);
         Assert.Equal(0, S("silicon_carbide"), 9);
-        Assert.Equal(1.0 * 0.5, S("electronics"), 9);     // half a day's make
-        Assert.Equal(100 - 0.4 * 0.5, S("titanium"), 9);
+        Assert.Equal(1.0 * k / 2, S("electronics"), 9);         // half a day's make
+        Assert.Equal(100 - 0.4 * k / 2, S("titanium"), 9);
         // Without power, nothing runs.
         alone.Take(solo, star, "fission_fuel", 1e9);
         alone.Put(solo, star, "silicon_carbide", 100);
         alone.AdvanceTo(solo, 2);
-        Assert.Equal(0.5, S("electronics"), 9);
+        Assert.Equal(1.0 * k / 2, S("electronics"), 9);
         // Full of output, the line stops.
         alone.Put(solo, star, "fission_fuel", 10);
         alone.Put(solo, star, "electronics", 1e3);

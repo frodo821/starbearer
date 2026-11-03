@@ -64,6 +64,8 @@ public static class Tuning
     public const int FrontSystems = 4, Battlefields = 1;
     /// <summary>A fortress's supply line to each station of its faction: its strength at no distance, and the distance it falls to 1/e over.</summary>
     public const double SupplyLine = 1, SupplyLy = 50;
+    /// <summary>What a passage through a gate counts as, in light years, for goods evening out along a gate route.</summary>
+    public const double GateTradeLy = 6;
     public const int StarsPerRegion = 30;
     public const int StarCount = RegionCount * StarsPerRegion;
     /// <summary>The disc grows with the star count so the stars stay as far apart as before.</summary>

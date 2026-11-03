@@ -35,7 +35,12 @@ public static class Economy
     /// <summary>Stock beyond this many times the target has no room: lines making it stop.</summary>
     public const double Capacity = 2;
     /// <summary>Every station keeps fuel for ships calling, even one that makes and burns none.</summary>
-    public const double ShipFuelStock = 30;
+    public const double ShipFuelStock = 30 * Scale;
+    /// <summary>
+    /// How big the economy is: every line and upkeep rate below is multiplied by this. Prices follow fill,
+    /// so a bigger economy behaves the same, but a ship's few units move its prices less.
+    /// </summary>
+    public const double Scale = 6;
     /// <summary>Share of the gap in fill two neighbours close each day, at no distance.</summary>
     public const double Spread = 0.3;
     /// <summary>Distance over which that falls to 1/e.</summary>
@@ -150,8 +155,9 @@ public static class Economy
     {
         var kind = g.KindOf(station);
         var weapon = kind is StationKind.Armory or StationKind.Fortress && g.OwnerOf(station) is var f and >= 0 ? g.Factions[f].Weapon : "shells";
-        var lines = LinesFor(kind, new Rng(g.Seed * 40503 + g.SeedKey(station)), weapon);
-        var upkeep = UpkeepFor(kind);
+        static (string, double)[] Scaled((string W, double Q)[] x) => x.Select(r => (r.W, r.Q * Scale)).ToArray();
+        var lines = LinesFor(kind, new Rng(g.Seed * 40503 + g.SeedKey(station)), weapon).Select(l => new Line(Scaled(l.In), Scaled(l.Out))).ToArray();
+        var upkeep = Scaled(UpkeepFor(kind));
         var flow = new Dictionary<string, double>();
         void Add(string w, double rate) => flow[w] = flow.GetValueOrDefault(w) + rate;
         foreach (var l in lines) { foreach (var (w, q) in l.In) Add(w, q); foreach (var (w, q) in l.Out) Add(w, q); }

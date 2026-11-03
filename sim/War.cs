@@ -47,9 +47,9 @@ public static class War
     /// <summary>How much a day's fire varies, either way: the fortunes of war.</summary>
     public const double FireSpread = 0.4;
     /// <summary>Steel a fortress goes through toward the next one; how much makes one.</summary>
-    public const double SteelPerFortress = 40;
+    public const double SteelPerFortress = 40 * Economy.Scale;
     /// <summary>Steel a shipyard puts toward its faction's next fortress a day, as far as its stock goes.</summary>
-    public const double YardSteel = 0.1;
+    public const double YardSteel = 0.1 * Economy.Scale;
     /// <summary>A faction keeps no more fortresses standing than this many times what it started with.</summary>
     public const double FortressCap = 1.5;
 

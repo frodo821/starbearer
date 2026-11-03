@@ -109,33 +109,57 @@ public sealed class Galaxy
     (int A, int B, double Closeness)[]? _neighbours;
     /// <summary>
     /// Station pairs whose stock evens out, and how strongly: closer ones more. Only a faction's own
-    /// stations trade: every pair within a region, or within reach of each other's fronts (a fortress is
-    /// supplied from home across the border), and each pair of linked gates. Goods cross between regions,
-    /// and to the enemy, only in ships' holds.
+    /// stations trade: within a region, between regions along a gate route (weaker the farther the
+    /// stations sit from the gates), and along the supply lines of what a faction keeps supplied from
+    /// everywhere. Goods reach the enemy only in ships' holds.
     /// </summary>
-    public (int A, int B, double Closeness)[] Neighbours => _neighbours ??= Links.Where(l => OwnerOf(l.A) == OwnerOf(l.B)).ToArray();
+    public (int A, int B, double Closeness)[] Neighbours => _neighbours ??= Economies.Keys.OrderBy(s => s)
+        .SelectMany(a => Economies.Keys.Where(b => b > a && OwnerOf(a) == OwnerOf(b)).Select(b => (a, b, Closeness(a, b, TradeLy(a, b)))).Where(l => l.Item3 > 0))
+        .ToArray();
 
     (int A, int B, double Closeness)[]? _links;
     /// <summary>
-    /// Every pair news and goods travel between: within a region, each pair of linked gates, and a
-    /// supply line of a fortress, an armory or a fuel plant, to every station that deals in what it needs,
-    /// weaker with distance.
+    /// Every pair news travels between directly: within a region, each pair of linked gates, and a
+    /// supply line of a fortress, an armory or a fuel plant, to every station that deals in what it needs.
     /// </summary>
     (int A, int B, double Closeness)[] Links => _links ??= Economies.Keys.OrderBy(s => s)
-        .SelectMany(a => Economies.Keys.Where(b => b > a).Select(b => (a, b, Closeness(a, b))).Where(l => l.Item3 > 0))
+        .SelectMany(a => Economies.Keys.Where(b => b > a).Select(b => (a, b, Closeness(a, b, null))).Where(l => l.Item3 > 0))
         .ToArray();
+
+    /// <summary>
+    /// How far goods go between two stations by way of a gate: to it, and on from its exit, with the
+    /// passage counted as Tuning.GateTradeLy more. Null where no gate route is shorter than the way straight there.
+    /// </summary>
+    double? TradeLy(int a, int b)
+    {
+        double Apart(int x, int y) => (StarAt(x).Position - StarAt(y).Position).Length;
+        var direct = Apart(a, b);
+        double? best = null;
+        foreach (var (gate, exit) in GateLinks)
+        {
+            var ly = Apart(a, gate) + Apart(exit, b) + Tuning.GateTradeLy;
+            if (ly < direct && (best == null || ly < best)) best = ly;
+        }
+        return best;
+    }
 
     /// <summary>What a faction keeps supplied from all its stations, not just its neighbours: the war, and the fuel everything burns.</summary>
     static bool SuppliedFar(StationKind kind) => kind is StationKind.Fortress or StationKind.Armory or StationKind.FuelPlant;
 
-    double Closeness(int a, int b)
+    /// <summary>
+    /// How strongly two stations even out: by distance within a region, or along a gate route (gateLy)
+    /// between any two; a supply line reaches the whole faction, weaker with distance.
+    /// </summary>
+    double Closeness(int a, int b, double? gateLy)
     {
         if (GateLinks.TryGetValue(a, out var x) && x == b) return 1;
         var ly = (StarAt(a).Position - StarAt(b).Position).Length;
+        var near = StarAt(a).Region == StarAt(b).Region ? Math.Exp(-ly / Economy.SpreadLy) : 0;
+        if (gateLy is { } via) near = Math.Max(near, Math.Exp(-via / Economy.SpreadLy));
         if (SuppliedFar(Kinds[a]) || SuppliedFar(Kinds[b]))
             return Economies[a].Wares.Any(w => w != Wares.ShipFuel && Economies[b].IndexOf(w) >= 0) || Kinds[a] == Kinds[b]
-                ? Math.Max(Tuning.SupplyLine * Math.Exp(-ly / Tuning.SupplyLy), StarAt(a).Region == StarAt(b).Region ? Math.Exp(-ly / Economy.SpreadLy) : 0) : 0;
-        return StarAt(a).Region == StarAt(b).Region ? Math.Exp(-ly / Economy.SpreadLy) : 0;
+                ? Math.Max(Tuning.SupplyLine * Math.Exp(-Math.Min(ly, gateLy ?? ly) / Tuning.SupplyLy), near) : 0;
+        return near;
     }
 
     double[,]? _lag;
