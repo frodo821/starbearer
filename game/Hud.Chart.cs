@@ -10,7 +10,9 @@ namespace Starbearer;
 public partial class Hud
 {
 
-    Vector2 MapPoint(Vec3d p) => Game.Chart.Project(p, Size);
+    /// <summary>The middle of the chart: the open space over the helm, not the screen's middle, where the helm sits.</summary>
+    Vector2 MapCentre => new(Size.X / 2, Mathf.Max(ClusterTop / 2 + 20, 180));
+    Vector2 MapPoint(Vec3d p) => Game.Chart.Project(p, MapCentre * 2);
 
     /// <summary>Stars, wells and the FTL path. Shared by the galaxy map and the zoomed-out orbit view.</summary>
     /// <summary>
@@ -206,7 +208,7 @@ public partial class Hud
         var me = MapPoint(v.EstimatedPosition);
         DrawArc(me, Mathf.Max(4f, (float)v.NavSigma * Game.Chart.Zoom * 2), 0, Mathf.Tau, 20, Ink, 1.5f, true);
         DrawCircle(me, 2.5f, Ink);
-        var c0 = Size / 2;
+        var c0 = MapCentre;
         DrawLine(c0 + new Vector2(-7, 0), c0 + new Vector2(7, 0), Dim, 1);
         DrawLine(c0 + new Vector2(0, -7), c0 + new Vector2(0, 7), Dim, 1);
         Centered(118, "ダブルタップ その星を中心に   2本指 移動   ドラッグ 回転", Dim, 14);

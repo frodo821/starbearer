@@ -78,6 +78,7 @@ public partial class Hud
         var p = Mathf.Clamp(Game.CueAge / cue.Seconds, 0, 1);
         var fade = Mathf.Min(1, (1 - p) * 4);
         var centre = (Size - new Vector2(0, ConsoleHeight)) / 2;
+        var words = new Vector2(Size.X / 2, Mathf.Min(centre.Y, ClusterTop - 80));   // the title over the helm, not on it
         if (cue.Major)
         {
             DrawRect(new Rect2(Vector2.Zero, Size - new Vector2(0, ConsoleHeight)), new Color(cue.Colour, 0.45f * Mathf.Pow(1 - p, 3)));
@@ -86,11 +87,11 @@ public partial class Hud
             DrawArc(centre, r, 0, Mathf.Tau, 64, new Color(cue.Colour, 0.8f * fade), 2, true);
             DrawArc(centre, r * 0.7f, 0, Mathf.Tau, 64, new Color(cue.Colour, 0.4f * fade), 1, true);
             var w = F.GetStringSize(cue.Title, HorizontalAlignment.Left, -1, 44).X + 60;
-            var box = new Rect2((Size.X - w) / 2, centre.Y - 60, w, 76);
+            var box = new Rect2((Size.X - w) / 2, words.Y - 60, w, 76);
             DrawRect(box, new Color(0, 0, 0, 0.6f * fade));
             DrawRect(box, new Color(cue.Colour, fade), false, 2);
-            Centered(centre.Y - 6, cue.Title, new Color(cue.Colour, fade), 44);
-            Centered(centre.Y + 44, cue.Detail, new Color(Ink, fade), 18);
+            Centered(words.Y - 6, cue.Title, new Color(cue.Colour, fade), 44);
+            Centered(words.Y + 44, cue.Detail, new Color(Ink, fade), 18);
         }
         else
         {

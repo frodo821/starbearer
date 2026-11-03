@@ -10,46 +10,11 @@ namespace Starbearer;
 /// <summary>The clock and the instrument panels.</summary>
 public partial class Hud
 {
-    const float NavLeft = 10, NavWidth = 380, ShipWidth = 340, TimeTop = 8, TimeHeight = 92;
+    const float NavLeft = 10, NavWidth = 380, ShipWidth = 340;
     float NavRight => NavLeft + NavWidth;
-    float NavTop => TimeTop + TimeHeight + 8;
+    float NavTop => 8;
     /// <summary>Panels sized to what they held last frame: drawn behind, their contents decide how tall.</summary>
     float _navHeight = 300, _shipHeight = 260;
-
-    /// <summary>Time, as in KSP: stop and go, the rate, on to the next burn; under them the clocks and what comes next.</summary>
-    void DrawTimePanel()
-    {
-        var v = Game.V!;
-        var commands = Game.TimeCommands();
-        var width = Mathf.Max(RowWidth(commands) + 2 * PanelPad, 540);
-        Panel(new Rect2(NavLeft, TimeTop, width, TimeHeight), "");
-        float x = NavLeft + PanelPad, y = TimeTop + 8;
-        var shown = Game.RateShown;
-        foreach (var c in commands)
-        {
-            var current = c.Key == Key.Key1 + shown && !Game.Paused && Game.Screen != Screen.Plan;
-            if (current) DrawRect(new Rect2(x, y, ButtonWidth(c), ButtonHeight), new Color(Ink, 0.25f));
-            x += Button(new Vector2(x, y), c) + ButtonGap;
-        }
-        y += ButtonHeight + 24;
-        x = NavLeft + PanelPad;
-        var right = NavLeft + width - PanelPad;
-        void RightText(float yy, string s, Color c, int size) => Text(new Vector2(right - F.GetStringSize(s, HorizontalAlignment.Left, -1, size).X, yy), s, c, size);
-        Text(new Vector2(x, y), "航海", Dim, 11);
-        Text(new Vector2(x + 30, y), Instruments.Clock(v.Time), Ink, 17);
-        RightText(y, Instruments.Date(v.AbsoluteTime), Dim, 14);
-        y += 22;
-        var (label, left) = NextEvent();
-        var running = Game.Screen != Screen.Plan && Game.CurrentRate > 0;
-        if (left is { } t)
-        {
-            var count = Instruments.Countdown(t);
-            Text(new Vector2(x, y), count, t < 1 ? Warn : Good, 15);
-            Text(new Vector2(x + F.GetStringSize(count, HorizontalAlignment.Left, -1, 15).X + 10, y), label, Dim, 13);
-            RightText(y, "(" + Instruments.Date(v.AbsoluteTime + t) + ")", Dim, 12);
-        }
-        else Text(new Vector2(x, y), running ? "予定なし" : "時間停止", running ? Dim : Warn, 14);
-    }
 
     (string, double?) NextEvent()
     {
@@ -158,7 +123,6 @@ public partial class Hud
 
     void DrawInstruments()
     {
-        DrawTimePanel();
         DrawNavPanel();
         DrawShipPanel();
         DrawFtlState();
@@ -209,11 +173,11 @@ public partial class Hud
     void DrawRangeGauge()
     {
         var v = Game.V!; var g = Game.G!; var fc = Game.Forecast;
-        // Clear of the helm on the right.
-        var room = HelmLeft - 40 - 40;
-        var width = Mathf.Min(room, 900f);
-        var x0 = 40 + (room - width) / 2;
-        var top = Size.Y - ConsoleHeight - 112;
+        // Up top under the speed bar, between the side panels: the helm has the bottom.
+        var room = Size.X - 2 * (NavRight + 30);
+        var width = Mathf.Min(room, 760f);
+        var x0 = (Size.X - width) / 2;
+        var top = 205f;
         var direct = (v.ChartPositions[v.TargetStar] - v.EstimatedPosition).Length;
 
         double total = 0;

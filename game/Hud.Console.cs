@@ -27,7 +27,7 @@ public partial class Hud
     static readonly Color PanelFill = new(0.01f, 0.02f, 0.05f, 0.78f);
 
     /// <summary>Where the advice line is centred: between the navigation panel and the helm.</summary>
-    float AdviceCentre => (NavRight + HelmLeft) / 2;
+    float AdviceCentre => Size.X / 2;
 
     void ClearButtons()
     {

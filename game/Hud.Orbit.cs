@@ -441,10 +441,17 @@ public partial class Hud
     Rect2? NodePanelBox(Maneuver n)
     {
         if (NodePoint(n) is not { } np) return null;
-        var x = np.X + HandleReach + 24;
-        if (x + NodePanelWidth > HelmLeft - 8) x = np.X - HandleReach - 24 - NodePanelWidth;
-        x = Mathf.Clamp(x, NavRight + 8, Size.X - NodePanelWidth - 10);
-        var y = Mathf.Clamp(np.Y - NodePanelHeight / 2, NavTop, Size.Y - ConsoleHeight - NodePanelHeight - 60);
+        // Out past the drawn path on the node's side, so the panel never sits over the orbit's markers
+        // (Ap, Pe, the closest approach) a pilot may want to tap next; failing room there, the other side.
+        var path = Game.SubForecast is { } fc ? PathAhead(fc).Select(x => x.At).Append(np).ToList() : new List<Vector2> { np };
+        var (lo, hi) = (path.Min(p => p.X), path.Max(p => p.X));
+        var right = Mathf.Max(np.X + HandleReach + 24, hi + 16);
+        var left = Mathf.Min(np.X - HandleReach - 24, lo - 16) - NodePanelWidth;
+        var (minX, maxX) = (NavRight + 8, Size.X - ShipWidth - 20 - NodePanelWidth);
+        var outward = np.X >= (lo + hi) / 2 ? right : left;
+        var other = outward == right ? left : right;
+        var x = outward >= minX && outward <= maxX ? outward : other >= minX && other <= maxX ? other : Mathf.Clamp(outward, minX, Size.X - NodePanelWidth - 10);
+        var y = Mathf.Clamp(np.Y - NodePanelHeight / 2, NavTop, ClusterTop - NodePanelHeight - 8);   // clear of the helm below
         return new Rect2(x, y, NodePanelWidth, NodePanelHeight);
     }
 

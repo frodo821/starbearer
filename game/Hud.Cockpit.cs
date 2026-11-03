@@ -168,58 +168,98 @@ public partial class Hud
         }
     }
 
-    const float CompassRadius = 112;
-    /// <summary>The dial sits above the helm's two rows of buttons, with room under it for its captions.</summary>
-    Vector2 CompassCentre => new(Size.X - CompassRadius - 26, HelmRowsTop - 48 - CompassRadius);
-    float HelmRowsTop => Size.Y - ConsoleHeight - 10 - 2 * ButtonHeight - ButtonGap;
-    /// <summary>The left edge of the helm: the attitude buttons, or its rows of buttons if wider.</summary>
-    float HelmLeft
-    {
-        get
-        {
-            var left = CompassCentre.X - CompassRadius - 66 - 2 * 62 - 4;
-            if (Game.V == null || Game.Screen != Screen.Orbit && Game.Screen != Screen.Flight) return left;
-            var (thrust, nose) = Game.HelmCommands();
-            return Mathf.Min(left, Size.X - 10 - Mathf.Max(RowWidth(thrust), RowWidth(nose)));
-        }
-    }
+    const float CompassRadius = 104, HoldW = 58, HoldH = 26, HoldGap = 4, BurnWidth = 290;
+    /// <summary>Room under the helm's rows for the advice line and the message over it.</summary>
+    const float AdviceRoom = 52;
 
     /// <summary>
-    /// The helm, as around KSP's navball: the dial, the throttle and the attitude holds; above them what
-    /// the next burn needs; below them the buttons that fly the ship. Docked or planning, nothing to fly.
+    /// Everything a burn is flown with sits in one place at the bottom middle, as around KSP's navball:
+    /// the dial in the centre, the attitude holds either side, the throttle to the left and the burn's
+    /// numbers to the right, time and the clock over it, the buttons that fly the ship under it.
     /// </summary>
+    Vector2 CompassCentre => new(Size.X / 2, HelmRowsTop - 44 - CompassRadius);
+    float HelmRowsTop => Size.Y - ConsoleHeight - AdviceRoom - 2 * ButtonHeight - ButtonGap;
+    /// <summary>Where the time controls' row sits, and the clock line over it.</summary>
+    float TimeRowTop => CompassCentre.Y - CompassRadius - 22 - ButtonHeight;
+    /// <summary>The top of the helm's cluster: the chart and the node panel keep above it.</summary>
+    float ClusterTop => TimeRowTop - 26;
+    float HoldsLeft => CompassCentre.X - CompassRadius - 14 - HoldW;
+    float HoldsRight => CompassCentre.X + CompassRadius + 14;
+    float BurnLeft => HoldsRight + HoldW + 16;
+
+    /// <summary>The flight controls and their readouts, gathered round the dial. Docked or planning, nothing to fly.</summary>
     void DrawHelm()
     {
         var v = Game.V!;
+        DrawTimeRow();
         DrawCompass();
         if (Game.Screen == Screen.Plan || v.Docked) return;
         var (thrust, nose) = Game.HelmCommands();
-        ButtonRowRight(Size.X - 10, HelmRowsTop, thrust);
-        ButtonRowRight(Size.X - 10, HelmRowsTop + ButtonHeight + ButtonGap, nose);
-        if (Game.Screen == Screen.Orbit) { DrawBurnBox(); DrawNodeTiming(); }
+        ButtonRow(Size.X / 2 - RowWidth(thrust) / 2, HelmRowsTop, thrust);
+        ButtonRow(Size.X / 2 - RowWidth(nose) / 2, HelmRowsTop + ButtonHeight + ButtonGap, nose);
+        if (Game.Screen == Screen.Orbit) DrawBurnPanel();
+    }
+
+    /// <summary>Over the dial: the clocks and what comes next, then stop and go, the rates, and on to the burn.</summary>
+    void DrawTimeRow()
+    {
+        var v = Game.V!;
+        var commands = Game.TimeCommands();
+        var x = Size.X / 2 - RowWidth(commands) / 2;
+        var y = TimeRowTop;
+        var shown = Game.RateShown;
+        foreach (var c in commands)
+        {
+            var current = c.Key == Key.Key1 + shown && !Game.Paused && Game.Screen != Screen.Plan;
+            if (current) DrawRect(new Rect2(x, y, ButtonWidth(c), ButtonHeight), new Color(Ink, 0.25f));
+            x += Button(new Vector2(x, y), c) + ButtonGap;
+        }
+        // One line over the buttons, centred: the voyage clock, the countdown to what comes next, and when that is.
+        var parts = new List<(string Text, Color Colour, int Size)> { ("航海 ", Dim, 12), (Instruments.Clock(v.Time), Ink, 15) };
+        var (label, left) = NextEvent();
+        var running = Game.Screen != Screen.Plan && Game.CurrentRate > 0;
+        if (left is { } t)
+        {
+            parts.Add(("    " + Instruments.Countdown(t), t < 1 ? Warn : Good, 15));
+            parts.Add(("  " + label, Dim, 13));
+            parts.Add(("  (" + Instruments.Date(v.AbsoluteTime + t) + ")", Dim, 12));
+        }
+        else parts.Add(("    " + (running ? Instruments.Date(v.AbsoluteTime) : "時間停止  " + Instruments.Date(v.AbsoluteTime)), running ? Dim : Warn, 13));
+        var width = parts.Sum(p => F.GetStringSize(p.Text, HorizontalAlignment.Left, -1, p.Size).X);
+        var px = Size.X / 2 - width / 2;
+        var back = new Rect2(px - 10, y - 26, width + 20, 22);
+        DrawRect(back, PanelFill);
+        foreach (var (text, col, size) in parts)
+        {
+            Text(new Vector2(px, y - 9), text, col, size);
+            px += F.GetStringSize(text, HorizontalAlignment.Left, -1, size).X;
+        }
     }
 
     /// <summary>A span of real time as the pilot reads it.</summary>
     static string RealTime(double seconds) => Instruments.Span(seconds / Instruments.SecondsPerDay);
 
     /// <summary>
-    /// Over the attitude holds, the next node's timing: how long until the best moment to light (half
-    /// the burn before the node), and how much burn is left, each in game days and in real time. Real
-    /// time to ignition is at the rate time runs now; the burn's is at the rate a burn runs at.
+    /// Right of the dial, what the next node asks of the pilot: what is left of it and the throttle;
+    /// how long until the best moment to light (half the burn before the node) and how much burn is
+    /// left, each in game time and real time; and whether the nose is on it. Real time to ignition is at
+    /// the rate time runs now; the burn's is at the rate a burn runs at.
     /// </summary>
-    void DrawNodeTiming()
+    void DrawBurnPanel()
     {
         if (Game.NextNode is not { } burn || Game.IgnitionIn is not { } wait) return;
-        var holds = HoldButtons().ToList();
-        if (holds.Count == 0) return;
-        var left = holds.Min(b => b.Box.Position.X);
-        var right = holds.Max(b => b.Box.End.X);
-        var bottom = holds.Min(b => b.Box.Position.Y) - 8;
-        const float rowH = 19, height = 3 * rowH + 10;
-        var box = new Rect2(left, bottom - height, Mathf.Max(right - left, 300), height);
-        box.Position = new Vector2(right - box.Size.X, box.Position.Y);
-        Panel(box, "", opaque: true);
-        float x = box.Position.X + 8, c1 = x + 62, c2 = x + 180, y = box.Position.Y + 16;
+        const float rowH = 20;
+        var rows = 5 + (Game.NoseOffNode != null ? 1 : 0);
+        var height = 24 + rows * rowH + 6;
+        var box = new Rect2(BurnLeft, CompassCentre.Y - height / 2, BurnWidth, height);
+        Panel(box, "噴射", opaque: true);
+        float x = box.Position.X + PanelPad, c1 = x + 64, c2 = x + 172, y = box.Position.Y + 24 + 14;
+        Text(new Vector2(x, y), "ノード残", Dim, 13);
+        Text(new Vector2(c1, y), $"Δv {Instruments.Speed(burn.DeltaV)}" + (Game.NodeOvershot ? "  過ぎた" : ""), Game.NodeOvershot ? Warn : Ink, 14);
+        y += rowH;
+        Text(new Vector2(x, y), "推力", Dim, 13);
+        Text(new Vector2(c1, y), Game.EngineAcceleration > 0 ? $"{Game.Helm.Throttle * 100:F0}%" : "0%  噴射できない (W で上げる)", Game.EngineAcceleration > 0 ? Ink : Warn, 14);
+        y += rowH;
         Text(new Vector2(c1, y), "ゲーム内", Dim, 11);
         Text(new Vector2(c2, y), "実時間", Dim, 11);
         y += rowH;
@@ -230,7 +270,7 @@ public partial class Hud
         if (lit) Text(new Vector2(c1, y), "噴射中", Warn, 14);
         else
         {
-            var col = wait <= 0 ? Warn : wait < 0.3 ? Warn : Good;
+            var col = wait < 0.3 ? Warn : Good;
             Text(new Vector2(c1, y), wait <= 0 ? "今" : Instruments.Span(wait), col, 14);
             Text(new Vector2(c2, y), wait <= 0 ? "今" : rate > 0 ? RealTime(wait / rate) : "時間停止", rate > 0 || wait <= 0 ? col : Dim, 14);
         }
@@ -240,33 +280,16 @@ public partial class Hud
         if (Game.EngineAcceleration > 0)
         {
             var days = burn.DeltaV / Game.EngineAcceleration;
-            var col = days > 3 ? Warn : lit ? Warn : Ink;
+            var col = days > 3 || lit ? Warn : Ink;
             Text(new Vector2(c1, y), Instruments.Span(days), col, 14);
             Text(new Vector2(c2, y), RealTime(days / Game.BurnRateNow), col, 14);
         }
-        else Text(new Vector2(c1, y), "推力 0", Warn, 14);
-    }
-
-    /// <summary>What the next node asks of the pilot: how much is left, how long it burns, when to light, and whether the nose is on it.</summary>
-    void DrawBurnBox()
-    {
-        if (Game.NextNode is not { } burn) return;
-        var v = Game.V!;
-        var lines = new List<(string, Color)>
-        {
-            ($"ノード残 Δv {Instruments.Speed(burn.DeltaV)}   スロットル {Game.Helm.Throttle * 100:F0}%" + (Game.NodeOvershot ? "  過ぎた" : ""), Game.NodeOvershot ? Warn : Ink),
-        };
-        if (Game.EngineAcceleration <= 0) lines.Add(("スロットル0%: 噴射できない (W で上げる)", Warn));
+        y += rowH;
         if (Game.NoseOffNode is { } off)
-            lines.Add(($"機首と噴射方向のずれ {off:F1}°" + (off > 5 ? "  「ノード」で保持" : ""), off > 5 ? Warn : Good));
-        // Only as wide as it needs, against the right edge, so the chart beside it stays in view.
-        var width = lines.Max(l => F.GetStringSize(l.Item1, HorizontalAlignment.Left, -1, 15).X) + 2 * PanelPad;
-        var left = Size.X - 10 - width;
-        var height = 26 + lines.Count * 20 + 6;
-        var bottom = CompassCentre.Y - CompassRadius - 30;
-        Panel(new Rect2(left, bottom - height, width, height), "噴射");
-        var y = bottom - height + 26;
-        foreach (var (text, col) in lines) { Text(new Vector2(left + PanelPad, y + 14), text, col, 15); y += 20; }
+        {
+            Text(new Vector2(x, y), "機首ずれ", Dim, 13);
+            Text(new Vector2(c1, y), $"{off:F1}°" + (off > 5 ? "  「ノード」で保持" : ""), off > 5 ? Warn : Good, 14);
+        }
     }
 
     Vector2 CompassPt(Vec3d d)
@@ -287,18 +310,15 @@ public partial class Hud
         (ViewHold.Node, new(1f, 0.7f, 0.25f)), (ViewHold.Target, new(0.5f, 1f, 0.7f)),
     };
 
-    /// <summary>The attitude holds as buttons in two columns beside the dial, left of the throttle.</summary>
+    /// <summary>The attitude holds as buttons either side of the dial: each pair's first on the left, its opposite on the right.</summary>
     IEnumerable<(Rect2 Box, ViewHold Hold, string Label, Color Colour, bool Enabled)> HoldButtons()
     {
         if (Game.Screen is not (Screen.Flight or Screen.Orbit)) yield break;
-        const float w = 58, h = 26, gap = 4;
-        var c = CompassCentre;
-        var right = c.X - CompassRadius - 66;
-        var top = c.Y - (5 * (h + gap) - gap) / 2;
+        var top = CompassCentre.Y - (5 * (HoldH + HoldGap) - HoldGap) / 2;
         for (int i = 0; i < HoldChoices.Length; i++)
         {
             var (hold, col) = HoldChoices[i];
-            var box = new Rect2(right - (2 - i % 2) * (w + gap), top + i / 2 * (h + gap), w, h);
+            var box = new Rect2(i % 2 == 0 ? HoldsLeft : HoldsRight, top + i / 2 * (HoldH + HoldGap), HoldW, HoldH);
             yield return (box, hold, Helm.NameOf(hold), col, hold == ViewHold.Free || Game.DirectionOf(hold) != null);
         }
     }
@@ -380,7 +400,7 @@ public partial class Hud
     void DrawThrottle(Vector2 compass)
     {
         const float height = 200, width = 16;
-        var x = compass.X - CompassRadius - 44;
+        var x = HoldsLeft - 36;
         var top = compass.Y - height / 2;
         DrawRect(new Rect2(x - 8, top - 30, width + 24, height + 70), new Color(0.01f, 0.02f, 0.05f, 0.72f));
         var col = Game.Helm.EngineOn ? Warn : Ink;
