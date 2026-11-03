@@ -579,6 +579,16 @@ public sealed class Galaxy
                     if (i >= Tuning.Battlefields) { g.UnbuiltSites.Add(defend); g.UnbuiltSites.Add(attack); }
                 }
             }
+        // Room to grow: in each region a site for each economic kind, on a free star whose system suits it,
+        // for its faction to build on when it runs short of what that kind makes (see Industry).
+        var economic = Enumerable.Range(0, (int)StationKind.Depot).Select(i => (StationKind)i).ToArray();
+        foreach (var region in g.Regions)
+            foreach (var kind in economic)
+            {
+                var free = g.Stars.Where(s => s.Region == region.Id && g.AllStationsIn(s.Id).Length == 0 && Fits(kind, g.System(s.Id))).ToList();
+                if (free.Count == 0) continue;
+                g.UnbuiltSites.Add(Add(free[r.Index(free.Count)].Id, kind, g.RegionOwners[region.Id]));
+            }
         g.Ports = g.Ports.Concat(added).ToArray();
         g.War = WarState.Start(g);
     }

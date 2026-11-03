@@ -20,15 +20,26 @@ public sealed class WarState
     /// <summary>Stations destroyed: they never come back, unlike a fortress site, which its owner can build again.</summary>
     public HashSet<int> Destroyed { get; set; } = new();
     public List<WarEvent> Log { get; set; } = new();
+    /// <summary>Per faction, materials gathered toward its next station of the economy, as a share of one (see Industry).</summary>
+    public double[] Industry { get; set; } = Array.Empty<double>();
+    /// <summary>Per faction, how long each ware has been short across it, in days, by ware id.</summary>
+    public List<Dictionary<string, double>> Shortage { get; set; } = new();
+    /// <summary>Per faction, the day it last built a station of the economy.</summary>
+    public double[] LastBuilt { get; set; } = Array.Empty<double>();
 
     public double HullOf(int station) => Hull.TryGetValue(station, out var h) ? h : 1;
 
     public WarState Copy() => new()
     {
         Down = Down.ToHashSet(), Hull = new(Hull), Built = new(Built), Progress = (double[])Progress.Clone(), Destroyed = Destroyed.ToHashSet(), Log = Log.ToList(),
+        Industry = (double[])Industry.Clone(), Shortage = Shortage.Select(x => new Dictionary<string, double>(x)).ToList(), LastBuilt = (double[])LastBuilt.Clone(),
     };
 
-    public static WarState Start(Galaxy g) => new() { Down = g.UnbuiltSites.ToHashSet(), Progress = new double[g.Factions.Length] };
+    public static WarState Start(Galaxy g) => new()
+    {
+        Down = g.UnbuiltSites.ToHashSet(), Progress = new double[g.Factions.Length], Industry = new double[g.Factions.Length],
+        Shortage = g.Factions.Select(_ => new Dictionary<string, double>()).ToList(), LastBuilt = Enumerable.Repeat(double.NegativeInfinity, g.Factions.Length).ToArray(),
+    };
 }
 
 /// <summary>
@@ -158,7 +169,7 @@ public static class War
     public static string Describe(Galaxy g, WarEvent e) => e.Kind switch
     {
         "destroyed" => $"{Missions.Label(g, e.Station)}（{g.Factions[e.Faction].Name}）が破壊された",
-        "built" => $"{g.Factions[e.Faction].Name} が {g.Stars[e.Star].Name} に要塞を建てた",
+        "built" => $"{g.Factions[e.Faction].Name} が {g.Stars[e.Star].Name} に{(g.KindOf(e.Station) == StationKind.Fortress ? "要塞" : Missions.Name(g.KindOf(e.Station)))}を建てた",
         "taken" => $"{g.Stars[e.Star].Name} 星系が {g.Factions[e.Faction].Name} 領になった",
         _ => e.Kind,
     };

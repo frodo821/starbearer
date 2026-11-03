@@ -140,6 +140,7 @@ public sealed class Market
         foreach (var (a, b, closeness) in g.Neighbours)
             if (g.Alive(a) && g.Alive(b)) Even(g.Economies[a], Stock[a], g.Economies[b], Stock[b], closeness);
         Sim.War.Step(g, this);
+        Industry.Step(g, this);
     }
 
     /// <summary>

@@ -23,7 +23,7 @@ public partial class SimTests
             // held by it alone. Each front has a battlefield on each side from the start.
             var forts = g.StationStars.Keys.Where(st => g.KindOf(st) == StationKind.Fortress).ToHashSet();
             Assert.All(g.StationStars.Keys.Except(forts), st => Assert.Equal(g.RegionOwners[g.StarAt(st).Region], g.OwnerOf(st)));
-            Assert.All(g.StationStars.Values.Distinct().Where(star => !g.AllStationsIn(star).Any(forts.Contains)),
+            Assert.All(g.StationStars.Values.Distinct().Where(star => g.HasStation(star) && !g.AllStationsIn(star).Any(forts.Contains)),
                 star => Assert.Equal((g.RegionOwners[g.Stars[star].Region], false), g.Claim(star)));
             Assert.All(War.Fronts(g), star => Assert.Equal(g.RegionOwners[g.Stars[star].Region], g.Claim(star).Holder));   // the defender came first
             Assert.NotEmpty(War.Fronts(g));
