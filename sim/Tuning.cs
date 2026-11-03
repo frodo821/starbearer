@@ -15,7 +15,7 @@ public static class Tuning
     // Ship
     public const double ExhaustVelocity = 1.6;
     public const double MaxThrust = 1.0;      // ly/day^2, used during manual flyby burns
-    public const double LifeSupportDays = 600;
+    public const double LifeSupportDays = 1800;   // at the true scale of a system, a crossing of it takes months
     public const double PressureMassPerVolume = 0.02;   // dry mass a pressurized bay adds per unit of room
     public const double CubicMetersPerVolume = 20;   // for display: one unit is about a 20ft container
     public const double StartingCredits = 200;
@@ -29,11 +29,11 @@ public static class Tuning
     public const double DepartureFuelFloor = 0.8;  // below this a ship can't reach another station
 
     // Normal space
-    public const double SublightThrust = 0.2;      // AU/day^2
-    public const double SublightFuelFactor = 0.5;  // sublight delta-v is cheaper than FTL delta-v
-    public const double DockRange = 0.001;         // AU, about 150,000 km
-    public const double DockRelativeSpeed = 0.002; // AU/day, about 3.5 km/s
-    public const double HostClearance = 0.03;      // AU a station's orbit keeps clear of its host's body
+    public const double SublightThrust = 0.01;     // AU/day^2, about 0.2 m/s², a fiftieth of a g
+    public const double SublightFuelFactor = 15;   // FTL delta-v per sublight AU/day: a full tank is about 0.08 AU/day, some 130 km/s
+    public const double DockRange = 2e-5;          // AU, about 3,000 km
+    public const double DockRelativeSpeed = 2e-4; // AU/day, about 0.35 km/s
+    public const double HostClearance = 3;         // a station's orbit keeps this many radii of its host's body
     public const double RendezvousFuelReserve = 0.5;  // covers about 90% of rendezvous, flown well
 
     // Flyby hazards

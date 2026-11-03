@@ -132,15 +132,17 @@ public partial class Sky : MultiMeshInstance3D
             _dir[k] = to / dist;
             // True size: the glow's bright core (a third of the quad) covers the star's real disc, which
             // Worlds draws as a sphere when the star is close. Far off, the floor keeps it a point of light.
-            var disc = 2 * Radius * Math.Tan(Math.Min(Math.Atan(s.Radius / Math.Max(dist, s.Radius * 1.02)), 1.4));
+            var radius = Sublight.StarRadius(s) / Sublight.AuPerLy;   // the star's body, to scale, in ly
+            var disc = 2 * Radius * Math.Tan(Math.Min(Math.Atan(radius / Math.Max(dist, radius * 1.02)), 1.4));
             _size[k] = Math.Clamp(disc * 3 + 1.6, 0.5, Radius * 3);
             _bright[k] = Math.Clamp(0.5 + 30 * s.Mass / (dist * dist), 0.5, 3);
         }
         var lensStar = g.Stars[lens];
-        var lensAu = lensDist / Sublight.Scale;
-        var einstein = Optics.EinsteinAngle(lensStar.Mu, lensAu);
+        var lensAu = lensDist * Sublight.AuPerLy;
+        var einstein = Optics.EinsteinAngle(Sublight.Mu(lensStar), lensAu);
         var lensDir = _dir[Background + lens];
-        var lensDisc = Math.Atan(lensStar.Radius / Math.Max(lensDist, lensStar.Radius * 1.02));
+        var lensRadius = Sublight.StarRadius(lensStar) / Sublight.AuPerLy;
+        var lensDisc = Math.Atan(lensRadius / Math.Max(lensDist, lensRadius * 1.02));
         var lensing = einstein > 2e-4;   // under about a hundredth of a degree it can't be seen
 
         void Write(int slot, Vec3d dir, double kelvin, double bright, double size, double sharp)

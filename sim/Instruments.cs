@@ -33,6 +33,16 @@ public static class Instruments
         return (x / side * r, y / side * r);
     }
 
+    /// <summary>Kilometres in an AU, and km/s in an AU/day.</summary>
+    public const double KmPerAu = 149597870.7, KmPerSecondPerAuPerDay = KmPerAu / 86400;
+
+    /// <summary>A distance in a system: AU from a tenth of one up, km below, where AU would read as nothing.</summary>
+    public static string Distance(double au) =>
+        Math.Abs(au) >= 0.1 ? $"{au:F3} AU" : Math.Abs(au) * KmPerAu >= 1e5 ? $"{au * KmPerAu / 1e3:N0}千 km" : $"{au * KmPerAu:N0} km";
+
+    /// <summary>A speed in a system, in km/s.</summary>
+    public static string Speed(double auPerDay) => $"{auPerDay * KmPerSecondPerAuPerDay:F2} km/s";
+
     /// <summary>A year of the clock, in days.</summary>
     public const double DaysPerYear = 365;
     /// <summary>The galaxy's day 0, on the calendar.</summary>

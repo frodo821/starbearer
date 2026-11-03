@@ -101,7 +101,18 @@ public static class Bodies
         return best;
     }
 
-    /// <summary>A star's planets and moons, from the seed, so they never need saving.</summary>
+    /// <summary>Earth's share of the Sun's mass, and the radii (AU) of Earth and of Jupiter.</summary>
+    const double EarthShare = 3.003e-6, EarthRadius = 4.2635e-5, JupiterShare = 9.546e-4, JupiterRadius = 4.7789e-4;
+
+    /// <summary>A body's radius from its mass: rock grows slowly with mass; a giant is about Jupiter's size whatever it weighs.</summary>
+    static double RadiusFor(double share, bool giant) =>
+        giant ? JupiterRadius * Math.Pow(share / JupiterShare, 0.05) : EarthRadius * Math.Pow(share / EarthShare, 0.28);
+
+    /// <summary>
+    /// A star's planets and moons, from the seed, so they never need saving. To scale: rocky worlds of a
+    /// Mars to a few Earths, giants of a Saturn to a couple of Jupiters, more often further out; each
+    /// planet's orbit half again to twice the last one's, from a tenth of the way to the edge; moons a ten-thousandth to a hundredth of their planet.
+    /// </summary>
     public static Center Build(ulong seed, Star s)
     {
         var r = new Rng(seed * 2147483647 + (ulong)s.Id);
@@ -109,12 +120,14 @@ public static class Bodies
         var system = new Center { Star = s.Id, Name = s.Name, Kind = BodyKind.Star, Mu = root.Mu, BodyRadius = root.BodyRadius, Edge = root.Edge };
         var index = 1;
         var planets = 2 + r.Index(3);
-        var inner = system.Edge * 0.18;
+        var a = system.Edge * r.Range(0.15, 0.25);   // out to where a descent from the well comes down
+        var inner = 0.0;
         for (int i = 0; i < planets; i++)
         {
-            var giant = r.Unit() < 0.45;
-            var mu = system.Mu * r.Range(giant ? 0.02 : 0.004, giant ? 0.05 : 0.012);
-            var a = Slot(inner + system.Edge * r.Range(0.02, 0.1), mu, system.Mu);
+            var giant = r.Unit() < (a > system.Edge * 0.2 ? 0.6 : 0.15);
+            var share = giant ? r.Range(3e-4, 2e-3) : EarthShare * Math.Pow(10, r.Range(-1, 0.7));
+            var mu = system.Mu * share;
+            a = Math.Max(a, Slot(inner, mu, system.Mu) * 1.05);
             var edge = Sphere(a, mu, system.Mu);
             if (a + edge > system.Edge * 0.92) break;
             inner = a + edge;
@@ -122,14 +135,15 @@ public static class Bodies
             var planet = new Center
             {
                 Star = s.Id, Index = index++, Name = $"{s.Name} {"bcdefg"[i]}", Kind = giant ? BodyKind.Giant : BodyKind.Rocky, Parent = system,
-                Mu = mu, BodyRadius = edge * 0.05, Edge = edge,
+                Mu = mu, BodyRadius = RadiusFor(share * s.Mass, giant), Edge = edge,
                 OrbitRadius = a, Phase = r.Range(0, 2 * Math.PI), Omega = Math.Sqrt(system.Mu / (a * a * a)), U = u, W = w,
             };
             system.Children.Add(planet);
             var moonInner = edge * FreeInnerShare;
             for (int m = 0, moons = giant ? 1 + r.Index(2) : r.Index(2); m < moons; m++)
             {
-                var mmu = mu * 0.01;
+                var mshare = Math.Pow(10, r.Range(-4, -2));
+                var mmu = mu * mshare;
                 var ma = Slot(moonInner + edge * r.Range(0.01, 0.05), mmu, mu);
                 var me = Sphere(ma, mmu, mu);
                 if (ma + me > edge * 0.9) break;
@@ -138,10 +152,11 @@ public static class Bodies
                 planet.Children.Add(new Center
                 {
                     Star = s.Id, Index = index++, Name = $"{planet.Name}{"ⅠⅡⅢ"[m]}", Kind = BodyKind.Moon, Parent = planet,
-                    Mu = mmu, BodyRadius = me * 0.07, Edge = me,
+                    Mu = mmu, BodyRadius = RadiusFor(share * mshare * s.Mass, false), Edge = me,
                     OrbitRadius = ma, Phase = r.Range(0, 2 * Math.PI), Omega = Math.Sqrt(mu / (ma * ma * ma)), U = mu0, W = mw,
                 });
             }
+            a *= r.Range(1.5, 2.1);
         }
         return system;
     }

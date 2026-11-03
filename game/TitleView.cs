@@ -70,7 +70,7 @@ public partial class TitleView : Node3D
             case Hanging h:
                 var t = h.T0 + _age * OrbitDaysPerSecond;
                 var ship = h.Body.StarPosition(t) + h.Offset;
-                _sky!.UpdateSky(_truth, _truth[h.Star] + ship * Sublight.Scale, null, delta);
+                _sky!.UpdateSky(_truth, _truth[h.Star] + ship / Sublight.AuPerLy, null, delta);
                 _worlds.Show(g, h.Star, ship, t);
                 // From the world toward the star, leaning further as the scene goes.
                 var toBody = -h.Offset.Normalized();

@@ -147,7 +147,7 @@ public partial class Main
         }
         else if (v.CanDock && !DockAdmitted) Message = $"{Factions.OwnerName(G!, v.LocalStation!.Id)} は入港を拒否した（敵対）";
         else if (v.RequestDock()) Dock();
-        else Message = $"港まで {Tuning.DockRange:F3} AU、相対 {Tuning.DockRelativeSpeed:F3} 以内で入港できる（X 接近、Z 相対0 で寄せる）";
+        else Message = $"港まで {Instruments.Distance(Tuning.DockRange)}、相対 {Instruments.Speed(Tuning.DockRelativeSpeed)} 以内で入港できる（X 接近、Z 相対0 で寄せる）";
     }
 
     /// <summary>Whether the station in reach lets the ship dock: its owner must not be hostile.</summary>

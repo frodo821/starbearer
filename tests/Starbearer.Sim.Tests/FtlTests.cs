@@ -166,113 +166,21 @@ public partial class SimTests
     }
 
     [Fact]
-    public void AShipCoastingBetweenStarsChangesPrimary()
+    public void NormalSpaceDoesNotReachTheNextStar()
     {
+        // Out of the system edge at all the speed a full tank gives, straight at the nearest star.
         var g = Galaxy.Generate(5);
-        var (from, to) = (g.StarAt(g.Ports[0]), g.StarAt(g.Ports[1]));
-        var v = new Voyage(g, g.Ports[0], to.Id, Box, Unseen(g), 1);
-        v.Undock();
-        var way = (to.Position - from.Position).Normalized();
-        var start = from.Position + way * (from.Soi * 1.01);
-        v.PlaceSublightForTest((start - from.Position) / Sublight.Scale, way * 0.5);
-        var soon = Sublight.NextPrimary(g, from.Id, start, way * 0.5, v.AbsoluteTime);
-        Assert.NotNull(soon);
-        Assert.True(v.Adrift);
-        Assert.False(soon!.Value.Star == from.Id);
-        v.AdvanceSublight(soon.Value.Time - v.AbsoluteTime + 0.1, Vec3d.Zero);
-        Assert.Equal(soon.Value.Star, v.SystemStar);
-        Assert.False(v.Adrift);
-    }
-
-    /// <summary>A ship just outside one star, coasting at a point beside the next so it swings past.</summary>
-    static (Voyage V, OrbitForecast F, Star To) Flyby(double speed)
-    {
-        var g = Galaxy.Generate(5);
-        // The nearest star, so nothing else lies on the way.
         var from = g.StarAt(g.Ports[0]);
         var to = g.Stars.Where(s => s != from).MinBy(s => (s.Position - from.Position).Length)!;
-        var v = new Voyage(g, g.Ports[0], to.Id, Box, Unseen(g), 1);
-        v.Undock();
         var way = (to.Position - from.Position).Normalized();
-        var start = from.Position + way * (from.Soi * 1.01);
-        var aim = to.Position + way.AnyPerpendicular() * (to.Soi * 0.4);
-        var velocity = (aim - start).Normalized() * speed;
-        v.PlaceSublightForTest((start - from.Position) / Sublight.Scale, velocity);
-        var f = Sublight.Predict(from, null, v.SubPosition, velocity, v.AbsoluteTime, Array.Empty<Maneuver>(), 10);
-        Sublight.FollowOn(g, from.Id, f);
-        return (v, f, to);
-    }
-
-    [Fact]
-    public void AForecastCarriesOnAroundTheStarItMeets()
-    {
-        var (v, f, to) = Flyby(0.5);
-        Assert.Equal(to.Id, f.Next!.Value.Star);
-        var pass = f.Beyond!;
-        Assert.Equal(f.Next.Value.Time, pass.Track[0].Time, 9);
-        Assert.Equal(Sublight.SystemRadius(to), pass.Track[0].Position.Length, 6);
-        Assert.False(pass.Impact);
-        Assert.Equal(Sublight.SystemRadius(to), pass.Exit!.Value.Position.Length, 6);
-        Assert.True(pass.DrawnCount > 10);
-        var bend = f.Exit!.Value.Velocity.Normalized().Dot(pass.Exit.Value.Velocity.Normalized());
-        Assert.True(bend < 0.9999, "the pass should bend the path");
-
-        var mid = pass.Track[pass.DrawnCount / 2];
-        v.AdvanceSublight(mid.Time - v.AbsoluteTime, Vec3d.Zero);
-        Assert.Equal(to.Id, v.SystemStar);
-        Assert.True((v.SubPosition - mid.Position).Length < 0.02, $"flown {v.SubPosition} predicted {mid.Position}");
-    }
-
-    [Fact]
-    public void AForecastStopsFollowingAfterTheLastLeg()
-    {
-        var g = Galaxy.Generate(5);
-        var (_, f, _) = Flyby(0.5);
-        Assert.NotNull(f.Beyond);
-        var once = new OrbitForecast { Exit = f.Exit };
-        Sublight.FollowOn(g, g.StarOf(g.Ports[0]), once, legs: 1);
-        Assert.Null(once.Beyond?.Beyond);
-        var none = new OrbitForecast { Exit = f.Exit };
-        Sublight.FollowOn(g, g.StarOf(g.Ports[0]), none, legs: 0);
-        Assert.NotNull(none.Next);
-        Assert.Null(none.Beyond);
-    }
-
-    [Fact]
-    public void ABurnPlannedOnTheStarAheadIsFlownThere()
-    {
-        var (v, plain, to) = Flyby(0.5);
-        var pass = plain.Beyond!;
-        var node = new Maneuver { Time = pass.Track[pass.DrawnCount / 2].Time, Prograde = -0.1 };
-        v.Nodes.Add(node);
-        var f = Sublight.Predict(v.Primary, null, v.SubPosition, v.SubVelocity, v.AbsoluteTime, v.Nodes, 10);
-        Sublight.FollowOn(v.G, v.SystemStar, f, v.Nodes);
-        Assert.Empty(f.Stages);
-        Assert.Equal(to.Id, f.LegOf(node)!.Star);
-        Assert.Same(f.Beyond, f.LegOf(node));
-        Assert.True(f.Beyond!.Exit!.Value.Time > pass.Exit!.Value.Time, "slowing down should stay longer");
-
-        var check = f.Beyond.Track[^3];
-        v.IdealNodesForTest = true;
-        v.AdvanceSublight(check.Time - v.AbsoluteTime, Vec3d.Zero);
-        Assert.Empty(v.Nodes);
-        Assert.Equal(to.Id, v.SystemStar);
-        Assert.True((v.SubPosition - check.Position).Length < 0.02, $"flown {v.SubPosition} predicted {check.Position}");
-    }
-
-    [Fact]
-    public void ABurnInOpenSpaceChangesWhichStarIsMet()
-    {
-        var (v, plain, to) = Flyby(0.5);
-        var when = (plain.Exit!.Value.Time + plain.Next!.Value.Time) / 2;
-        // Straight back along the way it came: nothing ahead is the same star any more.
-        var node = new Maneuver { Time = when, Prograde = -1.0 };
-        v.Nodes.Add(node);
-        var f = Sublight.Predict(v.Primary, null, v.SubPosition, v.SubVelocity, v.AbsoluteTime, v.Nodes, 10);
-        Sublight.FollowOn(v.G, v.SystemStar, f, v.Nodes);
-        Assert.Same(f.Drift, f.LegOf(node));
-        Assert.Equal(when, f.Drift!.Stages[0].Node.Time, 9);
-        Assert.NotEqual(to.Id, f.Next?.Star);
+        var start = from.Position + way * (Sublight.SystemRadius(from) * 1.01 / Sublight.AuPerLy);
+        var speed = Tuning.ExhaustVelocity * Math.Log(2) / Tuning.SublightFuelFactor * 10;   // ten times what any ship carries
+        var n = Sublight.NextPrimary(g, from.Id, start, way * speed, 0);
+        Assert.Equal(to.Id, n!.Value.Star);
+        Assert.True(n.Value.Time > 365 * 1000, $"{n.Value.Time / 365:F0} years");   // between the stars there is only hyperspace
+        // What is left of the way, at the speed it is flown.
+        var gap = (to.Position - start).Length - Sublight.SystemRadius(to) / Sublight.AuPerLy;
+        Assert.Equal(gap * Sublight.AuPerLy / speed, n.Value.Time, 3);
     }
 
     [Fact]
@@ -280,7 +188,7 @@ public partial class SimTests
     {
         var g = Galaxy.Generate(5);
         var inside = g.StarAt(g.Ports[1]);
-        var at = inside.Position + new Vec3d(inside.Soi * 0.5, 0, 0);
+        var at = inside.Position + new Vec3d(Sublight.SystemRadius(inside) * 0.5 / Sublight.AuPerLy, 0, 0);
         var n = Sublight.NextPrimary(g, g.StarOf(g.Ports[0]), at, new Vec3d(1, 0, 0), 7);
         Assert.Equal(inside.Id, n!.Value.Star);
         Assert.Equal(7, n.Value.Time, 9);

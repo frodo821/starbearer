@@ -133,7 +133,9 @@ public partial class Hud
     public void OrbitMenu(Vector2 at)
     {
         var v = Game.V!;
-        if (StationUnder(at) is { } st)
+        // As with a tap, a station close by its body yields to the body when the body is nearer.
+        var near = OrbiterAt(at) as Center;
+        if (StationUnder(at) is { } st && (near == null || StationPoint(st).DistanceTo(at) <= BodyPoint(near).DistanceTo(at)))
             OpenMenu(at, Missions.KindLabel(Game.G!.KindOf(st.Id)) + (Factions.OwnerName(Game.G, st.Id) is { Length: > 0 } owner ? $"（{owner}）" : "")
                 + (v.Hold.Any(c => c.IsJob && c.Mission.Target == st.Id) ? "  届け先" : v.SystemStar == v.TargetStar ? "  目的地" : ""), OrbiterMenu(st));
         else if (OrbiterAt(at) is Center body)

@@ -153,7 +153,7 @@ public static class Missions
         {
             if (left < 1) continue;
             var priceHere = market.Price(g, station, ware)!.Value;
-            foreach (var to in places)
+            foreach (var to in stations)   // never to a gate or a fortress: those are kept by their owners, not by hire
                 if (g.Economies[to].Uses(ware) && market.Fill(g, to, ware) is { } fill and < ShortFill)
                 {
                     var e = g.Economies[to];

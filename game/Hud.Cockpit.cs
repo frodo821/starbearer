@@ -254,7 +254,7 @@ public partial class Hud
         var v = Game.V!;
         var lines = new List<(string, Color)>
         {
-            ($"ノード残 Δv {burn.DeltaV:F4}   スロットル {Game.Helm.Throttle * 100:F0}%" + (Game.NodeOvershot ? "  過ぎた" : ""), Game.NodeOvershot ? Warn : Ink),
+            ($"ノード残 Δv {Instruments.Speed(burn.DeltaV)}   スロットル {Game.Helm.Throttle * 100:F0}%" + (Game.NodeOvershot ? "  過ぎた" : ""), Game.NodeOvershot ? Warn : Ink),
         };
         if (Game.EngineAcceleration <= 0) lines.Add(("スロットル0%: 噴射できない (W で上げる)", Warn));
         if (Game.NoseOffNode is { } off)

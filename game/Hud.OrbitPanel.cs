@@ -21,10 +21,10 @@ public partial class Hud
         var el = Sublight.OrbitOf(v.Primary.Mu, v.SubPosition, v.SubVelocity);
         var (pe, ap) = Sublight.NextApsides(v.Primary.Mu, v.SubPosition, v.SubVelocity, v.AbsoluteTime);
         string When(Apsis? a) => a is { } x ? "  " + Instruments.Countdown(x.Time - v.AbsoluteTime) : "";
-        Line($"Pe {el.Periapsis:F3} AU" + When(pe), Ink);
-        Line(el.Bound ? $"Ap {el.Apoapsis:F3} AU" + When(ap) : "Ap なし  脱出軌道", el.Bound ? Ink : Warn);
+        Line($"Pe {Instruments.Distance(el.Periapsis)}" + When(pe), Ink);
+        Line(el.Bound ? $"Ap {Instruments.Distance(el.Apoapsis)}" + When(ap) : "Ap なし  脱出軌道", el.Bound ? Ink : Warn);
         Line($"主天体 {v.Primary.Name}" + (el.Bound ? $"   周期 {Instruments.Span(el.Period)}" : ""), Dim);
-        Line($"速度 {v.SubVelocity.Length:F3}   位置誤差 ±{v.NavSigma:F3} ly", v.NavSigma > 0.1 ? Warn : Dim);
+        Line($"速度 {Instruments.Speed(v.SubVelocity.Length)}   位置誤差 ±{v.NavSigma:F3} ly", v.NavSigma > 0.1 ? Warn : Dim);
         if (Game.SubForecast?.Impact == true) Line("天体に衝突する軌道", Bad);
 
         // The target: what it is, how the ship is coming to it, and the plans that bring it there.
@@ -41,7 +41,7 @@ public partial class Hud
             var rel = (goalSpeed - v.SubVelocity).Length;
             var refused = goal is Station && v.CanDock && !Game.DockAdmitted;
             var dockable = goal is Station && v.CanDock && !refused;
-            Line($"距離 {d:F4} AU   相対 {rel:F4}" + (dockable ? "   入港可 U" : refused ? "   入港拒否" : ""), dockable ? Good : refused ? Warn : goal is Station && d < Tuning.DockRange * 10 ? Warn : Ink);
+            Line($"距離 {Instruments.Distance(d)}   相対 {Instruments.Speed(rel)}" + (dockable ? "   入港可 U" : refused ? "   入港拒否" : ""), dockable ? Good : refused ? Warn : goal is Station && d < Tuning.DockRange * 10 ? Warn : Ink);
         }
         if (watched != null)
         {
@@ -52,14 +52,14 @@ public partial class Hud
             var planned = last is { Node: not null } ls ? Sublight.RelativeInclination(watched, ls.Position, ls.Velocity + Sublight.Impulse(ls.Position, ls.Velocity, ls.Node)) : incl;
             Line($"相対傾斜 {incl:F1}°" + (last is { Node: not null } ? $" → {planned:F1}°" : ""), planned < 1.5 ? Good : Warn);
             if (Game.SubForecast?.Closest is { } a)
-                Line($"最接近 {a.Distance:F3} AU  {Instruments.Countdown(a.Time - v.AbsoluteTime)}  相対 {a.RelativeSpeed:F2}", a.Distance < 0.05 ? Good : Warn);
+                Line($"最接近 {Instruments.Distance(a.Distance)}  {Instruments.Countdown(a.Time - v.AbsoluteTime)}  相対 {Instruments.Speed(a.RelativeSpeed)}", a.Distance < Tuning.DockRange * 50 ? Good : Warn);
             if (Game.SubForecast?.Crossing is { } x2)
                 Line($"交差時の{name} {Math.Abs(x2.LeadDegrees):F0}° {(x2.LeadDegrees >= 0 ? "先" : "後ろ")}  {Instruments.Countdown(x2.Time - v.AbsoluteTime)}", Math.Abs(x2.LeadDegrees) < 8 ? Good : Warn);
             else Line($"{name}の軌道半径に届いていない", Warn);
         }
         else if (goal != null && v.Waypoint == null) Line(goal is Center c && c.Key == v.Primary.Key ? "目標を周回中" : "目標はこの天体の外", Dim);
         if (st != null && goal is Station)
-            Line($"入港の条件  {Tuning.DockRange:F3} AU 以内 / 相対 {Tuning.DockRelativeSpeed:F3} 以下", Dim, 13);
+            Line($"入港の条件  {Instruments.Distance(Tuning.DockRange)} 以内 / 相対 {Instruments.Speed(Tuning.DockRelativeSpeed)} 以下", Dim, 13);
         yy += 2;
         ButtonRow(x, yy, Game.TargetCommands());
         yy += ButtonHeight + 4;
@@ -72,28 +72,28 @@ public partial class Hud
         else
         {
             var total = live.Sum(s => s.Node.DeltaV);
-            Line($"{live.Count} 段  Δv {total:F3} / 残 {v.SublightDeltaV:F2}", total > v.SublightDeltaV ? Bad : Ink);
+            Line($"{live.Count} 段  Δv {Instruments.Speed(total)} / 残 {Instruments.Speed(v.SublightDeltaV)}", total > v.SublightDeltaV ? Bad : Ink);
             for (int i = 0; i < Math.Min(live.Count, 5); i++)
             {
                 var s = live[i];
                 var left = s.Node.Time - v.AbsoluteTime;
                 var when = left > 0 ? Instruments.Countdown(left) : "点火!";
-                var orbit = s.After.Bound ? $"{s.After.Periapsis:F2}-{s.After.Apoapsis:F2}" : "脱出";
+                var orbit = s.After.Bound ? $"{Instruments.Distance(s.After.Periapsis)}-{Instruments.Distance(s.After.Apoapsis)}" : "脱出";
                 var row = new Rect2(x - 4, yy, width + 8, 20);
                 var node = s.Node;
                 _clicks.Add((row, () => Game.OpenNode(node)));
                 if (node == Game.Selected) DrawRect(row, new Color(Warn, 0.12f));
-                Line($"{i + 1}. {when}  Δv {node.DeltaV:F3}  → {orbit}", node == Game.Selected ? Warn : left <= 0.3 ? Warn : Ink);
+                Line($"{i + 1}. {when}  Δv {Instruments.Speed(node.DeltaV)}  → {orbit}", node == Game.Selected ? Warn : left <= 0.3 ? Warn : Ink);
             }
         }
         if (Game.SubCurrent is { } now && (live.Count > 0 || Game.Helm.EngineOn))
         {
             var e3 = now.After;
-            var stop = e3.Bound ? $"近 {e3.Periapsis:F2} 遠 {e3.Apoapsis:F2}" : "脱出軌道";
-            Line($"今止めると {stop}" + (now.Closest is { } ca ? $"  {Game.NameOf(now.Watched)}まで {ca.Distance:F3}" : ""), Color.Color8(255, 255, 255), 14);
+            var stop = e3.Bound ? $"近 {Instruments.Distance(e3.Periapsis)} 遠 {Instruments.Distance(e3.Apoapsis)}" : "脱出軌道";
+            Line($"今止めると {stop}" + (now.Closest is { } ca ? $"  {Game.NameOf(now.Watched)}まで {Instruments.Distance(ca.Distance)}" : ""), Color.Color8(255, 255, 255), 14);
         }
         if (Game.PlanDeviation() is { } dev)
-            Line($"計画固定中  ずれ {dev:F3} AU   「再計画」で作り直す", dev > 0.05 ? Warn : Good, 14);
+            Line($"計画固定中  ずれ {Instruments.Distance(dev)}   「再計画」で作り直す", dev > Tuning.DockRange * 50 ? Warn : Good, 14);
         yy += 2;
         ButtonRow(x, yy, Game.PlanCommands());
         yy += ButtonHeight;

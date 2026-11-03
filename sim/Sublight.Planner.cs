@@ -9,7 +9,7 @@ public static partial class Sublight
         var mu = star.Mu;
         var n = target.PlaneNormal;
         var el = OrbitOf(mu, p, v);
-        var span = el.Bound ? el.Period : 30;
+        var span = el.Bound ? el.Period : 2 * Math.PI / target.Omega;
         var dt = span / 400;
         var (pos, vel, t) = (p, v, t0);
         var lead = Math.Min(0.1, span / 100);
@@ -42,9 +42,11 @@ public static partial class Sublight
         {
             var want = Math.Max(target.OrbitRadius, c.BodyRadius * 2.5);
             var (_, radial, _) = Frame(p, v);
-            var trim = Enumerable.Range(-60, 121).Select(i => i * 0.01)
-                .OrderBy(dv => Math.Abs(OrbitOf(c.Mu, p, v + radial * dv).Periapsis - want) + Math.Abs(dv) * 0.02).First();
-            if (Math.Abs(trim) > 1e-3)
+            // Trims in steps of the ship's own speed, so the search fits a moon as well as a star.
+            var unit = v.Length * 0.02;
+            var trim = Enumerable.Range(-60, 121).Select(i => i * unit)
+                .OrderBy(dv => Math.Abs(OrbitOf(c.Mu, p, v + radial * dv).Periapsis - want) / want + Math.Abs(dv) / v.Length * 0.1).First();
+            if (Math.Abs(trim) > unit * 0.1)
             {
                 plan.Add(Decompose(t, p, v, radial * trim));
                 v += radial * trim;
@@ -69,10 +71,12 @@ public static partial class Sublight
         var needed = Math.Sqrt(2 * c.Mu / p.Length) * 1.1 - v.Length;
         var (_, radial, _) = Frame(p, v);
         // A ship falling at the body has to miss it first.
+        var unit = v.Length * 0.02;
         var clear = p.Dot(v) < 0 && OrbitOf(c.Mu, p, v).Periapsis < c.BodyRadius * 1.5
-            ? Enumerable.Range(-60, 121).Select(i => i * 0.01).Where(dv => OrbitOf(c.Mu, p, v + radial * dv).Periapsis > c.BodyRadius * 2).OrderBy(Math.Abs).FirstOrDefault()
+            ? Enumerable.Range(-60, 121).Select(i => i * unit).Where(dv => OrbitOf(c.Mu, p, v + radial * dv).Periapsis > c.BodyRadius * 2).OrderBy(Math.Abs).FirstOrDefault()
             : 0;
-        return new Maneuver { Time = t0 + 0.02, Prograde = Math.Max(needed, 0), Radial = clear };
+        var soon = Math.Min(0.02, 0.01 * Math.Sqrt(p.LengthSq * p.Length / c.Mu));   // a moment, beside the orbit
+        return new Maneuver { Time = t0 + soon, Prograde = Math.Max(needed, 0), Radial = clear };
     }
 
     /// <summary>A step of delta-v that means the same around a star as around a moon.</summary>
@@ -82,14 +86,43 @@ public static partial class Sublight
     static double Horizon(Elements el, IOrbiter target) =>
         Math.Max(2 * Math.PI / target.Omega, el.Bound ? el.Period * 1.5 : 2 * Math.PI / target.Omega);
 
-    /// <summary>How badly a path misses, or null if it can't be flown. Reaching a body's sphere is a hit.</summary>
+    /// <summary>
+    /// How badly a path misses, in units of the target's orbital speed (as the delta-v it is weighed
+    /// against), or null if it can't be flown. Reaching a body's sphere is a hit. The distance counts
+    /// as a share of the target's orbit, so a miss means the same around a star as around a moon.
+    /// </summary>
     static double? Miss(OrbitForecast f, IOrbiter target)
     {
         if (f.Impact) return null;
-        if (f.Enter is { } e && e.Body == target) return 0;
+        var speed = target.OrbitRadius * target.Omega;
+        // Into the body's sphere: the faster it comes in, the more it costs to stay. The pass is best a
+        // fifth of the way in, clear of the body: near the edge a small error misses the sphere, near the
+        // body it falls in or comes by too fast to hold.
+        if (f.Enter is { } e && e.Body == target)
+        {
+            var body = e.Body;
+            var low = OrbitOf(body.Mu, e.Position, e.Velocity).Periapsis;
+            if (low < body.BodyRadius * 1.5) return null;
+            var want = Math.Max(body.Edge * 0.2, body.BodyRadius * 3);
+            return e.Velocity.Length / speed + 2 * Math.Abs(low - want) / body.Edge;
+        }
         // Another body in the way cuts the path short: a bad pass, but one a better burn can clear.
-        return f.Closest is { } c ? c.Distance * 6 + c.RelativeSpeed + (f.Enter != null || f.Exit != null ? 1 : 0) : null;
+        return f.Closest is { } c ? c.Distance / target.OrbitRadius * 9 + c.RelativeSpeed / speed + (f.Enter != null || f.Exit != null ? 5 : 0) : null;
     }
+
+    /// <summary>
+    /// A plan's price in the same units as Miss: its delta-v, and the days until it gets there, a whole
+    /// orbit of the target's costing as much as its orbital speed. Life support runs while waiting for
+    /// a cheap window, so a little more delta-v that saves months is worth it.
+    /// </summary>
+    static double Cost(Maneuver m, OrbitForecast f, IOrbiter target, double t0)
+    {
+        var arrive = f.Enter is { } e && e.Body == target ? e.Time : f.Closest?.Time ?? m.Time;
+        return m.DeltaV / (target.OrbitRadius * target.Omega) + (arrive - t0) / DaysPerSpeed;
+    }
+
+    /// <summary>The days that cost as much as the target's orbital speed of delta-v.</summary>
+    public const double DaysPerSpeed = 300;
 
     /// <summary>A rough transfer to refine by hand: scans departure time and prograde, after any burns already planned.</summary>
     public static Maneuver SuggestTransfer(Center star, IOrbiter target, Vec3d p, Vec3d v, double t0, IReadOnlyList<Maneuver>? planned = null)
@@ -109,7 +142,7 @@ public static partial class Sublight
                 var f = Predict(star, target, p, v, t0, baseNodes.Append(m), horizon, 120, coarse: true);
                 var miss = Miss(f, target);
                 if (miss == null) continue;
-                var score = miss.Value + m.DeltaV;
+                var score = miss.Value + Cost(m, f, target, t0);
                 if (score < bestScore) { bestScore = score; best = m; }
             }
         return best;
@@ -146,14 +179,14 @@ public static partial class Sublight
         double Score(Maneuver m)
         {
             var f = Predict(star, target, p, v, t0, plan.Append(m), horizon, 160, coarse: true);
-            return Miss(f, target) is { } miss ? miss + m.DeltaV : double.MaxValue;
+            return Miss(f, target) is { } miss ? miss + Cost(m, f, target, t0) : double.MaxValue;
         }
         var scale = 2 * Math.PI / target.Omega / 30;
         var earliest = plan.Count > 0 ? plan[0].Time + Math.Min(0.1, scale / 2) : t0 + Math.Min(0.05, scale / 4);
         var bestS = Score(first);
         double stepT = Math.Min(0.5, scale), stepD = DvUnit(target);
-        // Refining a way into a body only shaves delta-v until the pass barely grazes it.
-        for (int round = 0; round < 30 && target is Station; round++)
+        // A way into a body is refined too: Miss weighs how deep the pass goes, so shaving delta-v stops short of grazing.
+        for (int round = 0; round < 30; round++)
         {
             var improved = false;
             foreach (var (dt, dp, dr, dn) in new[] { (stepT, 0.0, 0.0, 0.0), (-stepT, 0.0, 0.0, 0.0), (0.0, stepD, 0.0, 0.0), (0.0, -stepD, 0.0, 0.0), (0.0, 0.0, stepD, 0.0), (0.0, 0.0, -stepD, 0.0), (0.0, 0.0, 0.0, stepD), (0.0, 0.0, 0.0, -stepD) })

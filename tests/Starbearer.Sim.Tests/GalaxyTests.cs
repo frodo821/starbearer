@@ -160,7 +160,7 @@ public partial class SimTests
             Assert.All(system.Children.SelectMany(p => p.Children), m => Assert.True(m.OrbitRadius + m.Edge < m.Parent!.Edge));
             var st = g.StationAt(star);
             Assert.True(system.Holds(st.Host!));
-            Assert.True(st.Radius > Tuning.HostClearance && st.Radius < st.Host!.Edge);
+            Assert.True(st.Radius > st.Host!.BodyRadius * Tuning.HostClearance && st.Radius < st.Host!.Edge);
             Assert.True(st.Radius > st.Host!.BodyRadius);
         }
         Assert.Contains(Enumerable.Range(1, 8).Select(i => Galaxy.Generate((ulong)i)).SelectMany(x => x.Ports.Select(x.StationAt)), s => s.Host!.Kind == BodyKind.Star);

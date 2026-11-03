@@ -348,7 +348,7 @@ public sealed partial class Galaxy
         foreach (var f in g.Factions)
         {
             var enemy = g.Stars.Where(s => g.RegionOwners[s.Region] != f.Id).Select(s => s.Position).ToList();
-            var star = g.Stars.Where(s => g.RegionOwners[s.Region] == f.Id && g.GateIn(s.Id) < 0
+            var star = g.Stars.Where(s => g.RegionOwners[s.Region] == f.Id && g.GateIn(s.Id) < 0 && g.StationsIn(s.Id).Count() < 4   // a hub has at most four
                                           && g.StationsIn(s.Id).All(x => g.KindOf(x) is not (StationKind.Fortress or StationKind.Armory)))
                 .OrderByDescending(s => enemy.Select(e => (e - s.Position).Length).DefaultIfEmpty(0).Min()
                                         + g.System(s.Id).Tree.Count() + (g.HasStation(s.Id) ? 6 : 0) + r.Range(0, 4))

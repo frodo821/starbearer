@@ -95,7 +95,7 @@ public partial class Main
         var aim = screen == Screen.Plan ? baseVel + PlanDir * PlanDv : baseVel;
         Star? well = null;
         if (v.Phase == Phase.Flight && v.NearestWell(out var star) < double.MaxValue) well = star;
-        var (wellAt, wellSpeed) = well != null ? ((v.TruePosition - v.TruePositions[well.Id]) / Sublight.Scale, v.Velocity) : default;
+        var (wellAt, wellSpeed) = well != null ? Sublight.ToSystem(v.TruePosition - v.TruePositions[well.Id], v.Velocity) : default;
         _forecastJob = Task.Run(() =>
         {
             var descent = well == null ? null : Sublight.Predict(g.System(well.Id), Sublight.Waypoint(g.System(well.Id), g.MainStation(well.Id)),

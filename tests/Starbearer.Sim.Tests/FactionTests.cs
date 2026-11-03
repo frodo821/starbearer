@@ -88,7 +88,8 @@ public partial class SimTests
         Assert.True(Missions.Take(s, g, job));
         var owner = g.OwnerOf(job.Target);
         var moved = Missions.Deliver(s, g, s.Hold.Single(c => c.Mission == job));
-        Assert.Equal(job.Pay * Factions.PerCredit * (Factions.Military.Contains(job.Cargo.Ware!) ? Factions.MilitaryWeight : 1), moved, 9);
+        Assert.Equal(job.Pay * Factions.PerCredit * (Factions.Military.Contains(job.Cargo.Ware!) ? Factions.MilitaryWeight : 1)
+            * (g.KindOf(job.Target) == StationKind.Capital ? Factions.CapitalWeight : 1), moved, 9);   // a capital counts more
         Assert.True(s.Standing[owner] > 0);
         Assert.True(s.Standing[1 - owner] < 0);
 

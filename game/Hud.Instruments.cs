@@ -96,7 +96,7 @@ public partial class Hud
         Bar(x, ref y, "熱", Math.Min(v.Heat, 1.5) / 1.5, v.Heat > 1 ? Bad : v.Heat > v.HeatTolerance ? Warn : Ink, $"{v.Heat:F2}");
         Bar(x, ref y, "生命", v.LifeRemaining / Tuning.LifeSupportDays, Ink, v.Docked ? $"{v.LifeRemaining:F0}日 停泊中" : $"{v.LifeRemaining:F0}日");
         y += 8;
-        Text(new Vector2(x, y), v.Phase == Phase.Sublight ? $"亜光速 Δv 残 {v.SublightDeltaV:F2}   推力 {Game.EngineAcceleration:F2} /日" : $"推力 {Game.EngineAcceleration:F2} /日", Ink, 14); y += 20;
+        Text(new Vector2(x, y), v.Phase == Phase.Sublight ? $"亜光速 Δv 残 {Instruments.Speed(v.SublightDeltaV)}   推力 {Game.EngineAcceleration:F2} /日" : $"推力 {Game.EngineAcceleration:F2} /日", Ink, 14); y += 20;
         Text(new Vector2(x, y), $"計算機 {(Game.Owns(Modules.Transfer) ? "搭載" : "なし")}   自動噴射 {(Game.Owns(Modules.AutoBurn) ? (v.AutoBurn ? "ON" : "OFF") : "なし")}", Dim, 13); y += 8;
         _shipHeight = y + PanelPad - 8;
     }
@@ -136,7 +136,7 @@ public partial class Hud
                 if (isT)
                 {
                     var el = Sublight.DescentOrbit(g.Stars[e.Star], e.Periapsis, e.PeriapsisSpeed);
-                    Line(el.Bound ? $"  近日点で降下 → {el.Periapsis:F2}-{el.Apoapsis:F2} AU" : "  近日点で降下 → 脱出軌道", el.Bound ? Good : Warn, 13);
+                    Line(el.Bound ? $"  近日点で降下 → {Instruments.Distance(el.Periapsis)} - {Instruments.Distance(el.Apoapsis)}" : "  近日点で降下 → 脱出軌道", el.Bound ? Good : Warn, 13);
                 }
             }
             var (txt, col) = fc.End switch
@@ -149,7 +149,7 @@ public partial class Hud
             };
             if (txt != "") Line(txt, col);
             if (Game.DescentForecast is { } df && Game.Screen == Screen.Flight)
-                Line(df.After.Bound ? $"今降下すると {df.After.Periapsis:F2}-{df.After.Apoapsis:F2} AU" : "今降下すると 脱出軌道", df.After.Bound ? Good : Warn);
+                Line(df.After.Bound ? $"今降下すると {Instruments.Distance(df.After.Periapsis)} - {Instruments.Distance(df.After.Apoapsis)}" : "今降下すると 脱出軌道", df.After.Bound ? Good : Warn);
         }
         Section(x, ref y, width, "周囲の天体");
         DrawContacts(x, ref y);

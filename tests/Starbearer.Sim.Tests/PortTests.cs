@@ -23,7 +23,8 @@ public partial class SimTests
         var depot = g.Depots[0];
         var st = g.StationAt(depot);
         v.EnterFtl();
-        v.PlaceForTest(g.StarAt(depot).Position + (st.Host!.StarPosition(v.AbsoluteTime) + st.Position(v.AbsoluteTime)) * Sublight.Scale, st.Host.StarVelocity(v.AbsoluteTime) + st.Velocity(v.AbsoluteTime));
+        var (wellAt, wellSpeed) = Sublight.ToWell(st.Host!.StarPosition(v.AbsoluteTime) + st.Position(v.AbsoluteTime), st.Host.StarVelocity(v.AbsoluteTime) + st.Velocity(v.AbsoluteTime));
+        v.PlaceForTest(g.StarAt(depot).Position + wellAt, wellSpeed);
         Assert.True(v.Descend());
         v.AdvanceSublight(0.01, Vec3d.Zero);
         Assert.Equal(Phase.Sublight, v.Phase);   // close, but docking is the pilot's call

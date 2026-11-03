@@ -14,7 +14,7 @@ public static partial class Sublight
         OrbitForecast Fly(Center c, Vec3d p, Vec3d v, double t)
         {
             var el = OrbitOf(c.Mu, p, v);
-            var span = el.Bound ? el.Period : 2 * c.Edge / Math.Max(v.Length, 1e-3);
+            var span = el.Bound ? el.Period : 2 * c.Edge / Math.Max(v.Length, 1e-6);
             return Predict(c, Watch(g, c, goal), p, v, t, rest, span);
         }
         void Carry(Center c, Vec3d p, Vec3d v, double t)
@@ -39,7 +39,7 @@ public static partial class Sublight
         f.Next = next;
         if (legs <= 0 || next is not { } n) return;
         var to = g.Stars[n.Star];
-        var arrive = (n.Point - to.Position) / Scale * (1 - 1e-9);   // on the boundary would count as already out
+        var arrive = (n.Point - to.Position) * AuPerLy * (1 - 1e-9);   // on the boundary would count as already out
         Carry(g.System(n.Star), arrive, velocity, n.Time);
     }
 
@@ -69,7 +69,7 @@ public static partial class Sublight
         }
         while (true)
         {
-            next = NextPrimary(g, star, from.Position + p * Scale, v, t);
+            next = NextPrimary(g, star, from.Position + p / AuPerLy, v, t);
             var end = next?.Time ?? Math.Max(t + OpenRunDays, rest.Count > 0 ? rest[^1].Time + OpenRunDays : 0);
             if (rest.Count == 0 || rest[0].Time >= end) { RunTo(end); break; }
             RunTo(Math.Max(rest[0].Time, t));

@@ -20,7 +20,7 @@ public static class Optics
     /// <summary>The dark cone behind: its half-angle approaches DarkMaxDeg, about two thirds of it at DarkSpeed; its edge fades over DarkEdgeDeg.</summary>
     public const double DarkMaxDeg = 75, DarkSpeed = 0.8, DarkEdgeDeg = 6;
     /// <summary>How much more a star bends light than it really would, so it can be seen.</summary>
-    public const double LensExaggeration = 5000;   // the ring clears the star's glow from about 1 AU out
+    public const double LensExaggeration = 200000;   // for a Sun, a ring of some 5° at 1 AU, clear of its glow
     /// <summary>Light speed in AU/day, for a star's Schwarzschild radius from its μ (AU³/day²).</summary>
     public const double LightAuPerDay = 173.1446;
     /// <summary>Below this temperature a star's light has gone out of sight into the infrared; it fades out from FadeFromK.</summary>

@@ -13,6 +13,27 @@ public partial class Hud
     Vector2 MapPoint(Vec3d p) => Game.Chart.Project(p, Size);
 
     /// <summary>Stars, wells and the FTL path. Shared by the galaxy map and the zoomed-out orbit view.</summary>
+    /// <summary>
+    /// A dashed line cut to the screen first: zoomed into a moon's sphere, a line between stars runs
+    /// hundreds of millions of pixels, and dashing all of it would stall the frame.
+    /// </summary>
+    void DashedOnScreen(Vector2 a, Vector2 b, Color col, float width, float dash, bool aligned = false)
+    {
+        var view = new Rect2(Vector2.Zero, Size).Grow(20);
+        var d = b - a;
+        double t0 = 0, t1 = 1;
+        bool Clip(double p, double q)
+        {
+            if (Math.Abs(p) < 1e-12) return q >= 0;
+            var r = q / p;
+            if (p < 0) { if (r > t1) return false; if (r > t0) t0 = r; }
+            else { if (r < t0) return false; if (r < t1) t1 = r; }
+            return true;
+        }
+        if (!(Clip(-d.X, a.X - view.Position.X) && Clip(d.X, view.End.X - a.X) && Clip(-d.Y, a.Y - view.Position.Y) && Clip(d.Y, view.End.Y - a.Y))) return;
+        DrawDashedLine(a + d * (float)t0, a + d * (float)t1, col, width, dash, aligned);
+    }
+
     void DrawGalaxyLayer(int here = -1)
     {
         var g = Game.G!; var v = Game.V!;
@@ -25,7 +46,7 @@ public partial class Hud
         // Gate links, faint, under the stars.
         foreach (var (gate, exit) in g.GateLinks)
             if (gate < exit && g.Alive(gate) && g.Alive(exit))
-                DrawDashedLine(MapPoint(v.ChartPositions[g.StarOf(gate)]), MapPoint(v.ChartPositions[g.StarOf(exit)]), new Color(0.8f, 0.6f, 1f, 0.45f), 1.5f, 8, true);
+                DashedOnScreen(MapPoint(v.ChartPositions[g.StarOf(gate)]), MapPoint(v.ChartPositions[g.StarOf(exit)]), new Color(0.8f, 0.6f, 1f, 0.45f), 1.5f, 8, true);
         var current = CurrentStar();
         var zoom = Game.Chart.Zoom;
         var view = new Rect2(Vector2.Zero, Size).Grow(60);
@@ -137,7 +158,7 @@ public partial class Hud
         Text(p, label, Colors.White, 15);
     }
 
-    public Vector2 SystemPoint(int star, Vec3d p) => MapPoint(Game.V!.ChartPositions[star] + p * Sublight.Scale);
+    public Vector2 SystemPoint(int star, Vec3d p) => MapPoint(Game.V!.ChartPositions[star] + p * Sublight.ChartLyPerAu);
 
     /// <summary>Close enough to a system, its stations' orbits come into view.</summary>
     void DrawStations()

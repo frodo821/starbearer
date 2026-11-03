@@ -25,7 +25,7 @@ public partial class Hud
     public Vector2 OrbitPoint(Vec3d p) => StarPoint(Game.V!.Primary.StarPosition(Game.V.AbsoluteTime) + p);
 
     /// <summary>A point relative to this system's star.</summary>
-    Vector2 StarPoint(Vec3d p) => MapPoint(Game.V!.System.Position + p * Sublight.Scale);
+    Vector2 StarPoint(Vec3d p) => MapPoint(Game.V!.System.Position + p * Sublight.ChartLyPerAu);
 
 
     Stage? StageOf(Maneuver n) => Game.SubForecast?.StageOf(n);
@@ -125,7 +125,7 @@ public partial class Hud
         stage = DrawDrift(drift, map, c, stage);
         if (f.Next is not { } n) return;
         var star = Game.G!.Stars[n.Star];
-        var hit = SystemPoint(n.Star, (n.Point - star.Position) / Sublight.Scale);
+        var hit = SystemPoint(n.Star, (n.Point - star.Position) * Sublight.AuPerLy);
         DrawArc(hit, 6, 0, Mathf.Tau, 16, Good, 1.6f, true);
         Text(hit + new Vector2(10, -6), $"Encounter {star.Name} " + Instruments.Countdown(n.Time - v.AbsoluteTime), Good, 13);
         if (f.Beyond is { } pass) DrawPass(pass, c, stage, hit);
@@ -138,7 +138,7 @@ public partial class Hud
         foreach (var to in drift.Stages.Select(s => s.TrackIndex).Append(drift.DrawnCount - 1))
         {
             var line = stage == 0 ? new Color(c, 0.7f) : new Color(StageColor(stage), 0.8f);
-            DrawDashedLine(map(drift.Track[from].Position), map(drift.Track[to].Position), line, 1.4f, 5);
+            DashedOnScreen(map(drift.Track[from].Position), map(drift.Track[to].Position), line, 1.4f, 5);
             from = to;
             if (to != drift.DrawnCount - 1) stage++;
         }
@@ -151,7 +151,7 @@ public partial class Hud
         DrawDashedLine(ps, pt, Warn, 1, 3);
         DrawArc(ps, 6, 0, Mathf.Tau, 16, Warn, 1.4f, true);
         DrawArc(pt, 6, 0, Mathf.Tau, 4, Good, 1.4f, true);
-        Text(ps + new Vector2(9, 16), $"{a.Distance:F3} AU", Warn, 13);
+        Text(ps + new Vector2(9, 16), Instruments.Distance(a.Distance), Warn, 13);
     }
 
     /// <summary>The path around a star not yet reached, coloured by the stage flown so far.</summary>
@@ -270,7 +270,7 @@ public partial class Hud
         {
             DrawCircle(at, 4.5f, ApsisColor);
             DrawArc(at, 7, 0, Mathf.Tau, 16, new Color(ApsisColor, 0.6f), 1.2f, true);
-            Text(at + new Vector2(9, a.Apo ? -8 : 16), $"{(a.Apo ? "Ap" : "Pe")} {a.Radius:F3} AU", ApsisColor, 12);
+            Text(at + new Vector2(9, a.Apo ? -8 : 16), $"{(a.Apo ? "Ap" : "Pe")} {Instruments.Distance(a.Radius)}", ApsisColor, 12);
             Text(at + new Vector2(9, a.Apo ? 6 : 30), Instruments.Countdown(a.Time - now), new Color(ApsisColor, 0.6f), 11);
         }
     }
@@ -448,6 +448,18 @@ public partial class Hud
         return new Rect2(x, y, NodePanelWidth, NodePanelHeight);
     }
 
+    /// <summary>
+    /// A step of the node's panel: a round figure about a hundredth of the orbital speed where the node
+    /// lies, so a step means as much around a moon as around a star.
+    /// </summary>
+    double NodeStep(Maneuver n)
+    {
+        var speed = StageOf(n) is { } s ? s.Velocity.Length : Game.V!.SubVelocity.Length;
+        return Math.Pow(10, Math.Floor(Math.Log10(Math.Max(speed, 1e-9) * 0.01)));
+    }
+
+    public double NodeStepForTest => NodeStep(Game.Selected!);
+
     /// <summary>Where the + (or −) of an axis sits in the open node's panel.</summary>
     public Vector2 NodeNudgeForTest(int axis, bool plus)
     {
@@ -473,9 +485,9 @@ public partial class Hud
         Text(new Vector2(box.End.X - PanelPad - F.GetStringSize(when, HorizontalAlignment.Left, -1, 14).X, y), when, left <= 0.3 ? Warn : Ink, 14);
         y += 20;
         var burn = Game.EngineAcceleration > 0 ? $"   噴射 {Instruments.Span(n.DeltaV / Game.EngineAcceleration)}" : "";
-        Text(new Vector2(x, y), $"Δv {n.DeltaV:F4}" + burn, Ink, 14);
+        Text(new Vector2(x, y), $"Δv {Instruments.Speed(n.DeltaV)}" + burn, Ink, 14);
         y += 8;
-        var step = Input.IsKeyPressed(Key.Shift) ? 0.0001 : 0.001;
+        var step = NodeStep(n) * (Input.IsKeyPressed(Key.Shift) ? 0.1 : 1);
         var axes = new (string Label, double Value, Color Col)[]
         {
             ("順行", n.Prograde, new Color(0.45f, 1f, 0.6f)), ("外", n.Radial, new Color(0.45f, 0.8f, 1f)), ("法線", n.Normal, new Color(1f, 0.5f, 0.9f)),
@@ -485,7 +497,7 @@ public partial class Hud
             var (label, value, col) = axes[i];
             var axis = i;
             Text(new Vector2(x, y + 18), label, col, 13);
-            Text(new Vector2(x + 44, y + 18), $"{value:+0.0000;-0.0000}", Ink, 14);
+            Text(new Vector2(x + 44, y + 18), (value >= 0 ? "+" : "") + Instruments.Speed(value), Ink, 14);
             ActionButton(new Rect2(box.End.X - PanelPad - 64, y + 3, 30, 20), "−", () => Game.NudgeNode(axis, -step), col);
             ActionButton(new Rect2(box.End.X - PanelPad - 30, y + 3, 30, 20), "+", () => Game.NudgeNode(axis, step), col);
             y += 23;
@@ -493,7 +505,7 @@ public partial class Hud
         var by = box.End.Y - 34;
         ActionButton(new Rect2(x, by, 34, 26), "◀", () => Game.StepNode(-1), Ink, ordered.Count > 1);
         ActionButton(new Rect2(x + 38, by, 34, 26), "▶", () => Game.StepNode(1), Ink, ordered.Count > 1);
-        Text(new Vector2(x + 80, by + 18), step < 0.001 ? "±0.0001" : "±0.001", Dim, 11);
+        Text(new Vector2(x + 80, by + 18), "±" + Instruments.Speed(step), Dim, 11);
         ActionButton(NodeDeleteBox(box), "削除", () => { Game.SelectNodeQuietly(n); Game.DeleteNode(); }, Bad);
     }
 

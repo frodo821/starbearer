@@ -133,7 +133,7 @@ public partial class Autotest : Node
         Do(() =>
         {
             Check("a second click deletes it", !_g.HasSave && _g.TitleChoice == 0);
-            _g.StartSeed(1234);
+            _g.StartSeed(14);   // a start at a giant with a moon (for the steps that target a body), whose jump keeps clear of the star
             Check("starting a galaxy shows the loading screen", _g.Screen == Screen.Loading);
         });
         Do(() =>
@@ -279,17 +279,17 @@ public partial class Autotest : Node
         });
         Do(() =>
         {
-            Check("the node's panel adds Δv a step at a time", Math.Abs(_g.Selected!.Prograde - _pro - 0.001) < 1e-9);
+            Check("the node's panel adds Δv a step at a time", Math.Abs(_g.Selected!.Prograde - _pro - _g.HudForTest.NodeStepForTest) < 1e-12);
             Click(MouseButton.Left, _g.HudForTest.NodeNudgeForTest(0, false));
         });
         Do(() =>
         {
-            Check("and takes it back", Math.Abs(_g.Selected!.Prograde - _pro) < 1e-9);
+            Check("and takes it back", Math.Abs(_g.Selected!.Prograde - _pro) < 1e-12);
             Drag(_g.HandleTipForTest(0), new Vector2(60, 0));
         });
         Do(() =>
         {
-            Check("dragging a handle changes the burn", Math.Abs(_g.Selected!.Prograde - _pro) > 0.001);
+            Check("dragging a handle changes the burn", Math.Abs(_g.Selected!.Prograde - _pro) > _g.HudForTest.NodeStepForTest);
             _time = _g.Selected!.Time;
             var p = _g.OrbitPointForTest(_g.SubForecast!.Track.OrderBy(t => Math.Abs(t.Time - _time)).First().Position);
             var far = _g.OrbitPointForTest(_g.SubForecast.Track[_g.SubForecast.DrawnCount * 3 / 5].Position);
@@ -646,7 +646,7 @@ public partial class Autotest : Node
             // From 2 AU off the star, looking past it into the band of far stars: the star's lens rings them.
             var star = _g.V!.SystemStar;
             var band = _g.SkyForTest.BandForTest;
-            _g.SkyFromForTest = _g.V.TruePositions[star] - band * (2 * Sublight.Scale);
+            _g.SkyFromForTest = _g.V.TruePositions[star] - band * (2 / Sublight.AuPerLy);
             _g.LookAtPublic(band);
         }, 150);   // the arrival banner fades
         Do(() =>
@@ -777,9 +777,9 @@ public partial class Autotest : Node
         {
             Check("auto burn flew the nodes", _g.V!.Nodes.Count == 0 || _g.Screen == Screen.Port);
             Check("auto burn is real thrust", _g.Screen == Screen.Port || _sawEngine);
-            if (_g.Screen == Screen.Orbit) _g.V!.PlaceNearStationForTest(0.05);   // the coast from here isn't under test
+            if (_g.Screen == Screen.Orbit) _g.V!.PlaceNearStationForTest(Tuning.DockRange * 20);   // the coast from here isn't under test
             Shot("08_rendezvous");
-            _g.V!.PlaceNearStationForTest(0.05);   // reaching it is the planners' test; this one is X and the dock
+            _g.V!.PlaceNearStationForTest(Tuning.DockRange * 20);   // reaching it is the planners' test; this one is X and the dock
             Press(Key.Key5);
             Key_(Key.X, true);
             _clock = Time.GetTicksMsec();
@@ -928,8 +928,7 @@ public partial class Autotest : Node
             _meets = _g.G!.Stars.Where(s => s.Id != here.Id).OrderBy(s => (s.Position - here.Position).Length).First();
             var way = (_meets.Position - here.Position).Normalized();
             var start = way * (Sublight.SystemRadius(here) * 0.9);
-            var aim = _meets.Position + way.AnyPerpendicular() * (_meets.Soi * 0.4);
-            v.PlaceSublightForTest(start, (aim - (here.Position + start * Sublight.Scale)).Normalized() * 0.6);
+            v.PlaceSublightForTest(start, way * 0.05);   // out of the system at about 90 km/s, straight at the nearest star
             _g.Chart.Zoom = 60;
             _g.CommandForTest(Key.Y);
         }, 30);
@@ -937,25 +936,8 @@ public partial class Autotest : Node
         {
             var f = _g.SubCurrent!;
             Check("an escaping orbit ends where the star lets go", f.Exit != null);
-            Check("the path carries on around the star it meets", f.Next?.Star == _meets!.Id && f.Beyond?.DrawnCount > 10);
+            Check("normal space never reaches the next star", f.Next is not { } n || n.Time - _g.V!.AbsoluteTime > 365 * 1000);
             Shot("10c_disengage");
-            _g.Chart.Center = _g.V!.ChartPositions[_meets!.Id];
-            _g.Chart.Zoom = (float)(Math.Min(Size().X, Size().Y) * 0.3 / _meets.Soi);
-        }, 10);
-        Do(() =>
-        {
-            Shot("10d_encounter_pass");
-            var pass = _g.SubForecast!.Beyond!;
-            _coast = _g.SubCurrent;
-            _time = pass.Track[pass.DrawnCount / 2].Time;
-            Click(MouseButton.Left, _g.LegPointForTest(pass, pass.Track[pass.DrawnCount / 2].Position));
-        }, 10);
-        Do(() =>
-        {
-            var f = _g.SubForecast!;
-            Check("a tap on the star ahead plans a burn there", _g.Selected is { } n && f.LegOf(n) == f.Beyond && Math.Abs(n.Time - _time) < 1);
-            Check("the panel plans the burn ahead", f.AllStages.Count() == 1 && f.Stages.Count == 0);
-            Shot("10e_node_ahead");
             _views = _g.G!.Stars.SelectMany(x => _g.G.System(x.Id).Tree).GroupBy(c => c.Kind).Select(k => k.First()).ToList();
             _g.DeleteNode();
             // A clear circle around the star: nothing on the path comes up for days.

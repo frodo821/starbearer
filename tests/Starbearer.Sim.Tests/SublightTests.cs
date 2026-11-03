@@ -72,44 +72,49 @@ public partial class SimTests
         Assert.True((predicted - v.SubPosition).Length < 0.01, $"off by {(predicted - v.SubPosition).Length}");
     }
 
-    static (Voyage V, Maneuver Node, BurnTarget Target, Vec3d T, Vec3d N) NodeHere(double prograde)
+    /// <summary>
+    /// A ship at its port with a prograde node of size U there and then: U is a twentieth of the
+    /// orbital speed, so the burns below stay short beside the orbit, at whatever scale the port circles.
+    /// </summary>
+    static (Voyage V, Maneuver Node, BurnTarget Target, Vec3d T, Vec3d N, double U) NodeHere()
     {
         var g = Galaxy.Generate(3);
         var v = new Voyage(g, g.Ports[0], g.StarOf(g.Ports[1]), Box, Unseen(g), 1);
         var (t, _, n) = Sublight.Frame(v.SubPosition, v.SubVelocity);
-        var node = new Maneuver { Time = v.AbsoluteTime, Prograde = prograde };
+        var u = v.SubVelocity.Length * 0.05;
+        var node = new Maneuver { Time = v.AbsoluteTime, Prograde = u };
         v.Nodes.Add(node);
-        return (v, node, new BurnTarget(node.Time, v.SubPosition, v.SubVelocity, v.SubVelocity + t * prograde), t, n);
+        return (v, node, new BurnTarget(node.Time, v.SubPosition, v.SubVelocity, v.SubVelocity + t * u), t, n, u);
     }
 
     [Fact]
     public void BurningAlongTheNodeSpendsIt()
     {
-        var (v, node, target, along, _) = NodeHere(0.01);
-        v.AdvanceSublight(0.005 / Tuning.SublightThrust, along);
+        var (v, node, target, along, _, u) = NodeHere();
+        v.AdvanceSublight(0.5 * u / Tuning.SublightThrust, along);
         v.Remeasure(node, target, v.Primary.Mu);
-        Assert.InRange(node.Prograde, 0.0045, 0.0055);
-        v.AdvanceSublight(0.006 / Tuning.SublightThrust, along);
+        Assert.InRange(node.Prograde, 0.45 * u, 0.55 * u);
+        v.AdvanceSublight(0.6 * u / Tuning.SublightThrust, along);
         v.Remeasure(node, target, v.Primary.Mu);
-        Assert.InRange(node.Prograde, -0.0015, -0.0005);   // past the node, what is left points back
-        Assert.Single(v.Nodes);                             // done only when the pilot says so
+        Assert.InRange(node.Prograde, -0.15 * u, -0.05 * u);   // past the node, what is left points back
+        Assert.Single(v.Nodes);                                 // done only when the pilot says so
     }
 
     [Fact]
     public void BurningOffAxisLeavesTheNodeUnfinished()
     {
-        var (v, node, target, _, sideways) = NodeHere(0.01);
-        v.AdvanceSublight(0.005 / Tuning.SublightThrust, sideways);
+        var (v, node, target, _, sideways, u) = NodeHere();
+        v.AdvanceSublight(0.5 * u / Tuning.SublightThrust, sideways);
         v.Remeasure(node, target, v.Primary.Mu);
-        Assert.InRange(node.Prograde, 0.0095, 0.0105);
-        Assert.InRange(node.Normal, -0.0055, -0.0045);
-        Assert.True(node.DeltaV > 0.01);
+        Assert.InRange(node.Prograde, 0.95 * u, 1.05 * u);
+        Assert.InRange(node.Normal, -0.55 * u, -0.45 * u);
+        Assert.True(node.DeltaV > u);
     }
 
     [Fact]
     public void ANodeIsDoneWhenThePilotStopsCloseToIt()
     {
-        var (v, node, _, along, _) = NodeHere(0.01);
+        var (v, node, _, along, _, u) = NodeHere();
         var plan = Sublight.Predict(v.Primary, null, v.SubPosition, v.SubVelocity, v.AbsoluteTime, v.Nodes, 1);
         var burn = new NodeBurn();
         void Fly(double dv)
@@ -118,12 +123,12 @@ public partial class SimTests
             v.AdvanceSublight(dv / Tuning.SublightThrust, along);
             burn.Measure(v, node, along * dv);
         }
-        Fly(0.004);
+        Fly(0.4 * u);
         Assert.Equal(NodeBurn.Ending.Short, burn.Stop(v));   // stopped short: the node stays
         Assert.Single(v.Nodes);
-        Fly(0.0055);
+        Fly(0.55 * u);
         Assert.False(burn.Overshot);
-        Fly(0.001);
+        Fly(0.1 * u);
         Assert.True(burn.Overshot);
         Assert.Equal(NodeBurn.Ending.Done, burn.Stop(v));
         Assert.Empty(v.Nodes);
@@ -186,7 +191,8 @@ public partial class SimTests
         v.EnterFtl();
         var star = g.StarAt(g.Ports[1]);
         var r = Sublight.SystemRadius(star) * 0.12;
-        v.PlaceForTest(star.Position + new Vec3d(r * Sublight.Scale, 0, 0), new Vec3d(0, 0, Math.Sqrt(Sublight.Mu(star) / r) * 1.15));
+        var (wellAt, wellSpeed) = Sublight.ToWell(new Vec3d(r, 0, 0), new Vec3d(0, 0, Math.Sqrt(Sublight.Mu(star) / r) * 1.15));
+        v.PlaceForTest(star.Position + wellAt, wellSpeed);
         Assert.True(v.Descend());
         v.IdealNodesForTest = true;
         return v;
@@ -195,7 +201,7 @@ public partial class SimTests
     /// <summary>Flies each level of the system in turn: a plan to the next body or the station, then X.</summary>
     static void FlyDown(Voyage v, Func<Voyage, IOrbiter, List<Maneuver>?> plan)
     {
-        for (int attempt = 0; attempt < 24 && v.Phase == Phase.Sublight; attempt++)
+        for (int attempt = 0; attempt < 60 && v.Phase == Phase.Sublight; attempt++)
         {
             var at = v.Primary.Key;
             var way = v.Waypoint;
@@ -203,7 +209,7 @@ public partial class SimTests
             {
                 v.Nodes.Clear();
                 v.Nodes.Add(Sublight.SuggestEscape(v.Primary, v.SubPosition, v.SubVelocity, v.AbsoluteTime));
-                for (int i = 0; i < 6000 && v.Phase == Phase.Sublight && v.Primary.Key == at; i++) v.AdvanceSublight(0.05, Vec3d.Zero);
+                for (int i = 0; i < 40000 && v.Phase == Phase.Sublight && v.Primary.Key == at; i++) v.AdvanceSublight(0.05, Vec3d.Zero);
                 continue;
             }
             var nodes = plan(v, way!);
@@ -216,12 +222,14 @@ public partial class SimTests
             v.Nodes.Clear(); v.Nodes.AddRange(nodes!);
             var until = nodes!.Count > 0 ? nodes.Max(n => n.Time) + 0.5 : v.AbsoluteTime;
             while (v.AbsoluteTime < until && v.Phase == Phase.Sublight && v.Primary.Key == at) v.AdvanceSublight(0.05, Vec3d.Zero);
-            if (way is Center)
+            if (way is Center body)
             {
-                for (int i = 0; i < 6000 && v.Phase == Phase.Sublight && v.Primary.Key == at; i++) v.AdvanceSublight(0.05, Vec3d.Zero);
+                // Coast toward it; if a tenth of its year goes by without arriving, plan again from where the ship is, as a pilot corrects course.
+                var check = v.AbsoluteTime + 2 * Math.PI / body.Omega / 10;
+                while (v.AbsoluteTime < check && v.Phase == Phase.Sublight && v.Primary.Key == at) v.AdvanceSublight(0.05, Vec3d.Zero);
                 continue;
             }
-            if ((v.StationNow().Position - v.SubPosition).Length > 0.05 && attempt < 23) continue;
+            if ((v.StationNow().Position - v.SubPosition).Length > Math.Min(0.05, v.LocalStation!.Radius * 0.5) && attempt < 59) continue;
             // X to close, then dock once the readout allows it.
             for (int i = 0; i < 4000 && v.Phase == Phase.Sublight && v.Primary.Key == at; i++)
             {
@@ -285,11 +293,12 @@ public partial class SimTests
         var star = new Star(0, "test", Vec3d.Zero, 1, 5800, Vec3d.Zero);
         var mu = Sublight.Mu(star);
         var rp = 0.5; var ra = 2.0;
-        var speed = Math.Sqrt(mu * (2 / rp - 2 / (rp + ra)));
-        var el = Sublight.DescentOrbit(star, rp * Sublight.Scale, speed);
+        // The speed in the well that, carried into the system, puts the ship at periapsis of this orbit.
+        var speed = Math.Sqrt(mu * (2 / rp - 2 / (rp + ra))) / Sublight.SpeedFactor;
+        var el = Sublight.DescentOrbit(star, rp / Sublight.WellAuPerLy, speed);
         Assert.Equal(rp, el.Periapsis, 6);
         Assert.Equal(ra, el.Apoapsis, 6);
-        Assert.False(Sublight.DescentOrbit(star, rp * Sublight.Scale, speed * 3).Bound);
+        Assert.False(Sublight.DescentOrbit(star, rp / Sublight.WellAuPerLy, speed * 3).Bound);
     }
 
     [Fact]
@@ -328,8 +337,8 @@ public partial class SimTests
         var star = g.StarAt(g.Ports[1]);
         v.PlaceForTest(star.Position + new Vec3d(0.2, 0.3, 0), new Vec3d(0.1, -0.1, 0.3));
         Assert.True(v.Descend());
-        Assert.Equal(0.3 / Sublight.Scale, v.SubPosition.Y, 9);
-        Assert.Equal(-0.1, v.SubVelocity.Y, 9);
+        Assert.Equal(0.3 * Sublight.WellAuPerLy, v.SubPosition.Y, 9);
+        Assert.Equal(-0.1 * Sublight.SpeedFactor, v.SubVelocity.Y, 9);
     }
 
     [Fact]
@@ -463,7 +472,7 @@ public partial class SimTests
         var ly = v.JumpState.Position;
         v.AdvanceSublight(0.02, Vec3d.Zero);
         Assert.Equal(planet.Key, v.Primary.Key);
-        Assert.True((v.JumpState.Position - ly - velocity * (0.02 * Sublight.Scale)).Length < 1e-3);
+        Assert.True((v.JumpState.Position - ly - velocity * (0.02 * Sublight.ChartLyPerAu)).Length < 1e-3);
     }
 
     [Fact]

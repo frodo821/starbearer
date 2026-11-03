@@ -159,8 +159,8 @@ public partial class Main
             var relative = (stationSpeed - v.SubVelocity).Length;
             if (v.CanDock && !DockAdmitted) return (Key.J, $"{Factions.OwnerName(G!, st.Id)} は入港を拒否している。ほかの港へ");
             if (v.CanDock) return (Key.J, "港のすぐそば。発進するか、U で入港し直す");
-            if (distance < 0.05)
-                return relative > 0.1 ? (Key.Z, $"港の近く。相対速度 {relative:F2} を押し続けて落とす") : (Key.X, $"港まで {distance:F3} AU。押し続けて寄せる");
+            if (distance < Tuning.DockRange * 50)
+                return relative > Tuning.DockRelativeSpeed * 5 ? (Key.Z, $"港の近く。相対速度 {Instruments.Speed(relative)} を押し続けて落とす") : (Key.X, $"港まで {Instruments.Distance(distance)}。押し続けて寄せる");
         }
         if (IgnitionIn is { } wait)
             return wait > 0.05 ? (ToNode ? null : Key.N, $"次の点火まで {Instruments.Span(wait)}" + (v.AutoBurn ? "。自動噴射が点火する" : "。ノードまで時間を進める")) : (Key.E, "点火の時機。機首をノードに向けて点火");

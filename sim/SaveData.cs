@@ -10,7 +10,7 @@ public sealed class SaveData
     /// galaxies are made (or to what a save holds) leaves older saves describing another galaxy: raise
     /// this with any such change. A save from before the field is format 0.
     /// </summary>
-    public const int CurrentFormat = 1;
+    public const int CurrentFormat = 2;
     public int Format { get; set; }
     public ulong Seed { get; set; }
     /// <summary>When the checkpoint was written (UTC), and where the ship flown lay: for the list of saves, read without making the galaxy.</summary>

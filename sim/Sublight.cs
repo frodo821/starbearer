@@ -1,20 +1,54 @@
 namespace Starbearer.Sim;
 
 /// <summary>
-/// Normal space: patched conics with no drag. Inside a star's sphere of influence the ship is on a
-/// two-body orbit, solved exactly while coasting; outside it flies straight. Mapped so FTL wells and orbits
-/// agree: r(ly) = r(AU) * Scale and speeds carry over unchanged, which keeps orbital energy continuous
-/// across a descent or a jump.
+/// Normal space: patched conics with no drag, at the true scale of a planetary system: AU, days, the
+/// Sun's gravity per solar mass. Inside a star's sphere of influence the ship is on a two-body orbit,
+/// solved exactly while coasting; outside it flies straight, at speeds that leave it among the stars
+/// for millennia. Between stars there is only hyperspace.
+///
+/// Hyperspace near a star is drawn in: its well, Soi ly across, is the shadow of the system out to
+/// SystemRadius AU. Dropping out of it, or jumping into it, carries the ship across by a similarity:
+/// positions scale by WellAuPerLy and speeds by SpeedFactor, chosen so the two gravities agree, so
+/// the orbit keeps its shape (the same eccentricity, the same place on it), only its size and pace change.
 /// </summary>
 public static partial class Sublight
 {
-    public const double Scale = 0.4; // ly per AU
+    /// <summary>AU in a light year, and the Sun's gravity (AU³/day²) and radius (AU): star masses are solar masses.</summary>
+    public const double AuPerLy = 63241.077, SunMu = 2.9591220828e-4, SunRadius = 0.00465047;
+    /// <summary>
+    /// How far out a system reaches, per √(solar mass): the edge of its sphere of influence, and of the
+    /// planets. The inner system, where the worlds worth a station are; it puts a port as deep in the
+    /// well as hyperspace was balanced for.
+    /// </summary>
+    public const double EdgeAuPerSqrtMass = 3.25;
+    /// <summary>AU of the system per ly of its hyperspace well; the same for every star, as both go with √mass.</summary>
+    public const double WellAuPerLy = EdgeAuPerSqrtMass / Tuning.SoiPerSqrtMass;
+    /// <summary>
+    /// AU/day in the system per ly/day in the well. With positions scaled by WellAuPerLy, the speed scale
+    /// that keeps v²r/μ (and so the orbit's shape) the same on both sides.
+    /// </summary>
+    public static readonly double SpeedFactor = Math.Sqrt(SunMu / (Tuning.MuPerMass * WellAuPerLy));
+    /// <summary>Light years per AU on the chart, which draws a system as big as its well, so the two read as one map.</summary>
+    public const double ChartLyPerAu = 1 / WellAuPerLy;
     const double TrackStep = 0.03;   // forecast sample limit, as a fraction of the local orbital time
-    const double OpenRunDays = 30;   // how far a path that meets nothing is followed into open space
+    const double OpenRunDays = 3000; // how far a path that meets nothing is followed into open space
 
-    public static double Mu(Star s) => s.Mu / Scale;
-    public static double SystemRadius(Star s) => s.Soi / Scale;
-    public static double StarRadius(Star s) => s.Radius / Scale;
+    public static double Mu(Star s) => SunMu * s.Mass;
+    public static double SystemRadius(Star s) => EdgeAuPerSqrtMass * Math.Sqrt(s.Mass);
+    public static double StarRadius(Star s) => SunRadius * Math.Pow(s.Mass, 0.8);
+
+    /// <summary>A state in a star's hyperspace well (ly and ly/day from the star) as the system has it (AU, AU/day).</summary>
+    public static (Vec3d Position, Vec3d Velocity) ToSystem(Vec3d ly, Vec3d lyPerDay) => (ly * WellAuPerLy, lyPerDay * SpeedFactor);
+    /// <summary>The other way: a state in the system as its hyperspace well has it.</summary>
+    public static (Vec3d Position, Vec3d Velocity) ToWell(Vec3d au, Vec3d auPerDay) => (au / WellAuPerLy, auPerDay / SpeedFactor);
+
+    /// <summary>The star whose system holds a point of real space (ly), if any: the gap between systems is wide.</summary>
+    public static int SystemAt(Galaxy g, Vec3d ly)
+    {
+        foreach (var s in g.Stars)
+            if ((s.Position - ly).Length * AuPerLy < SystemRadius(s)) return s.Id;
+        return -1;
+    }
 
     /// <summary>Orbit frame at a state: tangent, outward radial and orbit normal, all unit length.</summary>
     public static (Vec3d T, Vec3d R, Vec3d N) Frame(Vec3d p, Vec3d v)
@@ -123,7 +157,7 @@ public static partial class Sublight
     /// <summary>The first sphere of influence a straight path runs into, leaving the one it came from.</summary>
     public static Handover? NextPrimary(Galaxy g, int from, Vec3d ly, Vec3d velocity, double time)
     {
-        var speed = velocity.Length * Scale;
+        var speed = velocity.Length / AuPerLy;
         if (speed < 1e-9) return null;
         var dir = velocity.Normalized();
         Handover? best = null;
@@ -133,8 +167,9 @@ public static partial class Sublight
             var to = s.Position - ly;
             var along = to.Dot(dir);
             var miss = to.LengthSq - along * along;
-            if (miss >= s.Soi * s.Soi) continue;
-            var half = Math.Sqrt(s.Soi * s.Soi - miss);
+            var reach = SystemRadius(s) / AuPerLy;
+            if (miss >= reach * reach) continue;
+            var half = Math.Sqrt(reach * reach - miss);
             if (along + half < 0) continue;              // behind the ship
             var hit = Math.Max(along - half, 0);         // zero when spheres overlap: already inside
             if (best == null || time + hit / speed < best.Value.Time)
@@ -216,7 +251,7 @@ public static partial class Sublight
 
     /// <summary>The orbit a ship would drop into from a periapsis pass in hyperspace.</summary>
     public static Elements DescentOrbit(Star star, double periapsisLy, double speed) =>
-        OrbitOf(Mu(star), new Vec3d(periapsisLy / Scale, 0, 0), new Vec3d(0, 0, speed));
+        OrbitOf(Mu(star), new Vec3d(periapsisLy * WellAuPerLy, 0, 0), new Vec3d(0, 0, speed * SpeedFactor));
 
     /// <summary>The axes a node is read along at a state: its locked ones once burned on, else the state's own.</summary>
     public static (Vec3d T, Vec3d R, Vec3d N) FrameOf(Maneuver m, Vec3d p, Vec3d v) => m.Locked ?? Frame(p, v);

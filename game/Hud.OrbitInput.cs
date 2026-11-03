@@ -19,7 +19,10 @@ public partial class Hud
         if (ApsisAt(at) is { } apsis) { Game.AddNode(apsis); return; }
         // A tap on a station not yet the target picks it: in a system with several, that is how the pilot
         // chooses one. The target itself is left to the path it sits on.
-        if (StationUnder(at) is { } station && station != v.Goal) { Game.SetTarget(station); return; }
+        // A station close by its body can sit under the same tap: the nearer of the two is meant.
+        var body = OrbiterAt(at) as Center;
+        if (StationUnder(at) is { } station && station != v.Goal
+            && (body == null || StationPoint(station).DistanceTo(at) <= BodyPoint(body).DistanceTo(at))) { Game.SetTarget(station); return; }
         // A tap on a body targets it; on the target again, lets it go.
         if (OrbiterAt(at) is { } picked) { Game.SetTarget(picked == v.Goal ? null : picked); return; }
         if (Game.SubForecast is { } fc && EarliestNear(fc, at, 14) is { } time) { Game.AddNode(time); return; }
@@ -44,7 +47,7 @@ public partial class Hud
     /// <summary>Screen position of the delete button in the node's panel.</summary>
     public Vector2? DeleteButton(Maneuver n) => NodePanelBox(n) is { } box ? NodeDeleteBox(box).GetCenter() : null;
 
-    const float HandleReach = 56f, DvPerPixel = 0.0005f;
+    const float HandleReach = 56f, DvPerPixelPerSpeed = 0.002f;
     Maneuver? _heldNode;
     Vector2 _heldAxis;
     int _heldKind;   // 0 prograde, 1 radial, 2 normal, 3 slides along the path
@@ -97,7 +100,8 @@ public partial class Hud
         }
         else
         {
-            var scale = DvPerPixel * (Input.IsKeyPressed(Key.Shift) ? 0.1f : 1f);
+            var speed = StageOf(n) is { } st ? (float)st.Velocity.Length : (float)Game.V!.SubVelocity.Length;   // a pixel is a share of the orbital speed there
+            var scale = DvPerPixelPerSpeed * speed * (Input.IsKeyPressed(Key.Shift) ? 0.1f : 1f);
             var change = mm.Relative.Dot(_heldAxis) * scale;
             if (_heldKind == 0) n.Prograde += change;
             else if (_heldKind == 1) n.Radial += change;

@@ -175,7 +175,7 @@ public partial class Main
         V.Nodes.Add(m);
         Selected = m;
         Paused = true; HandlesOpen = false;
-        Message = $"合流噴射を置いた (Δv {m.DeltaV:F3})。N で点火点まで進む";
+        Message = $"合流噴射を置いた (Δv {Instruments.Speed(m.DeltaV)})。N で点火点まで進む";
         Replan();
     }
 
@@ -189,7 +189,7 @@ public partial class Main
         V.Nodes.AddRange(plan);
         Selected = plan[0];
         HandlesOpen = false;
-        Message = $"転送計算機: {plan.Count}段の噴射を計画 (Δv {plan.Sum(n => n.DeltaV):F2})";
+        Message = $"転送計算機: {plan.Count}段の噴射を計画 (Δv {Instruments.Speed(plan.Sum(n => n.DeltaV))})";
         Replan();
     }
 }

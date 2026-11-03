@@ -34,7 +34,8 @@ public partial class Main
         var st = G.StationAt(depot);
         v.EnterFtl();
         var host = st.Host!;
-        v.PlaceForTest(G.StarAt(depot).Position + (host.StarPosition(v.AbsoluteTime) + st.Position(v.AbsoluteTime)) * Sublight.Scale, host.StarVelocity(v.AbsoluteTime) + st.Velocity(v.AbsoluteTime));
+        var (wellAt, wellSpeed) = Sublight.ToWell(host.StarPosition(v.AbsoluteTime) + st.Position(v.AbsoluteTime), host.StarVelocity(v.AbsoluteTime) + st.Velocity(v.AbsoluteTime));
+        v.PlaceForTest(G.StarAt(depot).Position + wellAt, wellSpeed);
         v.Descend();
         v.SetGoal(st);   // in a system of several, this one
         v.AdvanceSublight(0.01, Vec3d.Zero);
@@ -56,7 +57,8 @@ public partial class Main
         var s = G!.Stars[V!.TargetStar];
         var r = Sublight.SystemRadius(s) * 0.12;
         var speed = Math.Sqrt(Sublight.Mu(s) / r) * 1.1;
-        V.PlaceForTest(V.TruePositions[s.Id] + new Vec3d(r * Sublight.Scale, 0, 0), new Vec3d(0, 0, speed));
+        var (wellAt, wellSpeed) = Sublight.ToWell(new Vec3d(r, 0, 0), new Vec3d(0, 0, speed));
+        V.PlaceForTest(V.TruePositions[s.Id] + wellAt, wellSpeed);
         V.RefillForTest();
     }
 

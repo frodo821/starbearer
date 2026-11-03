@@ -119,7 +119,11 @@ public sealed class Voyage
         Observe();
     }
 
-    void SyncTruePosition() => TruePosition = JumpState.Position;
+    /// <summary>In normal space the ship is where it truly is, a few AU from its star; in hyperspace, where the well has it.</summary>
+    void SyncTruePosition() => TruePosition = SpacePosition;
+
+    /// <summary>Where the ship is in real space, in ly: its star's place and its AU from it, to scale.</summary>
+    public Vec3d SpacePosition => System.Position + (Primary.StarPosition(AbsoluteTime) + SubPosition) / Sublight.AuPerLy;
 
     /// <summary>Leaving a station with a job for another of its system, that one is what the ship deals with next; else the station itself.</summary>
     int NextDoor(int station) => Hold.Where(c => c.IsJob).Select(c => c.Mission.Target)
@@ -162,9 +166,15 @@ public sealed class Voyage
         return (host.StarPosition(t) - Primary.StarPosition(t) + o.Position(t), host.StarVelocity(t) - Primary.StarVelocity(t) + o.Velocity(t));
     }
 
-    /// <summary>State a jump would start from. Speed carries over, so timing the orbit matters.</summary>
-    public (Vec3d Position, Vec3d Velocity) JumpState =>
-        (System.Position + (Primary.StarPosition(AbsoluteTime) + SubPosition) * Sublight.Scale, SubVelocity + Primary.StarVelocity(AbsoluteTime));
+    /// <summary>State a jump would start from: the ship's place and motion around its star, carried into the well. Speed carries over, so timing the orbit matters.</summary>
+    public (Vec3d Position, Vec3d Velocity) JumpState
+    {
+        get
+        {
+            var (p, v) = Sublight.ToWell(Primary.StarPosition(AbsoluteTime) + SubPosition, SubVelocity + Primary.StarVelocity(AbsoluteTime));
+            return (System.Position + p, v);
+        }
+    }
 
     public void EnterFtl()
     {
@@ -182,9 +192,9 @@ public sealed class Voyage
         NearestWell(out var star);
         if (star == null) return false;
         Primary = G.System(star.Id);
-        SubPosition = (TruePosition - _truth[star.Id]) / Sublight.Scale;
-        SubVelocity = Velocity;
+        (SubPosition, SubVelocity) = Sublight.ToSystem(TruePosition - _truth[star.Id], Velocity);
         Phase = Phase.Sublight;
+        SyncTruePosition();
         return true;
     }
 
@@ -214,11 +224,11 @@ public sealed class Voyage
         }
         if (Primary != before) return;
         if (Primary.Parent != null || p.Length < Primary.Edge) return;
-        var ly = System.Position + p * Sublight.Scale;
-        var next = Physics.Primary(G, _truth, ly);
+        var ly = System.Position + p / Sublight.AuPerLy;
+        var next = Sublight.SystemAt(G, ly);
         if (next < 0 || next == SystemStar) return;
         Primary = G.System(next);
-        p = (ly - System.Position) / Sublight.Scale;
+        p = (ly - System.Position) * Sublight.AuPerLy;
     }
 
     /// <summary>Close and slow enough to tie up, whether or not the ship has been away yet.</summary>
@@ -237,7 +247,7 @@ public sealed class Voyage
         var (sp, sv) = StationNow();
         var toward = sp - SubPosition;
         var want = sv - SubVelocity;
-        if (approach) want += toward.Normalized() * Math.Min(0.02, toward.Length);
+        if (approach) want += toward.Normalized() * Math.Min(Tuning.DockRelativeSpeed * 10, toward.Length);   // closing at its distance a day, never fast
         return want.Length < Tuning.DockRelativeSpeed * 0.25 ? Vec3d.Zero : want.Normalized();
     }
 
@@ -293,6 +303,9 @@ public sealed class Voyage
                 a = thrust.Normalized() * (done / dt);
                 Thrusting = true;
             }
+            // Where the station stood against the ship as the step began: a gate is passed by coming
+            // within reach at any point of the step, not only at its end, or a fast ship slips through it.
+            var gateFrom = LocalStation != null && GateBooked != null ? StationNow().Position - p : (Vec3d?)null;
             Sublight.Propagate(mu, ref p, ref v, dt, a);
             HandOver(ref p, ref v, AbsoluteTime + dt);
             PassSublightTime(dt); left -= dt;
@@ -302,7 +315,7 @@ public sealed class Voyage
             if (LocalStation != null)
             {
                 var (sp, sv) = StationNow();
-                var near = (sp - p).Length < Tuning.DockRange;
+                var near = (gateFrom is { } from ? Closest(from, sp - p) : (sp - p).Length) < Tuning.DockRange;
                 if (near && GateBooked != null && G.GateLinks.TryGetValue(LocalStation.Id, out var exit)) PassGate(ref p, ref v, sp, sv, exit);
                 // Docking is the pilot's call (RequestDock): passing close and slow is not enough.
             }
@@ -310,6 +323,14 @@ public sealed class Voyage
         SubPosition = p; SubVelocity = v;
         SyncTruePosition();
         Observe();
+    }
+
+    /// <summary>How near a straight run from one offset to another passes the origin.</summary>
+    static double Closest(Vec3d from, Vec3d to)
+    {
+        var d = to - from;
+        var t = d.LengthSq < 1e-30 ? 0 : Math.Clamp(-from.Dot(d) / d.LengthSq, 0, 1);
+        return (from + d * t).Length;
     }
 
     int _bookedAt = -1;

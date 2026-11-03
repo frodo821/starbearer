@@ -64,18 +64,29 @@ public partial class SimTests
     [Fact]
     public void AStrandedWareGetsAGateBetweenWhereItIsMadeAndWanted()
     {
-        var (s, g) = SaveData.NewGalaxy(5);
-        var m = s.MarketIn(g);
-        var f = 0;
-        // A ware piled up at its makers and run out where it is wanted, for months.
+        // A ware piled up at its makers and run out where it is wanted, for months: for the first faction
+        // whose makers and users lie far enough apart for a gate, in the first galaxy that has one.
         var ware = "medical";
-        foreach (var (st, e) in g.Economies.Where(x => g.OwnerOf(x.Key) == f && x.Value.IndexOf(ware) >= 0))
-            m.Stock[st][e.IndexOf(ware)] = e.Makes(ware) ? e.Target[e.IndexOf(ware)] * 1.9 : 0;
-        m.War.Stranded[f][ware] = Industry.ShortDays + 1;
-        m.War.GateProgress[f] = 1;
-        var before = g.Gates.Count(g.Alive);
-        // Built on the day's stock, before evening out has run its course.
-        Industry.BuildGate(g, m, f);
+        foreach (var (seed, f) in from seed in Enumerable.Range(1, 8) from f in Enumerable.Range(0, Tuning.FactionCount) select (seed, f))
+        {
+            var (s, g) = SaveData.NewGalaxy((ulong)seed);
+            var m = s.MarketIn(g);
+            foreach (var (st, e) in g.Economies.Where(x => g.OwnerOf(x.Key) == f && x.Value.IndexOf(ware) >= 0))
+                m.Stock[st][e.IndexOf(ware)] = e.Makes(ware) ? e.Target[e.IndexOf(ware)] * 1.9 : 0;
+            m.War.Stranded[f][ware] = Industry.ShortDays + 1;
+            m.War.GateProgress[f] = 1;
+            var before = g.Gates.Count(g.Alive);
+            // Built on the day's stock, before evening out has run its course.
+            Industry.BuildGate(g, m, f);
+            if (!m.War.Log.Any(e => e.Kind == "gate built")) continue;
+            Built(s, g, m, f, before);
+            return;
+        }
+        Assert.Fail("no faction got a gate");
+    }
+
+    static void Built(SaveData s, Galaxy g, Market m, int f, int before)
+    {
         var built = Assert.Single(m.War.Log, e => e.Kind == "gate built");
         Assert.Equal(f, built.Faction);
         Assert.Equal(before + 2, g.Gates.Count(g.Alive));

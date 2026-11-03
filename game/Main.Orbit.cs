@@ -162,11 +162,11 @@ public partial class Main
         switch (Burn.Stop(V!))
         {
             case NodeBurn.Ending.Short:
-                Message = $"ノード残 Δv {node.DeltaV:F4}。続けるなら再点火";
+                Message = $"ノード残 Δv {Instruments.Speed(node.DeltaV)}。続けるなら再点火";
                 break;
             case NodeBurn.Ending.Done:
                 if (Selected == node) Selected = NextNode;
-                Message = $"ノード完了 (誤差 Δv {node.DeltaV:F4})" + (V!.Nodes.Count > 0 ? "。残りの段を現在の軌道で計画し直した" : "");
+                Message = $"ノード完了 (誤差 Δv {Instruments.Speed(node.DeltaV)})" + (V!.Nodes.Count > 0 ? "。残りの段を現在の軌道で計画し直した" : "");
                 Replan();   // what this stage actually achieved is now the baseline for the rest
                 break;
         }

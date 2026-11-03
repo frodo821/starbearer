@@ -24,11 +24,11 @@ public sealed class ChartView
     Vec3d _followed;
 
     /// <summary>Pixels per AU.</summary>
-    public float PixelsPerAu => Zoom * (float)Sublight.Scale;
+    public float PixelsPerAu => Zoom * (float)Sublight.ChartLyPerAu;
 
     /// <summary>A zoom that frames a body's sphere of influence, or the whole system for a star.</summary>
     public static float ZoomFor(Center c) =>
-        c.Parent == null ? SystemZoom : Mathf.Min(10000f, 220f / (float)(c.Edge * Sublight.Scale));
+        c.Parent == null ? SystemZoom : Mathf.Min(1e9f, 220f / (float)(c.Edge * Sublight.ChartLyPerAu));
 
     public Vector2 Project(Vec3d p, Vector2 screen)
     {
@@ -93,7 +93,7 @@ public sealed class ChartView
     public void ZoomBy(float factor)
     {
         StopGlide();
-        Zoom = Mathf.Clamp(Zoom * factor, 4, 40000);
+        Zoom = Mathf.Clamp(Zoom * factor, 4, 1e9f);
     }
 
     public void Rotate(Vector2 d)

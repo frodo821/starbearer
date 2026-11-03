@@ -43,7 +43,7 @@ public partial class Main : Node3D
     float _yaw, _pitch;
 
     /// <summary>The ship's primary on the galaxy chart, in ly.</summary>
-    public Vec3d PrimaryOnChart => V!.System.Position + V.Primary.StarPosition(V.AbsoluteTime) * Sublight.Scale;
+    public Vec3d PrimaryOnChart => V!.System.Position + V.Primary.StarPosition(V.AbsoluteTime) * Sublight.ChartLyPerAu;
 
     public bool Owns(string module) => Save?.Modules.Contains(module) == true;
 
@@ -121,6 +121,9 @@ public partial class Main : Node3D
         if (SkyFromForTest != null) { _worlds.Show(G!, -1, Vec3d.Zero, v.AbsoluteTime); return; }   // the sky seen from elsewhere: no worlds from here
         var star = v.Phase == Phase.Flight ? (v.NearestWell(out var s) < double.MaxValue && s != null ? s.Id : -1) : v.SystemStar;
         var (along, beta) = _sky?.Bubble ?? (Vec3d.Zero, 0);
-        _worlds.Show(G!, star, star < 0 ? Vec3d.Zero : (v.TruePosition - v.TruePositions[star]) / Sublight.Scale, v.AbsoluteTime, along, beta);
+        // In normal space the ship's own AU from its star; in a hyperspace well, where the well puts it in the system.
+        var at = star < 0 ? Vec3d.Zero : v.Phase == Phase.Sublight ? v.Primary.StarPosition(v.AbsoluteTime) + v.SubPosition
+            : Sublight.ToSystem(v.TruePosition - v.TruePositions[star], Vec3d.Zero).Position;
+        _worlds.Show(G!, star, at, v.AbsoluteTime, along, beta);
     }
 }

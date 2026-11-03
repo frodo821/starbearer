@@ -160,8 +160,8 @@ public sealed partial class Galaxy
     }
 
     // Only bodies whose sphere leaves room for an orbit clear of the body (see PlaceStation).
-    static List<Center> Planets(Center system) => system.Children.Where(p => p.Edge * 0.22 > Tuning.HostClearance).ToList();
-    static List<Center> Moons(Center system) => system.Children.SelectMany(p => p.Children).Where(m => m.Edge * 0.25 > Tuning.HostClearance).ToList();
+    static List<Center> Planets(Center system) => system.Children.Where(p => p.Edge * 0.22 > p.BodyRadius * Tuning.HostClearance).ToList();
+    static List<Center> Moons(Center system) => system.Children.SelectMany(p => p.Children).Where(m => m.Edge * 0.25 > m.BodyRadius * Tuning.HostClearance).ToList();
 
     /// <summary>Whether a system has the body a kind of station works: gas harvesting needs a giant, ice a moon.</summary>
     internal static bool Fits(StationKind kind, Center system) => kind switch
