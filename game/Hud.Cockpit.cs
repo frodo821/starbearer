@@ -58,15 +58,6 @@ public partial class Hud
         if (Game.Forecast is { Encounters.Count: > 0 } soon && soon.Encounters[0].Star != v.TargetStar)
             DrawEdgeArrow((v.ChartPositions[soon.Encounters[0].Star] - ship).Normalized(), "次の星", Ink);
 
-        var r = v.NearestWell(out var star);
-        if (star != null && Game.Screen == Screen.Flight)
-        {
-            var pass = Game.Forecast?.Encounters.FirstOrDefault(e => e.Star == star.Id);
-            var periapsis = pass is { Star: var id } e0 && id == star.Id ? $"   近日点 {e0.Periapsis:F2}" : "";
-            Centered(138, $"{star.Name}  距離 {r:F3} ly{periapsis}   時間 {Instruments.Rate(Game.CurrentRate)}", Warn, 22);
-            if (r < star.Soi * 0.7)
-                Centered(166, Game.Shielded ? "シールド: 恒星に正対" : "シールド外! 機首を恒星へ! (姿勢儀の「恒」をタップ)", Game.Shielded ? Good : Bad, 20);
-        }
     }
 
     (Vec3d Dir, string Label, Color Color, bool Primary, ViewHold Hold)[] Markers()

@@ -76,7 +76,7 @@ public partial class Main
         var jumping = v.Phase == Phase.Sublight;
         v.EnterFtl();
         v.Burn(PlanDir, PlanDv);
-        if (jumping) ShowCue(new StateCue("FTL 発進", $"速度 {v.Velocity.Length:F2}   失速線 {Tuning.StallSpeed:F2}", Palette.Ftl, Major: true, Outward: true));
+        // No banner for the jump: the sky and the corner frame tell it.
         Helm.Nose = PlanDir.Normalized();
         Screen = Screen.Flight;
         Paused = false;
@@ -125,7 +125,7 @@ public partial class Main
         MapOpen = false; Selected = null; Paused = true; PlanFrozen = false;
         OrbitSky = false;
         Chart.Glide(PrimaryOnChart, ChartView.ZoomFor(V.Primary));
-        ShowCue(new StateCue("亜光速へ降下", V.System.Name + " 星系", Palette.Good, Major: true, Outward: false));
+        // No banner for the descent either: the system comes up around the ship.
         Message = V.LocalStation == null ? "この星系に港はない。J で再発進できる"
             : V.Hold.Any(c => c.IsJob && G!.StarOf(c.Mission.Target) == V.SystemStar) ? "亜光速へ降下。軌道をタップしてマニューバを置き、港へ軌道を合わせる"
             : "この星系の港に入港すると補給できる。J で再発進もできる";

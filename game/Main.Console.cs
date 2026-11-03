@@ -196,8 +196,7 @@ public partial class Main
         _lastPhase = v.Phase;
         var well = -1;
         if (v.Phase == Phase.Flight && v.NearestWell(out var star) < double.MaxValue && star != null) well = star.Id;
-        if (well != _lastWell && well >= 0)
-            ShowCue(new StateCue($"{G!.Stars[well].Name} の井戸に進入", well == v.TargetStar ? "目的の星系" : "", new Color(1f, 0.7f, 0.25f), Major: false, Outward: true));
+        // Entering a well needs no banner: the FTL clock turns to its periapsis and the advice line says what to do.
         _lastWell = well;
     }
 

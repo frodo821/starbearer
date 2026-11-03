@@ -78,6 +78,17 @@ public partial class Hud
         Section(x, ref y, width, "航法");
         void Line(string s, Color c, int size = 15) { Text(new Vector2(x, y + 14), s, c, size); y += 20; }
         Line($"速度 {(v.Phase == Phase.Sublight ? v.SubVelocity : v.Velocity).Length:F3}   位置誤差 ±{v.NavSigma:F3} ly", v.NavSigma > 0.1 ? Warn : Ink);
+        if (Game.Screen == Screen.Flight && v.Phase != Phase.Sublight)
+        {
+            var speed = v.Velocity.Length;
+            Line($"失速線 {Tuning.StallSpeed:F2}   余裕 {speed - Tuning.StallSpeed:+0.00;-0.00} ly/日", speed < Tuning.StallSpeed * 1.3 ? Bad : Dim, 14);
+            var well = v.NearestWell(out var near);
+            if (near != null)
+            {
+                var capture = Physics.CaptureSpeed(near, well);
+                Line($"捕獲速度 {capture:F2}  " + (speed <= capture ? "今降下すれば軌道に乗る" : "速すぎる: 機首を逆行へ噴射"), speed <= capture ? Good : Warn, 14);
+            }
+        }
         if (Game.Screen == Screen.Plan)
         {
             Line($"キック Δv {Game.PlanDv:F3}  (燃料 {v.FuelFor(Game.PlanDv):F2})", Warn, 17);
@@ -125,9 +136,50 @@ public partial class Hud
     {
         DrawNavPanel();
         DrawShipPanel();
-        DrawFtlState();
-        if (Game.Screen != Screen.Orbit) DrawRangeGauge();
+        // In FTL the top keeps only the clock that matters there and the heat warnings; planning a jump, the speed and range it needs.
+        if (Game.Screen == Screen.Flight) DrawFtlClock();
+        else DrawFtlState();
+        if (Game.Screen == Screen.Plan) DrawRangeGauge();
         DrawHelm();
+    }
+
+    /// <summary>
+    /// The top of the screen in FTL: when the next star's periapsis comes and when the drive stalls, and
+    /// under them, only when they apply, the heat warnings. The rest (speed against the stall and
+    /// capture lines) is in the navigation panel.
+    /// </summary>
+    void DrawFtlClock()
+    {
+        var v = Game.V!; var g = Game.G!;
+        var parts = new List<(string Text, Color Colour)>();
+        if (Game.Forecast is { } fc)
+        {
+            if (fc.Encounters.Count > 0)
+            {
+                var e = fc.Encounters[0];
+                parts.Add(($"{g.Stars[e.Star].Name} 近日点まで {Instruments.Countdown(e.Time)}", e.Star == v.TargetStar ? Good : Ink));
+            }
+            if (fc.End == PredictionEnd.Stall) parts.Add(($"失速まで {Instruments.Countdown(fc.Duration)}", fc.Duration < 10 ? Bad : Warn));
+            if (fc.End == PredictionEnd.Collision) parts.Add(($"突入まで {Instruments.Countdown(fc.Duration)}", Bad));
+        }
+        if (parts.Count == 0) parts.Add(("予定なし", Dim));
+        const int size = 20;
+        var sep = "     ";
+        var width = parts.Sum(p => F.GetStringSize(p.Text, HorizontalAlignment.Left, -1, size).X) + (parts.Count - 1) * F.GetStringSize(sep, HorizontalAlignment.Left, -1, size).X;
+        var x = Size.X / 2 - width / 2;
+        DrawRect(new Rect2(x - 16, 12, width + 32, 36), new Color(0, 0, 0, 0.55f));
+        for (int i = 0; i < parts.Count; i++)
+        {
+            if (i > 0) { Text(new Vector2(x, 38), sep, Dim, size); x += F.GetStringSize(sep, HorizontalAlignment.Left, -1, size).X; }
+            Text(new Vector2(x, 38), parts[i].Text, parts[i].Colour, size);
+            x += F.GetStringSize(parts[i].Text, HorizontalAlignment.Left, -1, size).X;
+        }
+        // Heat, only when it matters: out of the shield deep in a well, or the hull or cargo heating past what they take.
+        var y = 72f;
+        var r = v.NearestWell(out var star);
+        if (star != null && r < star.Soi * 0.7 && !Game.Shielded) { Centered(y, "シールド外! 機首を恒星へ (姿勢儀の「恒」をタップ)", Bad, 20); y += 26; }
+        if (v.Heat > 1) Centered(y, $"熱 {v.Heat:F2}: 船体が傷んでいる", Bad, 18);
+        else if (v.Hold.Count > 0 && v.Heat > v.HeatTolerance) Centered(y, $"熱 {v.Heat:F2}: 積荷の耐熱 {v.HeatTolerance:F2} を超えた", Warn, 18);
     }
 
     /// <summary>Whether the ship is in FTL at all, then how close it is to falling out.</summary>
