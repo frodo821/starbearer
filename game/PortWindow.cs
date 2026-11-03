@@ -56,12 +56,23 @@ public partial class PortWindow : PanelContainer
 
     public void ShowTab(int tab) { _tab = tab; Rebuild(); }
 
-    static HBoxContainer Columns(params Control[] columns)
+    /// <summary>
+    /// A tab's columns, side by side, each scrolling on its own. The whole sits in a frame that scrolls
+    /// sideways if a long line ever outgrows it, so no tab can widen the window.
+    /// </summary>
+    static Control Columns(params Control[] columns)
     {
-        var body = new HBoxContainer { SizeFlagsVertical = SizeFlags.ExpandFill };
+        var body = new HBoxContainer { SizeFlagsVertical = SizeFlags.ExpandFill, SizeFlagsHorizontal = SizeFlags.ExpandFill };
         body.AddThemeConstantOverride("separation", 28);
         foreach (var c in columns) body.AddChild(Scroll(c));
-        return body;
+        var frame = new ScrollContainer
+        {
+            SizeFlagsVertical = SizeFlags.ExpandFill,
+            HorizontalScrollMode = ScrollContainer.ScrollMode.Auto,
+            VerticalScrollMode = ScrollContainer.ScrollMode.Disabled,
+        };
+        frame.AddChild(body);
+        return frame;
     }
 
     public void Rebuild()
@@ -75,7 +86,7 @@ public partial class PortWindow : PanelContainer
         _root.AddChild(Text($"資金 {s.Credits:F0}   配達 {s.Deliveries} 件   {_game.GalaxyDayText}   ここがチェックポイント", 15, Dim));
         if (g.Factions.Length > 0)
             _root.AddChild(Text($"スタンディング   {Factions.Summary(s, g)}   （{Factions.HostileAt:+0;-0} 以下で敵対: 入港とゲートを拒まれる）", 14, Dim));
-        foreach (var line in _game.PortReport) _root.AddChild(Text(line, 16));
+        foreach (var line in _game.PortReport) _root.AddChild(Wrapped(line, 16));
         var tabs = new TabContainer { SizeFlagsVertical = SizeFlags.ExpandFill };
         tabs.AddThemeFontSizeOverride("font_size", 16);
         var jobs = Columns(BoardColumn(g, s), HoldColumn(g, s)); jobs.Name = "仕事と積荷";
@@ -86,8 +97,16 @@ public partial class PortWindow : PanelContainer
         tabs.CurrentTab = _tab;
         tabs.TabChanged += t => _tab = (int)t;
         _root.AddChild(tabs);
-        if (_game.Message != "") _root.AddChild(Text(_game.Message, 15, Warn));
+        if (_game.Message != "") _root.AddChild(Wrapped(_game.Message, 15, Warn));
         _root.AddChild(Row(new Control(), Press("船へ戻る", _game.LeavePort, key: "Enter")));
+    }
+
+    /// <summary>A line across the window that wraps rather than widening it.</summary>
+    static Label Wrapped(string s, int size, Color? c = null)
+    {
+        var l = Text(s, size, c);
+        l.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        return l;
     }
 
     /// <summary>
@@ -99,12 +118,12 @@ public partial class PortWindow : PanelContainer
         var box = Column(1180);
         var m = s.MarketIn(g);
         box.AddChild(Text("戦況", 20, Good));
-        box.AddChild(Text("要塞は兵器の弾薬と燃料が足りているほど強い。補給の差で勝敗が決まる。要塞に弾薬・燃料・食品・鋼鉄（次の要塞の建材）を売ると、その勢力のスタンディングが大きく上がる", 13, Dim));
+        box.AddChild(Wrapped("要塞は兵器の弾薬と燃料が足りているほど強い。補給の差で勝敗が決まる。要塞に弾薬・燃料・食品・鋼鉄（次の要塞の建材）を売ると、その勢力のスタンディングが大きく上がる", 13, Dim));
         foreach (var f in g.Factions)
         {
             var forts = War.Fortresses(g).Where(x => g.OwnerOf(x) == f.Id).ToList();
             var held = g.Stars.Count(x => g.Claim(x.Id).Holder == f.Id);
-            box.AddChild(Text($"{f.Name}   主力兵器 {War.WeaponName(f.Weapon)}（{Wares.Get(f.Weapon).Name}を消費）   要塞 {forts.Count}   領有 {held} 星系   次の要塞の建材 {Math.Min(1, m.War.Progress.ElementAtOrDefault(f.Id)):P0}", 16, Palette.Faction(f.Id)));
+            box.AddChild(Wrapped($"{f.Name}   主力兵器 {War.WeaponName(f.Weapon)}（{Wares.Get(f.Weapon).Name}を消費）   要塞 {forts.Count}   領有 {held} 星系   次の要塞の建材 {Math.Min(1, m.War.Progress.ElementAtOrDefault(f.Id)):P0}", 16, Palette.Faction(f.Id)));
         }
         box.AddChild(new HSeparator());
         box.AddChild(Text("係争中の星系", 17, Good));
@@ -133,16 +152,16 @@ public partial class PortWindow : PanelContainer
 
     Control BoardColumn(Galaxy g, SaveData s)
     {
-        var box = Column(680);
+        var box = Column(650);
         box.AddChild(Text("ミッションボード", 20, Good));
         if (_game.GateExit is var exit and >= 0)
         {
             box.AddChild(Text($"ゲートの行き先: {g.StarAt(exit).Name}（{g.Regions[g.StarAt(exit).Region].Name} 宙域）", 17));
-            box.AddChild(Text($"出港してから「ゲート通過」で予約し、ゲートまで寄ると向こうへ出る。速さはそのまま\n通行税は船・モジュール・積荷の価値の {Tuning.GateTollRate:P0}（今なら {_game.GateToll:F0}）、次の入港で精算", 14, Dim));
+            box.AddChild(Wrapped($"出港してから「ゲート通過」で予約し、ゲートまで寄ると向こうへ出る。速さはそのまま\n通行税は船・モジュール・積荷の価値の {Tuning.GateTollRate:P0}（今なら {_game.GateToll:F0}）、次の入港で精算", 14, Dim));
             var m = s.MarketIn(g);
             var here = s.PortStation;
-            box.AddChild(Text(Gates.Open(g, m, here) ? "ゲートは動いている" : "ゲートは止まっている: 維持の品物が尽きた。ここか向こうの端に届けば動き出す", 15, Gates.Open(g, m, here) ? Good : Warn));
-            box.AddChild(Text("維持（1日、この端）: " + string.Join("、", g.Economies[here].Upkeep.Select(u => $"{Wares.Get(u.Ware).Name} {u.Rate:F2}（在庫 {m.StockOf(g, here, u.Ware):F0}）")) + $"。結ぶ距離 {g.GateSpan(here):F0} ly に比例する", 14, Dim));
+            box.AddChild(Wrapped(Gates.Open(g, m, here) ? "ゲートは動いている" : "ゲートは止まっている: 維持の品物が尽きた。ここか向こうの端に届けば動き出す", 15, Gates.Open(g, m, here) ? Good : Warn));
+            box.AddChild(Wrapped("維持（1日、この端）: " + string.Join("、", g.Economies[here].Upkeep.Select(u => $"{Wares.Get(u.Ware).Name} {u.Rate:F2}（在庫 {m.StockOf(g, here, u.Ware):F0}）")) + $"。結ぶ距離 {g.GateSpan(here):F0} ly に比例する", 14, Dim));
             box.AddChild(Text("ゲートは仕事を出さない。維持の品物は市場で売れる", 15, Dim));
             TakeButtons = Array.Empty<Button>();
             return box;
@@ -179,7 +198,7 @@ public partial class PortWindow : PanelContainer
     /// <summary>The company's ships docked here, and at a shipyard what it builds.</summary>
     Control HangarColumn(Galaxy g, SaveData s)
     {
-        var box = Column(680);
+        var box = Column(650);
         var star = s.PortStation;
         box.AddChild(Text("格納庫", 20, Good));
         foreach (var ship in s.ShipsAt(star))
@@ -194,7 +213,7 @@ public partial class PortWindow : PanelContainer
         }
         var away = s.Fleet.Where(x => x.Station != star).ToList();
         if (away.Count > 0)
-            box.AddChild(Text("ほかの港: " + string.Join("、", away.Select(x => $"{x.Type.Name}（{Missions.Label(g, x.Station)}）")), 13, Dim));
+            box.AddChild(Wrapped("ほかの港: " + string.Join("、", away.Select(x => $"{x.Type.Name}（{Missions.Label(g, x.Station)}）")), 13, Dim));
         var sold = Ships.SoldAt(g, star);
         if (sold.Length == 0) return box;
         box.AddChild(Text("造船", 18, Good));
@@ -245,7 +264,7 @@ public partial class PortWindow : PanelContainer
             box.AddChild(Row(Text(name, 15), Press($"{cost:F0}", () => _game.Purchase(buy), need, key)));
         Sale($"生命維持 残 {s.HeldLife:F0} 日", (Tuning.LifeSupportDays - s.HeldLife) * Tuning.LifePricePerDay, s.HeldLife < Tuning.LifeSupportDays - 0.5, Supply.BuyLife, "4");
         Sale($"船体 {s.HeldHull:P0}", (1 - s.HeldHull) * Tuning.HullRepairPrice, s.HeldHull < 0.999, Supply.RepairHull, "5");
-        box.AddChild(Text("足りなければ買える分だけ。燃料は港の在庫から。出港に足る燃料も買えなければ破産", 13, Dim));
+        box.AddChild(Wrapped("足りなければ買える分だけ。燃料は港の在庫から。出港に足る燃料も買えなければ破産", 13, Dim));
         return box;
     }
 
@@ -257,7 +276,7 @@ public partial class PortWindow : PanelContainer
         var star = s.PortStation;
         var e = g.Economies[star];
         box.AddChild(Text("市場", 20, Good));
-        box.AddChild(Text("ここで作る物を買い、ここで使う物を売れる。燃料はどこでも買える。価格は在庫しだいで、目標量ちょうどで基準価格。売り買いするほど値が動く", 13, Dim));
+        box.AddChild(Wrapped("ここで作る物を買い、ここで使う物を売れる。燃料はどこでも買える。価格は在庫しだいで、目標量ちょうどで基準価格。売り買いするほど値が動く", 13, Dim));
         foreach (var ware in e.Wares)
         {
             var w = Wares.Get(ware);
@@ -286,7 +305,7 @@ public partial class PortWindow : PanelContainer
         }
         var unsold = s.Hold.Where(c => !c.IsJob && !Trade.Buys(g, star, c.Mission.Cargo.Ware!)).ToList();
         if (unsold.Count > 0)
-            box.AddChild(Text("ここでは売れない荷: " + string.Join("、", unsold.Select(c => $"{c.Mission.Cargo.Name} {c.Mission.Cargo.Volume:F0}")), 13, Dim));
+            box.AddChild(Wrapped("ここでは売れない荷: " + string.Join("、", unsold.Select(c => $"{c.Mission.Cargo.Name} {c.Mission.Cargo.Volume:F0}")), 13, Dim));
         box.AddChild(new HSeparator());
         Quotes(box, g, s, m);
         box.AddChild(new HSeparator());
@@ -396,7 +415,7 @@ public partial class PortWindow : PanelContainer
             box.AddChild(Row(Text(label, 15), buy));
         }
         if (!_game.AtShipyard)
-            box.AddChild(Text(_game.NearestShipyard() is var yard and >= 0 ? $"買えるのは造船所だけ。最寄りは {g.StarAt(yard).Name} ▲" : "買えるのは造船所だけ", 13, Dim));
+            box.AddChild(Wrapped(_game.NearestShipyard() is var yard and >= 0 ? $"買えるのは造船所だけ。最寄りは {g.StarAt(yard).Name} ▲" : "買えるのは造船所だけ", 13, Dim));
         return box;
     }
 }

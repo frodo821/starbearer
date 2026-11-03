@@ -16,10 +16,12 @@ public readonly record struct MenuItem(string Label, Action? Act);
 /// </summary>
 public partial class Hud
 {
-    const float MenuWidth = 190, MenuRow = 26, MenuTitle = 28;
+    const float MenuMinWidth = 190, MenuRow = 26, MenuTitle = 28;
 
-    /// <summary>The open menu, and the view it belongs to: it closes if that view goes away.</summary>
-    (Vector2 At, string Title, MenuItem[] Items, Screen On, bool Map, bool Sky)? _menu;
+    /// <summary>The open menu, as wide as its longest line, and the view it belongs to: it closes if that view goes away.</summary>
+    (Vector2 At, string Title, MenuItem[] Items, Screen On, bool Map, bool Sky, float Width)? _menu;
+
+    float MenuWidth => _menu?.Width ?? MenuMinWidth;
 
     public bool MenuOpen => _menu is { } m && m.On == Game.Screen && m.Map == Game.MapOpen && m.Sky == Game.OrbitSky;
 
@@ -27,11 +29,14 @@ public partial class Hud
     {
         var list = items.ToArray();
         if (list.Length == 0) { _menu = null; return; }
-        // Kept on screen, clear of the console.
+        // As wide as the title or the longest choice, and kept on screen, clear of the console.
+        var width = Math.Max(MenuMinWidth, Math.Max(F.GetStringSize(title, HorizontalAlignment.Left, -1, 15).X + 20,
+            list.Max(x => F.GetStringSize(x.Label, HorizontalAlignment.Left, -1, 14).X) + 22));
+        width = Mathf.Min(width, Size.X - 16);
         var height = MenuTitle + list.Length * MenuRow + 6;
-        var x = Mathf.Min(at.X, Size.X - MenuWidth - 8);
+        var x = Mathf.Clamp(at.X, 8, Size.X - width - 8);
         var y = Mathf.Min(at.Y, Size.Y - ConsoleHeight - height - 8);
-        _menu = (new Vector2(x, y), title, list, Game.Screen, Game.MapOpen, Game.OrbitSky);
+        _menu = (new Vector2(x, y), title, list, Game.Screen, Game.MapOpen, Game.OrbitSky, width);
     }
 
     public void CloseMenu() => _menu = null;
@@ -56,7 +61,7 @@ public partial class Hud
     void DrawMenu()
     {
         if (!MenuOpen) return;
-        var (at, title, items, _, _, _) = _menu!.Value;
+        var (at, title, items, _, _, _, _) = _menu!.Value;
         var box = new Rect2(at, MenuWidth, MenuTitle + items.Length * MenuRow + 6);
         DrawRect(box, new Color(0.02f, 0.04f, 0.08f, 0.95f));
         DrawRect(box, new Color(Ink, 0.6f), false, 1);
