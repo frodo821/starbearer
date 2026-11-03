@@ -25,6 +25,7 @@ public partial class Main
     {
         SaveRefused = null;
         Save = made.Save;
+        _slot = NewSlot();   // a company of its own, beside the others
         WriteSave();
         ShowGalaxy(made.Galaxy);
         Board();
@@ -40,9 +41,13 @@ public partial class Main
         _loading = task;
         _loaded = () =>
         {
-            if (task.IsCompletedSuccessfully) { done(task.Result); return; }
-            GD.PushError(task.Exception?.ToString() ?? "loading failed");
+            Exception? why = task.Exception;
+            if (task.IsCompletedSuccessfully)
+                try { done(task.Result); return; }
+                catch (Exception e) { why = e; }
+            GD.PushError(why?.ToString() ?? "loading failed");
             LoadFailed = true;
+            RefreshSaves();
             Screen = Screen.Title;
         };
     }
@@ -68,21 +73,24 @@ public partial class Main
     /// <summary>Why the save on disk can't be carried on from, or null if it can (or there is none).</summary>
     public string? SaveRefused { get; private set; }
 
-    public void Continue()
+    public void Continue(SaveEntry entry)
     {
-        using var f = FileAccess.Open(SavePath, FileAccess.ModeFlags.Read);
-        SaveData? save;
-        try { save = SaveData.FromJson(f.GetAsText()); }
-        catch (System.Text.Json.JsonException) { save = null; }
+        var save = Read(entry.Path).Data;
         // An older build's save describes another galaxy than its seed makes now: say so, rather than load it wrong.
         if (save is not { Current: true })
         {
-            SaveRefused = save == null ? "セーブを読めない" : "古い版のセーブで、この版では続けられない（銀河の作りが変わった）。N で新しい銀河を始める";
+            SaveRefused = save == null ? "このセーブは読めない" : "古い版のセーブで、この版では続けられない（銀河の作りが変わった）。N で新しい銀河を始める";
             return;
         }
         SaveRefused = null;
-        Save = save;
-        Board();
+        _slot = entry.Path;
+        var have = G;
+        Load("銀河を読み込んでいます", () => have?.Seed == save.Seed ? have : Galaxy.Generate(save.Seed), g =>
+        {
+            if (g != G) ShowGalaxy(g);
+            Save = save;
+            Board();
+        });
     }
 
     /// <summary>Set up the docked state from the checkpoint. Also the retry entry point.</summary>
@@ -112,12 +120,6 @@ public partial class Main
         _forecastDirty = true;
     }
 
-    void WriteSave()
-    {
-        using var f = FileAccess.Open(SavePath, FileAccess.ModeFlags.Write);
-        f.StoreString(Save!.ToJson());
-    }
-
     public void Retry()
     {
         Save!.Retries++;
@@ -127,9 +129,12 @@ public partial class Main
 
     public void EndVoyageForGood()
     {
-        DirAccess.RemoveAbsolute(ProjectSettings.GlobalizePath(SavePath));
+        if (_slot != null) DirAccess.RemoveAbsolute(ProjectSettings.GlobalizePath(_slot));
+        _slot = null;
         Save = null; V = null; G = null;
         _sky?.QueueFree(); _sky = null;
+        RefreshSaves();
+        TitleChoice = 0;
         Screen = Screen.Title;
     }
 }

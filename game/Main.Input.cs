@@ -67,6 +67,7 @@ public partial class Main
     public override void _UnhandledInput(InputEvent e)
     {
         if (Screen == Screen.Loading) return;
+        if (Screen == Screen.Title) { TitleInput(e); return; }
         if (MenuInput(e)) return;
         if (e is InputEventMouseButton { ButtonIndex: MouseButton.Left } click)
         {
@@ -125,10 +126,6 @@ public partial class Main
         if (MapOpen && k.Keycode == Key.T) Chart.Center = V!.ChartPositions[V.TargetStar];
         switch (Screen)
         {
-            case Screen.Title:
-                if (k.Keycode == Key.Enter) { if (HasSave) Continue(); else StartNewGalaxy(); }
-                if (k.Keycode == Key.N) StartNewGalaxy();
-                break;
             case Screen.Orbit:
                 if (ButtonOnly(k.Keycode) && !_fromButton) break;
                 if (V!.Docked && ShipControl(k.Keycode)) { Message = DockedNotice; break; }

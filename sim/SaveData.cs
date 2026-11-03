@@ -13,6 +13,9 @@ public sealed class SaveData
     public const int CurrentFormat = 1;
     public int Format { get; set; }
     public ulong Seed { get; set; }
+    /// <summary>When the checkpoint was written (UTC), and where the ship flown lay: for the list of saves, read without making the galaxy.</summary>
+    public DateTime SavedAt { get; set; }
+    public string Where { get; set; } = "";
     public int Deliveries { get; set; }
     public int Retries { get; set; }
     public double Credits { get; set; } = Tuning.StartingCredits;

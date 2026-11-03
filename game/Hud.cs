@@ -80,19 +80,10 @@ public partial class Hud : Control
 
     void DrawLoading()
     {
+        DrawShade();
         Centered(340, "STARBEARER", Ink, 64);
         var dots = new string('.', 1 + (int)(Time.GetTicksMsec() / 400 % 3));
         Centered(420, Game.LoadingLabel + dots, Dim, 22);
-    }
-
-    void DrawTitle()
-    {
-        Centered(340, "STARBEARER", Ink, 64);
-        Centered(400, "星間運送", Dim, 22);
-        if (Game.HasSave) Centered(500, "Enter  続きから      N  新しい銀河", Ink, 22);
-        else Centered(500, "Enter  新しい銀河", Ink, 22);
-        if (Game.LoadFailed) Centered(550, "読み込みに失敗した", Warn, 16);
-        if (Game.SaveRefused is { } why) Centered(580, why, Warn, 16);
     }
 
     void DrawDead()

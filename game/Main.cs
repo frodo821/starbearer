@@ -16,9 +16,6 @@ public enum Screen { Title, Loading, Orbit, Plan, Flight, Port, Dead }
 /// <summary>Owns game flow: one checkpoint on disk, one Voyage in memory. The other parts of Main are split by what they handle.</summary>
 public partial class Main : Node3D
 {
-    // The scripted smoke run must never touch the player's save.
-    static string SavePath => OS.GetCmdlineUserArgs().Any(a => a.StartsWith("--autotest=")) ? "user://autotest_save.json" : "user://save.json";
-
     public Screen Screen { get; private set; } = Screen.Title;
     public SaveData? Save { get; private set; }
     public Galaxy? G { get; private set; }
@@ -40,13 +37,15 @@ public partial class Main : Node3D
     Sky? _sky;
     Hud _hud = null!;
     readonly Worlds _worlds = new();
+    readonly TitleView _title = new();
+    /// <summary>How dark the title's view is drawn over: between its scenes, and before the first is ready.</summary>
+    public float TitleShade => _title.Shade;
     float _yaw, _pitch;
 
     /// <summary>The ship's primary on the galaxy chart, in ly.</summary>
     public Vec3d PrimaryOnChart => V!.System.Position + V.Primary.StarPosition(V.AbsoluteTime) * Sublight.Scale;
 
     public bool Owns(string module) => Save?.Modules.Contains(module) == true;
-    public bool HasSave => FileAccess.FileExists(SavePath);
 
     public override void _Ready()
     {
@@ -61,17 +60,37 @@ public partial class Main : Node3D
         Camera = new Camera3D { Fov = 70, Far = 1000 };
         AddChild(Camera);
         AddChild(_worlds);
+        AddChild(_title);
         var layer = new CanvasLayer();
         AddChild(layer);
         _hud = new Hud { Game = this };
         _hud.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         layer.AddChild(_hud);
         var script = new Autotest(this);
-        if (script.Enabled) { Chart.Instant = true; AddChild(script); }
+        if (script.Enabled)
+        {
+            Chart.Instant = true; AddChild(script);
+            // Each run starts from no saves.
+            if (DirAccess.Open(SaveDir) is { } dir)
+                foreach (var f in dir.GetFiles()) dir.Remove(f);
+        }
+        RefreshSaves();
+        // The title's view: a galaxy of its own, a fixed one for the scripted run.
+        _title.Begin(script.Enabled ? 77UL : (ulong)System.Random.Shared.NextInt64());
     }
 
     public override void _Process(double delta)
     {
+        // Behind the title and the loading screen, the title's own view; the game's sky and worlds are put away.
+        var titled = Screen is Screen.Title or Screen.Loading;
+        _title.Visible = titled;
+        _worlds.Visible = !titled;
+        if (_sky != null) _sky.Visible = !titled;
+        if (titled)
+        {
+            if (_title.Step(delta) is { } look) LookAt(look);
+            Camera.Rotation = new Vector3(_pitch, _yaw, 0);
+        }
         if (Screen == Screen.Loading) { PollLoading(); _hud.QueueRedraw(); return; }
         if (Cue is { } cue)
         {

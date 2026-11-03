@@ -94,9 +94,45 @@ public partial class Autotest : Node
 
     void Build()
     {
+        // The title: its view comes up behind it, and it lists the saves on disk.
+        Until(() => _g.TitleShade < 0.05f, 10);
         Do(() =>
         {
             Shot("00_title");
+            Check("the title's view comes up, with no saves listed", _g.TitleShade < 0.05f && !_g.HasSave && _g.TitleChoice == 0);
+            _g.PlantSavesForTest();
+        });
+        Do(() =>
+        {
+            Shot("00a_title_saves");
+            Check("the title lists the saves, the newest first", _g.Saves.Count == 2 && _g.Saves[0].Playable && !_g.Saves[1].Playable);
+            Press(Key.Down);
+            Press(Key.Enter);
+        });
+        Do(() =>
+        {
+            Check("an older build's save is refused, on the title", _g.TitleChoice == 1 && _g.Screen == Screen.Title && _g.SaveRefused != null);
+            Press(Key.Delete);
+        });
+        Do(() =>
+        {
+            Check("one Delete only arms it", _g.Saves.Count == 2 && _g.DeleteArmed);
+            Press(Key.Delete);
+        });
+        Do(() =>
+        {
+            Check("a second deletes the save", _g.Saves.Count == 1 && _g.Saves[0].Playable && !_g.DeleteArmed);
+            Click(MouseButton.Left, _g.HudForTest.TitleBinForTest(0));
+        });
+        Do(() =>
+        {
+            Shot("00b_title_delete");
+            Check("the row's delete button arms, and stays on the title", _g.DeleteArmed && _g.Saves.Count == 1 && _g.Screen == Screen.Title);
+            Click(MouseButton.Left, _g.HudForTest.TitleBinForTest(0));
+        });
+        Do(() =>
+        {
+            Check("a second click deletes it", !_g.HasSave && _g.TitleChoice == 0);
             _g.StartSeed(1234);
             Check("starting a galaxy shows the loading screen", _g.Screen == Screen.Loading);
         });
@@ -1051,7 +1087,11 @@ public partial class Autotest : Node
             Press(Key.R);
         });
         Do(() => Check("bankruptcy has no retry", _g.Screen == Screen.Dead && _g.Save!.Retries == _retries));
-        Do(() => Press(Key.X));
+        Do(() =>
+        {
+            Check("a company keeps to one save file all the way", _g.SaveFilesForTest == 1);
+            Press(Key.X);
+        });
         Do(() =>
         {
             Check("ending deletes the save", _g.Screen == Screen.Title && !_g.HasSave);

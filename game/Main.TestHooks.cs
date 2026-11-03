@@ -73,7 +73,22 @@ public partial class Main
     public void CommandForTest(Key k) => PressButton(new Command(k, "", ""));
 
     public Vector2 DeleteButtonForTest => _hud.DeleteButton(Selected!)!.Value;
-    public void ReloadForTest() => Continue();
+    /// <summary>Two saves on disk for the title to list: a company of this build, and an older build's, written earlier.</summary>
+    public void PlantSavesForTest()
+    {
+        void Put(string name, SaveData s)
+        {
+            using var f = FileAccess.Open($"{SaveDir}/{name}.json", FileAccess.ModeFlags.Write);
+            f.StoreString(s.ToJson());
+        }
+        Put("planted-new", new SaveData { Format = SaveData.CurrentFormat, Seed = 99, SavedAt = DateTime.UtcNow, Where = "Veor 燃料プラント", Deliveries = 12, TotalDays = 140, Credits = 2350 });
+        Put("planted-old", new SaveData { Format = 0, Seed = 98, SavedAt = DateTime.UtcNow.AddDays(-3), Where = "Ardel 鉱山" });
+        RefreshSaves();
+    }
+
+    public int SaveFilesForTest => DirAccess.GetFilesAt(SaveDir).Length;
+
+    public void ReloadForTest() => Continue(new SaveEntry(_slot!, null, default));
     public Hud HudForTest => _hud;
     public Sky SkyForTest => _sky!;
     public Vector2 BodyPointForTest(Center c) => _hud.BodyPointForTest(c);
