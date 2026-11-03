@@ -1,63 +1,5 @@
 namespace Starbearer.Sim;
 
-/// <summary>A station a faction built during the game: where, what, whose, and the gate it pairs with (-1 for none).</summary>
-public sealed record AddedStation(int Id, int Star, StationKind Kind, int Owner, int Link = -1);
-
-/// <summary>Something the war did on a day: a station destroyed or built, a system changing hands.</summary>
-public sealed record WarEvent(double Day, string Kind, int Station, int Star, int Faction);
-
-/// <summary>
-/// The war as it stands: which stations are down (fortress sites not yet built, and anything destroyed),
-/// how damaged the rest are, when each fortress went up, and how far each faction's next one has come.
-/// Saved with the market, and shared with the galaxy so every lookup sees only what stands.
-/// </summary>
-public sealed class WarState
-{
-    /// <summary>Stations destroyed. (They never come back; a faction builds anew instead.)</summary>
-    public HashSet<int> Down { get; set; } = new();
-    /// <summary>Stations built during the game, in the order they went up.</summary>
-    public List<AddedStation> Added { get; set; } = new();
-    /// <summary>The id the next station built gets.</summary>
-    public int NextId { get; set; }
-    /// <summary>Structure left, 1 at full; a station missing from it is whole.</summary>
-    public Dictionary<int, double> Hull { get; set; } = new();
-    /// <summary>The galaxy day each fortress built during the game went up; one there from the start has none.</summary>
-    public Dictionary<int, double> Built { get; set; } = new();
-    /// <summary>Per faction, building materials gathered toward its next fortress, as a share of one.</summary>
-    public double[] Progress { get; set; } = Array.Empty<double>();
-    /// <summary>Stations destroyed in the fighting (Down also holds them).</summary>
-    public HashSet<int> Destroyed { get; set; } = new();
-    public List<WarEvent> Log { get; set; } = new();
-    /// <summary>Per faction, materials gathered toward its next station of the economy, as a share of one (see Industry).</summary>
-    public double[] Industry { get; set; } = Array.Empty<double>();
-    /// <summary>Per faction, how long each ware has been short across it, in days, by ware id.</summary>
-    public List<Dictionary<string, double>> Shortage { get; set; } = new();
-    /// <summary>Per faction, how long each ware has been stranded: plenty where it is made, short where it is wanted.</summary>
-    public List<Dictionary<string, double>> Stranded { get; set; } = new();
-    /// <summary>Per faction, materials gathered toward its next gate, as a share of one.</summary>
-    public double[] GateProgress { get; set; } = Array.Empty<double>();
-    /// <summary>Gate pairs standing still for want of upkeep, by the lower id of the pair.</summary>
-    public HashSet<int> Stopped { get; set; } = new();
-    /// <summary>Per faction, the day it last built a station of the economy.</summary>
-    public double[] LastBuilt { get; set; } = Array.Empty<double>();
-
-    public double HullOf(int station) => Hull.TryGetValue(station, out var h) ? h : 1;
-
-    public WarState Copy() => new()
-    {
-        Down = Down.ToHashSet(), Added = Added.ToList(), NextId = NextId, Hull = new(Hull), Built = new(Built), Progress = (double[])Progress.Clone(), Destroyed = Destroyed.ToHashSet(), Log = Log.ToList(),
-        Stopped = Stopped.ToHashSet(), Industry = (double[])Industry.Clone(),
-        Stranded = Stranded.Select(x => new Dictionary<string, double>(x)).ToList(), GateProgress = (double[])GateProgress.Clone(), Shortage = Shortage.Select(x => new Dictionary<string, double>(x)).ToList(), LastBuilt = (double[])LastBuilt.Clone(),
-    };
-
-    public static WarState Start(Galaxy g) => new()
-    {
-        NextId = g.NextStationId, Progress = new double[g.Factions.Length], Industry = new double[g.Factions.Length],
-        Shortage = g.Factions.Select(_ => new Dictionary<string, double>()).ToList(),
-        Stranded = g.Factions.Select(_ => new Dictionary<string, double>()).ToList(), GateProgress = new double[g.Factions.Length], LastBuilt = Enumerable.Repeat(double.NegativeInfinity, g.Factions.Length).ToArray(),
-    };
-}
-
 /// <summary>
 /// The war, abstractly. Every faction is at war with every other. In a system where more than one has a
 /// station, their fortresses trade fire each day: each side hits the other's weakest fortress, or with
@@ -65,7 +7,7 @@ public sealed class WarState
 /// and fuel, give or take the day's luck. A supplied fortress repairs most of what an equal one does to
 /// it, so even sides wear each other down slowly, and the better supplied wins.
 /// A station at no structure is destroyed, and the ships left there with it. Steel the fortresses and
-/// shipyards take in builds the faction's next one, at its sites near the front.
+/// shipyards take in builds the faction's next one, where the war needs it (see Build).
 /// </summary>
 public static class War
 {
@@ -133,13 +75,10 @@ public static class War
             }
         }
         // Shipyards turn steel into fortresses too, so a faction driven from the front can come back.
-        foreach (var yard in g.Ports.Where(p => g.KindOf(p) == StationKind.Shipyard && g.Alive(p) && g.OwnerOf(p) >= 0))
+        foreach (var yard in g.Shipyards())
         {
-            if (w.Progress[g.OwnerOf(yard)] >= 1) continue;
-            var i = g.Economies[yard].IndexOf("steel");
-            var used = Math.Min(YardSteel, m.Stock[yard][i]);
-            m.Stock[yard][i] -= used;
-            w.Progress[g.OwnerOf(yard)] += used / SteelPerFortress;
+            var f = g.OwnerOf(yard);
+            if (f >= 0 && w.Progress[f] < 1) w.Progress[f] += m.Take(g, yard, "steel", YardSteel) / SteelPerFortress;
         }
         // Fire, in every system where more than one faction stands.
         var hit = new Dictionary<int, double>();

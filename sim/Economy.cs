@@ -30,6 +30,9 @@ public sealed class StationEconomy
 /// </summary>
 public static class Economy
 {
+    /// <summary>The kinds of station that make and use goods for the economy: those before Depot.</summary>
+    public static readonly StationKind[] EconomicKinds = Enumerable.Range(0, (int)StationKind.Depot).Select(i => (StationKind)i).ToArray();
+
     /// <summary>Days of flow a station aims to hold.</summary>
     public const double TargetDays = 25;
     /// <summary>Stock beyond this many times the target has no room: lines making it stop.</summary>

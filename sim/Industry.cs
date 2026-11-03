@@ -31,12 +31,10 @@ public static class Industry
     /// <summary>A gate is built only where it brings stranded goods at least this much closer, summed over pairs.</summary>
     public const double MinGateGain = 0.02;
 
-    static readonly StationKind[] Economic = Enumerable.Range(0, (int)StationKind.Depot).Select(i => (StationKind)i).ToArray();
-
     /// <summary>The kind of station that makes most of a ware, or null where none of the economy's does (war goods).</summary>
     public static StationKind? MakerOf(string ware)
     {
-        var best = Economic.Select(k => (k, Rate: Economy.Nominal(k).Makes.GetValueOrDefault(ware))).MaxBy(x => x.Rate);
+        var best = Economy.EconomicKinds.Select(k => (k, Rate: Economy.Nominal(k).Makes.GetValueOrDefault(ware))).MaxBy(x => x.Rate);
         return best.Rate > 0 ? best.k : null;
     }
 
@@ -64,15 +62,11 @@ public static class Industry
     {
         var w = m.War;
         if (w.GateProgress[faction] >= 1 || !w.Stranded[faction].Values.Any(d => d >= ShortDays / 2)) return;
-        foreach (var yard in g.Ports.Where(p => g.KindOf(p) == StationKind.Shipyard && g.Alive(p) && g.OwnerOf(p) == faction))
+        foreach (var yard in g.Shipyards(faction))
         {
-            var e = g.Economies[yard];
-            var (ti, el) = (e.IndexOf("titanium"), e.IndexOf("electronics"));
-            var tiUsed = Math.Min(YardTitanium, m.Stock[yard][ti]);
-            var elUsed = Math.Min(YardElectronics, m.Stock[yard][el]);
-            m.Stock[yard][ti] -= tiUsed;
-            m.Stock[yard][el] -= elUsed;
-            w.GateProgress[faction] += 0.5 * tiUsed / TitaniumPerGate + 0.5 * elUsed / ElectronicsPerGate;
+            var titanium = m.Take(g, yard, "titanium", YardTitanium);
+            var electronics = m.Take(g, yard, "electronics", YardElectronics);
+            w.GateProgress[faction] += 0.5 * titanium / TitaniumPerGate + 0.5 * electronics / ElectronicsPerGate;
         }
     }
 
@@ -148,13 +142,7 @@ public static class Industry
     {
         var w = m.War;
         if (w.Industry[faction] >= 1) return;
-        foreach (var yard in g.Ports.Where(p => g.KindOf(p) == StationKind.Shipyard && g.Alive(p) && g.OwnerOf(p) == faction))
-        {
-            var i = g.Economies[yard].IndexOf("steel");
-            var used = Math.Min(YardSteel, m.Stock[yard][i]);
-            m.Stock[yard][i] -= used;
-            w.Industry[faction] += used / SteelPerStation;
-        }
+        foreach (var yard in g.Shipyards(faction)) w.Industry[faction] += m.Take(g, yard, "steel", YardSteel) / SteelPerStation;
     }
 
     /// <summary>
