@@ -638,6 +638,42 @@ public partial class Autotest : Node
         Do(() =>
         {
             Check("retry returns to the docked orbit", _g.Screen == Screen.Orbit && _g.Save!.Retries == 1);
+            Press(Key.U);
+            Press(Key.Space);
+        }, 30);
+        Do(() => { Press(Key.Escape); _time = _g.V!.Time; }, 20);
+        Do(() =>
+        {
+            Check("Esc opens the pause menu and stops the clock", _g.PauseOpen && _g.V!.Time == _time && _time > 0);
+            Shot("15_pause_menu");
+            Press(Key.Down);
+            Press(Key.Enter);
+        });
+        Do(() =>
+        {
+            Check("restarting after a voyage asks again first", _g.PauseOpen && _g.PauseArmed == Main.PauseItem.Restart);
+            Shot("15a_pause_armed");
+            Press(Key.Enter);
+        });
+        Do(() =>
+        {
+            Check("restart goes back to the last port call", !_g.PauseOpen && _g.Screen == Screen.Orbit && _g.V!.Docked && _g.V.Time == 0 && _g.Save!.Retries == 2);
+            Click(MouseButton.Left, _g.HudForTest.ButtonForTest(Key.Escape));
+        });
+        Do(() =>
+        {
+            Check("the menu button opens it too", _g.PauseOpen);
+            Click(MouseButton.Left, _g.HudForTest.PauseRowForTest(2));
+        });
+        Do(() =>
+        {
+            Check("at the port call nothing is lost, so the title is one press away", _g.Screen == Screen.Title && _g.Save == null && _g.TitleChoice == 0 && _g.HasSave);
+            Press(Key.Enter);
+        });
+        Until(() => _g.Screen == Screen.Orbit);
+        Do(() =>
+        {
+            Check("the company is carried on from the title", _g.V!.Docked && _g.Save!.Retries == 2 && _g.SaveFilesForTest == 1);
             _g.Save!.Modules.Add(Modules.Transfer);
             _g.Save.Modules.Add(Modules.AutoBurn);
             Press(Key.U);

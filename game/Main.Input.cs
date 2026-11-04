@@ -67,7 +67,9 @@ public partial class Main
     public override void _UnhandledInput(InputEvent e)
     {
         if (Screen == Screen.Loading) return;
+        if (PauseRelease(e)) return;
         if (Screen == Screen.Title) { TitleInput(e); return; }
+        if (PauseOpen) { PauseInput(e); return; }
         if (MenuInput(e)) return;
         if (e is InputEventMouseButton { ButtonIndex: MouseButton.Left } click)
         {
@@ -121,6 +123,7 @@ public partial class Main
             if (k.Keycode == Key.I) { ToggleManifest(); return; }
             if (k.Keycode == Key.Escape && StationInfoOpen) { CloseStationInfo(); return; }
             if (k.Keycode == Key.Escape && ManifestOpen) { ToggleManifest(); return; }
+            if (k.Keycode == Key.Escape && Screen != Screen.Plan) { OpenPause(); return; }
             if (k.Keycode == Key.V) { ShowWinds = !ShowWinds; Message = ShowWinds ? "風向を表示" : "風向を隠した"; return; }
             if (k.Keycode == Key.P) { ShowJobs = !ShowJobs; Message = ShowJobs ? "この星系の仕事の行き先を表示" : "仕事の行き先を隠した"; return; }
         }
@@ -174,10 +177,12 @@ public partial class Main
                 if (k.Keycode == Key.Key4) Purchase(Supply.BuyLife);
                 if (k.Keycode == Key.Key5) Purchase(Supply.RepairHull);
                 if (k.Keycode == Key.Key6) Purchase(Supply.BuyReactionMass);
+                if (k.Keycode == Key.Escape) OpenPause();
                 break;
             case Screen.Dead:
                 if (k.Keycode == Key.R && !Bankrupt) Retry();
                 if (k.Keycode == Key.X) EndVoyageForGood();
+                if (k.Keycode == Key.Escape) OpenPause();
                 break;
         }
     }

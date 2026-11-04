@@ -101,9 +101,9 @@ public partial class Main : Node3D
         }
         WatchState();
         Chart.Update(delta);
-        if (Screen is Screen.Flight or Screen.Orbit) UpdateAttitude(delta);
+        if (Screen is Screen.Flight or Screen.Orbit && !PauseOpen) UpdateAttitude(delta);
         Camera.Rotation = new Vector3(_pitch, _yaw, 0);
-        if (V == null) { _hud.QueueRedraw(); return; }
+        if (V == null || PauseOpen) { _hud.QueueRedraw(); return; }
         var v = V;
 
         if (Screen == Screen.Orbit) UpdateOrbit(delta);

@@ -27,14 +27,14 @@ public partial class Hud : Control
 
     public override void _Process(double delta)
     {
-        var manifest = Game.ManifestOpen && Game.Screen is Screen.Orbit or Screen.Plan or Screen.Flight && Game.V != null;
+        var manifest = !Game.PauseOpen && Game.ManifestOpen && Game.Screen is Screen.Orbit or Screen.Plan or Screen.Flight && Game.V != null;
         if (manifest != Manifest.Visible)
         {
             if (manifest) Manifest.Rebuild();
             Manifest.Visible = manifest;
         }
-        StationInfo.Visible = StationInfo.StationId >= 0 && Game.Screen is Screen.Orbit or Screen.Plan or Screen.Flight && Game.V != null;
-        var open = Game.Screen == Screen.Port;
+        StationInfo.Visible = !Game.PauseOpen && StationInfo.StationId >= 0 && Game.Screen is Screen.Orbit or Screen.Plan or Screen.Flight && Game.V != null;
+        var open = Game.Screen == Screen.Port && !Game.PauseOpen;
         if (open == Port.Visible) return;
         if (open) Port.Rebuild();
         Port.Visible = open;
@@ -69,6 +69,7 @@ public partial class Hud : Control
             case Screen.Dead: DrawDead(); break;
         }
         DrawMenu();
+        if (Game.PauseOpen && Game.Save != null) DrawPauseMenu();
     }
 
     void DrawHudLayers()

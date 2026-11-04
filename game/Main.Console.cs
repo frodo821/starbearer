@@ -92,6 +92,7 @@ public partial class Main
     /// FTL) and the view. In planning a jump, the plan's own controls.
     /// </summary>
     Command WindsCommand => new(Key.V, "V", ShowWinds ? "風向 入" : "風向 切");
+    Command MenuCommand => new(Key.Escape, "Esc", "メニュー");
     Command JobsCommand => new(Key.P, "P", ShowJobs ? "仕事 入" : "仕事 切");
 
     public List<(string Group, Command[] Items)> BarCommands()
@@ -118,10 +119,12 @@ public partial class Main
             }
             list.Add(("FTL", new Command[] { new(Key.J, "J", v.Docked ? "発進計画" : "FTL発進") }));
             list.Add(("表示", new Command[] { new(Key.Tab, "Tab", OrbitSky ? "軌道図" : "空"), WindsCommand, JobsCommand }));
+            list.Add(("", new Command[] { MenuCommand }));
             return list;
         }
         list.Add(("亜光速", new Command[] { new(Key.D, "D", "降下", v.Phase == Phase.Flight && v.NearestWell(out _) < double.MaxValue) }));
         list.Add(("表示", new Command[] { new(Key.Tab, "Tab", MapOpen ? "空" : "星図"), WindsCommand, JobsCommand }));
+        list.Add(("", new Command[] { MenuCommand }));
         return list;
     }
 
