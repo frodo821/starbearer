@@ -183,13 +183,14 @@ public partial class Main
     {
         if (!Owns(Modules.Transfer)) { Message = "転送計算機が未搭載"; return; }
         if (V!.Waypoint is not { } st) { Message = NoWaypoint; return; }
-        var plan = Sublight.PlanRendezvous(V.Primary, st, V.SubPosition, V.SubVelocity, V.AbsoluteTime);
-        if (plan == null) { Message = "転送計算機: 解が見つからない"; return; }
+        var plan = Sublight.PlanRendezvous(V.Primary, st, V.SubPosition, V.SubVelocity, V.AbsoluteTime, V.SublightDeltaV);
+        if (plan == null) { Message = "転送計算機: 解が見つからない。待てば窓が来ることもある"; return; }
         V.Nodes.Clear();
         V.Nodes.AddRange(plan);
         Selected = plan[0];
         HandlesOpen = false;
-        Message = $"転送計算機: {plan.Count}段の噴射を計画 (Δv {Instruments.Speed(plan.Sum(n => n.DeltaV))})";
+        var total = plan.Sum(n => n.DeltaV);
+        Message = $"転送計算機: {plan.Count}段の噴射を計画 (Δv {Instruments.Speed(total)})" + (total > V.SublightDeltaV ? "。推進剤が足りない: 最も安い案" : "");
         Replan();
     }
 }

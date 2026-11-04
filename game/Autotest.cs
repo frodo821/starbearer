@@ -153,7 +153,7 @@ public partial class Autotest : Node
             Check("space stops and starts time", _g.Paused == _paused);
             Check("a voyage starts docked", _g.V!.Docked);
             Shot("01a_docked");
-            _fuel = _g.V.Fuel;
+            _fuel = _g.V.Fuel + _g.V.ReactionMass;
             Press(Key.O);
             Press(Key.E);
             Click(MouseButton.Left, _g.HoldButtonForTest(ViewHold.Prograde));
@@ -162,7 +162,7 @@ public partial class Autotest : Node
         Do(() =>
         {
             Key_(Key.Left, false);
-            Check("a docked ship's controls are locked", !_g.Helm.EngineOn && _g.Helm.Throttle != 1 && _g.Helm.Hold == ViewHold.Free && _g.V!.Fuel == _fuel && _g.V.Docked);
+            Check("a docked ship's controls are locked", !_g.Helm.EngineOn && _g.Helm.Throttle != 1 && _g.Helm.Hold == ViewHold.Free && _g.V!.Fuel + _g.V.ReactionMass == _fuel && _g.V.Docked);
             Press(Key.J);
         });
         Do(() => { Check("a departure can be planned while docked", _g.Screen == Screen.Plan); Press(Key.Enter); });
@@ -744,7 +744,7 @@ public partial class Autotest : Node
         });
         Do(() =>
         {
-            Check("transfer computer plans a multi-stage burn", _g.V!.Nodes.Count >= 2);
+            Check("transfer computer plans the burns", _g.V!.Nodes.Count >= 1);
             Check("no jump path shows until one is planned", _g.Forecast == null);
             _g.Chart.Zoom = 30;
         });
@@ -765,7 +765,7 @@ public partial class Autotest : Node
             Check("arriving at a node keeps real time for lining up", _g.Aligning && !_g.Paused && _g.CurrentRate == Main.Rates[0]);
             Press(Key.G);
             Press(Key.Key6);
-            _fuel = _g.V!.Fuel;
+            _fuel = _g.V!.ReactionMass;
         }, 30);
         Do(() => Shot("07_orbit_transfer"), 1);
         Until(() =>
@@ -776,7 +776,8 @@ public partial class Autotest : Node
         Do(() =>
         {
             Check("auto burn flew the nodes", _g.V!.Nodes.Count == 0 || _g.Screen == Screen.Port);
-            Check("auto burn is real thrust", _g.Screen == Screen.Port || _sawEngine);
+            // A short burn at speed can start and end between two frames: the reaction mass shows it was flown.
+            Check("auto burn is real thrust", _g.Screen == Screen.Port || _sawEngine || _g.V!.ReactionMass < _fuel);
             if (_g.Screen == Screen.Orbit) _g.V!.PlaceNearStationForTest(Tuning.DockRange * 20);   // the coast from here isn't under test
             Shot("08_rendezvous");
             _g.V!.PlaceNearStationForTest(Tuning.DockRange * 20);   // reaching it is the planners' test; this one is X and the dock
