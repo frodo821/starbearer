@@ -78,6 +78,9 @@ public partial class Hud
             Text(p + new Vector2(8, 4), name, new Color(c, c.A * shown), 13);
         }
         DrawRegionNames();
+        DrawSystemsInView(here);
+        DrawSystemJobs();
+        DrawWinds();
         var fc = Game.Forecast;
         // Up close, in orbit, the FTL line would only cross the orbit it starts from.
         var fade = here < 0 ? 1 : Mathf.Clamp(1.5f - Game.Chart.Zoom / 120, 0, 1);
@@ -162,32 +165,6 @@ public partial class Hud
 
     public Vector2 SystemPoint(int star, Vec3d p) => MapPoint(Game.V!.ChartPositions[star] + p * Sublight.ChartLyPerAu);
 
-    /// <summary>Close enough to a system, its stations' orbits come into view.</summary>
-    void DrawStations()
-    {
-        if (Game.Chart.Zoom < 40) return;
-        var g = Game.G!; var v = Game.V!;
-        foreach (var id in g.Ports.Concat(g.Depots).Where(g.Alive))
-        {
-            var star = g.StarOf(id);
-            var st = g.StationAt(id);
-            var host = (st.Host ?? g.System(star)).StarPosition(v.AbsoluteTime);
-            if (!new Rect2(Vector2.Zero, Size).Grow(200).HasPoint(MapPoint(v.ChartPositions[star]))) continue;
-            Vector2? last = null;
-            for (int i = 0; i <= 64; i++)
-            {
-                var a = i * Math.Tau / 64;
-                var p = SystemPoint(star, host + (st.U * Math.Cos(a) + st.W * Math.Sin(a)) * st.Radius);
-                if (last is { } l) DrawLine(l, p, new Color(Good, 0.35f), 1, true);
-                last = p;
-            }
-            var at = SystemPoint(star, host + st.Position(v.AbsoluteTime));
-            DrawRect(new Rect2(at - new Vector2(3, 3), 6, 6), Good);
-            var name = g.StationsIn(star).Count() > 1 ? Missions.KindLabel(g.KindOf(id)) : Missions.ShortName(g.KindOf(id));   // several: told apart
-            Text(at + new Vector2(7, -5), name + (star == v.TargetStar ? "（目的地）" : ""), Good, 12);
-        }
-    }
-
     /// <summary>The orbit a descent right now would leave the ship on.</summary>
     void DrawDescent()
     {
@@ -203,7 +180,6 @@ public partial class Hud
         DrawRect(new Rect2(Vector2.Zero, Size), new Color(0.01f, 0.02f, 0.05f, 0.92f));
 
         DrawGalaxyLayer();
-        DrawStations();
         DrawDescent();
         var me = MapPoint(v.EstimatedPosition);
         DrawArc(me, Mathf.Max(4f, (float)v.NavSigma * Game.Chart.Zoom * 2), 0, Mathf.Tau, 20, Ink, 1.5f, true);
@@ -212,7 +188,7 @@ public partial class Hud
         DrawLine(c0 + new Vector2(-7, 0), c0 + new Vector2(7, 0), Dim, 1);
         DrawLine(c0 + new Vector2(0, -7), c0 + new Vector2(0, 7), Dim, 1);
         Centered(118, "ダブルタップ その星を中心に   2本指 移動   ドラッグ 回転", Dim, 14);
-        Centered(138, "ピンチ 拡大（寄ると港の軌道）   R 自機へ   T 目的地へ", Dim, 14);
+        Centered(138, "ピンチ 拡大（寄るとその星系）   R 自機へ   T 目的地へ   V 風向   P 仕事", Dim, 14);
     }
 
     Vector2 _mapPress;

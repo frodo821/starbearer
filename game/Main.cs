@@ -27,6 +27,8 @@ public partial class Main : Node3D
     public bool CameraFollow;
     public bool MapOpen { get; set; }
     public bool OrbitSky;
+    /// <summary>The chart's overlays: the winds a jump from the present orbit meets, and where this system's jobs go.</summary>
+    public bool ShowWinds = true, ShowJobs = true;
     public bool Paused = true;
     public static readonly double[] Rates = Instruments.TimeScales.Select(x => x / Instruments.SecondsPerDay).ToArray();
     /// <summary>Time rate chosen in flight and in normal space, as indices into Rates.</summary>

@@ -231,24 +231,7 @@ public partial class Hud
     }
 
     /// <summary>The system's planets and moons, with their orbits.</summary>
-    void DrawBodies()
-    {
-        var v = Game.V!;
-        var t = v.AbsoluteTime;
-        foreach (var body in Game.G!.System(v.SystemStar).Tree.Skip(1))
-        {
-            var around = body.Parent!.StarPosition(t);
-            var (u, w, rad) = (body.U, body.W, body.OrbitRadius);
-            if (rad * Game.Chart.PixelsPerAu > 12)
-                for (int i = 0; i < 96; i++)
-                    DrawLine(StarPoint(around + (u * Math.Cos(i * Math.Tau / 96) + w * Math.Sin(i * Math.Tau / 96)) * rad),
-                        StarPoint(around + (u * Math.Cos((i + 1) * Math.Tau / 96) + w * Math.Sin((i + 1) * Math.Tau / 96)) * rad), new Color(Dim, 0.3f), 1, true);
-            var at = StarPoint(body.StarPosition(t));
-            var col = body.Kind switch { BodyKind.Giant => new Color(0.95f, 0.8f, 0.55f), BodyKind.Moon => new Color(0.75f, 0.75f, 0.8f), _ => new Color(0.55f, 0.75f, 0.9f) };
-            DrawCircle(at, Mathf.Max(body.Kind == BodyKind.Moon ? 2f : 3.5f, (float)body.BodyRadius * Game.Chart.PixelsPerAu), col);
-            if (body.Edge * Game.Chart.PixelsPerAu > 10 || body.Kind != BodyKind.Moon) Text(at + new Vector2(7, 12), body.Name, new Color(col, 0.8f), 12);
-        }
-    }
+    void DrawBodies() => DrawBodiesOf(Game.G!.System(Game.V!.SystemStar), StarPoint);
 
     static readonly Color ApsisColor = new(0.55f, 0.85f, 1f);
 

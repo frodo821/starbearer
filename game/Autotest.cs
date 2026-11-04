@@ -498,6 +498,24 @@ public partial class Autotest : Node
         Do(() => Check("Esc closes it", !_g.HudForTest.StationInfo.Visible));
         Do(() =>
         {
+            Shot("03e_winds_and_jobs");
+            Check("winds and jobs are on the chart to begin with", _g.ShowWinds && _g.ShowJobs);
+            Press(Key.V); Press(Key.P);
+        });
+        Do(() =>
+        {
+            Check("V and P hide them", !_g.ShowWinds && !_g.ShowJobs);
+            Press(Key.V); Press(Key.P);
+            // Close in on another system: it opens up as a system, not only the one the ship is in.
+            if (_infoStar >= 0) (_g.Chart.Center, _g.Chart.Zoom) = (_g.V!.ChartPositions[_infoStar], 300);
+        });
+        Do(() =>
+        {
+            Check("V and P bring them back", _g.ShowWinds && _g.ShowJobs);
+            Shot("03f_other_system");
+        });
+        Do(() =>
+        {
             Check("clearing the destination goes back to the job's", _g.V!.TargetStar == _heldTarget && !_g.FreeCourse);
             (_g.Chart.Center, _g.Chart.Zoom) = (Vec3d.Zero, 5);   // the whole galaxy, where regions read
         });
@@ -757,7 +775,7 @@ public partial class Autotest : Node
             _clock = Time.GetTicksMsec();
             Press(Key.N);
         });
-        Do(() => Check("N runs time forward instead of jumping", _g.ToNode && _g.CurrentRate > 0));
+        Do(() => Check($"N runs time forward instead of jumping [{_g.Message} | next {(_g.V!.Nodes.Count > 0 ? _g.V.Nodes.Min(n => n.Time) - _g.V.AbsoluteTime : -1):F3} d]", _g.ToNode && _g.CurrentRate > 0));
         Until(() => !_g.ToNode || Time.GetTicksMsec() - _clock > 15000);
         Do(() =>
         {

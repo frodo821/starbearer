@@ -121,6 +121,8 @@ public partial class Main
             if (k.Keycode == Key.I) { ToggleManifest(); return; }
             if (k.Keycode == Key.Escape && StationInfoOpen) { CloseStationInfo(); return; }
             if (k.Keycode == Key.Escape && ManifestOpen) { ToggleManifest(); return; }
+            if (k.Keycode == Key.V) { ShowWinds = !ShowWinds; Message = ShowWinds ? "風向を表示" : "風向を隠した"; return; }
+            if (k.Keycode == Key.P) { ShowJobs = !ShowJobs; Message = ShowJobs ? "この星系の仕事の行き先を表示" : "仕事の行き先を隠した"; return; }
         }
         if (MapOpen && k.Keycode == Key.R) Chart.Center = V!.EstimatedPosition;
         if (MapOpen && k.Keycode == Key.T) Chart.Center = V!.ChartPositions[V.TargetStar];
