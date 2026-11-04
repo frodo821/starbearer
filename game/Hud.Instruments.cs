@@ -56,12 +56,13 @@ public partial class Hud
             var now = v.Fuel / v.Class.Tank;
             DrawRect(new Rect2(x + 44 + 180 * (float)after, y - 21, 180 * (float)(now - after), 11), Warn);
         }
+        Bar(x, ref y, "推進剤", v.ReactionMass / v.Class.ReactionTank, v.SublightDeltaV < 0.006 ? Warn : Ink, Instruments.Speed(v.SublightDeltaV));
         Bar(x, ref y, "船体", v.Hull, v.Hull < 0.4 ? Bad : Ink, $"{v.Hull:P0}");
         Bar(x, ref y, "積荷", v.CargoIntegrity, v.CargoIntegrity < 0.6 ? Warn : Ink, $"{v.CargoIntegrity:P0}");
         Bar(x, ref y, "熱", Math.Min(v.Heat, 1.5) / 1.5, v.Heat > 1 ? Bad : v.Heat > v.HeatTolerance ? Warn : Ink, $"{v.Heat:F2}");
         Bar(x, ref y, "生命", v.LifeRemaining / Tuning.LifeSupportDays, Ink, v.Docked ? $"{v.LifeRemaining:F0}日 停泊中" : $"{v.LifeRemaining:F0}日");
         y += 8;
-        Text(new Vector2(x, y), v.Phase == Phase.Sublight ? $"亜光速 Δv 残 {Instruments.Speed(v.SublightDeltaV)}   推力 {Game.EngineAcceleration:F2} /日" : $"推力 {Game.EngineAcceleration:F2} /日", Ink, 14); y += 20;
+        Text(new Vector2(x, y), $"推力 {Game.EngineAcceleration:F2} /日", Ink, 14); y += 20;
         Text(new Vector2(x, y), $"計算機 {(Game.Owns(Modules.Transfer) ? "搭載" : "なし")}   自動噴射 {(Game.Owns(Modules.AutoBurn) ? (v.AutoBurn ? "ON" : "OFF") : "なし")}", Dim, 13); y += 8;
         _shipHeight = y + PanelPad - 8;
     }

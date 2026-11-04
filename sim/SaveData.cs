@@ -51,6 +51,7 @@ public sealed class SaveData
     /// <summary>Jobs in the bays of the ship flown, as of the last dock.</summary>
     [JsonIgnore] public List<Consignment> Hold { get => Ship.Hold; set => Ship.Hold = value; }
     [JsonIgnore] public double HeldFuel { get => Ship.Fuel; set => Ship.Fuel = value; }
+    [JsonIgnore] public double HeldReaction { get => Ship.ReactionMass < 0 ? Ship.Fitted.ReactionTank : Ship.ReactionMass; set => Ship.ReactionMass = value; }
     [JsonIgnore] public double HeldHull { get => Ship.Hull; set => Ship.Hull = value; }
     [JsonIgnore] public double HeldLife { get => Ship.Life; set => Ship.Life = value; }
 

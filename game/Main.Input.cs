@@ -171,6 +171,7 @@ public partial class Main
                 if (k.Keycode == Key.Key3) BuyFuel();
                 if (k.Keycode == Key.Key4) Purchase(Supply.BuyLife);
                 if (k.Keycode == Key.Key5) Purchase(Supply.RepairHull);
+                if (k.Keycode == Key.Key6) Purchase(Supply.BuyReactionMass);
                 break;
             case Screen.Dead:
                 if (k.Keycode == Key.R && !Bankrupt) Retry();

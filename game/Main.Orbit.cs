@@ -100,13 +100,13 @@ public partial class Main
                 if (step > aim.DeltaV) engine *= aim.DeltaV / step;
             }
         }
-        var fuelBefore = v.Fuel;
+        var fuelBefore = v.ReactionMass;
         var firedOn = engine.LengthSq > 0 ? NextNode : null;
         Burn.Prepare(v, firedOn, PlanFrozen ? SubForecast : null);
         var passages = v.Passages;
         v.AdvanceSublight(rate * delta, engine);
         if (v.Passages != passages) PassedGate();
-        var burned = v.Fuel < fuelBefore ? engine * (v.SublightThrust * rate * delta) : (Vec3d?)null;
+        var burned = v.ReactionMass < fuelBefore ? engine * (v.SublightThrust * rate * delta) : (Vec3d?)null;
         Burn.Measure(v, firedOn, burned);
         if (firedOn != null && burned != null && firedOn == Burn.Node)
         {

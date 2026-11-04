@@ -172,7 +172,7 @@ public static class Autopilot
                         if (speedAtP > bound) v.Burn(-v.Velocity, speedAtP - bound);
                         v.Descend();
                         var el = Sublight.OrbitOf(Sublight.Mu(star), v.SubPosition, v.SubVelocity);
-                        var ok = v.Phase == Phase.Sublight && el.Bound && v.Fuel >= Tuning.RendezvousFuelReserve;
+                        var ok = v.Phase == Phase.Sublight && el.Bound;
                         return new Result(ok, v.Death, v.Fuel, v.Time, v.CargoIntegrity, route.Count - 1, ok ? "descended" : "missed capture", v);
                     }
                     var after = route[next + 1];

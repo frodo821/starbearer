@@ -223,9 +223,10 @@ public partial class PortWindow : PanelContainer
         box.AddChild(Row(Text(fuelLabel, 15, fuelStock < 0.05 ? Warn : null), Press($"{fuelCost:F0}", _game.BuyFuel, fuelMass > 1e-4, "3")));
         void Sale(string name, double cost, bool need, Action<SaveData> buy, string key) =>
             box.AddChild(Row(Text(name, 15), Press($"{cost:F0}", () => _game.Purchase(buy), need, key)));
+        Sale($"推進剤（亜光速） {s.HeldReaction:F3} / {s.Ship.Fitted.ReactionTank:F3}", Supply.ReactionMassCost(s), s.HeldReaction < s.Ship.Fitted.ReactionTank - 1e-6, Supply.BuyReactionMass, "6");
         Sale($"生命維持 残 {s.HeldLife:F0} 日", (Tuning.LifeSupportDays - s.HeldLife) * Tuning.LifePricePerDay, s.HeldLife < Tuning.LifeSupportDays - 0.5, Supply.BuyLife, "4");
         Sale($"船体 {s.HeldHull:P0}", (1 - s.HeldHull) * Tuning.HullRepairPrice, s.HeldHull < 0.999, Supply.RepairHull, "5");
-        box.AddChild(Wrapped("足りなければ買える分だけ。燃料は港の在庫から。出港に足る燃料も買えなければ破産", 13, Dim));
+        box.AddChild(Wrapped("足りなければ買える分だけ。燃料は FTL、推進剤は亜光速の噴射に使う。燃料は港の在庫から、推進剤はどの港でも安い。出港に足る燃料も買えなければ破産", 13, Dim));
         return box;
     }
 

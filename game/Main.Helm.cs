@@ -120,7 +120,9 @@ public partial class Main
 
     Vec3d EngineCommand()
     {
-        if (Helm.EngineOn && V!.Fuel <= 0) CutEngine("燃料切れ");
+        var v = V!;
+        if (Helm.EngineOn && v.Phase == Phase.Sublight && v.ReactionMass <= 0) CutEngine("推進剤切れ");
+        else if (Helm.EngineOn && v.Phase != Phase.Sublight && v.Fuel <= 0) CutEngine("燃料切れ");
         return Helm.Thrust();
     }
 

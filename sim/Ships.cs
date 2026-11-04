@@ -17,6 +17,8 @@ namespace Starbearer.Sim;
 public sealed record ShipClass(string Id, string Name, Bay[] Bays, double Price, double DryMass, double Tank, double Drag, double Thrust, bool Gates)
 {
     public double Capacity => Bays.Sum(b => b.Volume);
+    /// <summary>Reaction mass for normal space it holds when full (see Tuning.SublightExhaust).</summary>
+    public double ReactionTank => DryMass * Tuning.ReactionMassPerDryMass;
 }
 
 public static class Ships
@@ -87,6 +89,8 @@ public sealed class OwnedShip
     /// <summary>The station it is docked at, by station id.</summary>
     public int Station { get; set; }
     public double Fuel { get; set; } = Ships.Courier.Tank;
+    /// <summary>Reaction mass for normal space. Below zero (a save from before it was kept apart) reads as full.</summary>
+    public double ReactionMass { get; set; } = -1;
     public double Hull { get; set; } = 1;
     public double Life { get; set; } = Tuning.LifeSupportDays;
     public List<string> Modules { get; set; } = new();
@@ -98,10 +102,10 @@ public sealed class OwnedShip
     [JsonIgnore] public ShipClass Type => Ships.Get(Class);
     /// <summary>The hull as it flies: its class, plus the weight of the pressurizers fitted to it.</summary>
     [JsonIgnore] public ShipClass Fitted => Type with { DryMass = Type.DryMass + Pressurized.Sum(i => Type.Bays[i].Volume) * Tuning.PressureMassPerVolume };
-    public ShipState State => new(Fuel, Hull, Life);
+    public ShipState State => new(Fuel, Hull, Life, ReactionMass < 0 ? null : ReactionMass);
 
     /// <summary>A new ship as a shipyard hands it over: full tank and supplies, empty bays.</summary>
-    public static OwnedShip Build(ShipClass c, int id, int station) => new() { Id = id, Class = c.Id, Station = station, Fuel = c.Tank };
+    public static OwnedShip Build(ShipClass c, int id, int station) => new() { Id = id, Class = c.Id, Station = station, Fuel = c.Tank, ReactionMass = c.ReactionTank };
 }
 
 /// <summary>Buying, boarding and selling ships, at the station the flown ship is docked at.</summary>

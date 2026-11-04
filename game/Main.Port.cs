@@ -183,13 +183,14 @@ public partial class Main
         var station = v.LocalStation!.Id;
         var here = v.Hold.Where(c => c.Mission.Target == station).ToList();
         PortReport = here.Select(c => $"配達  {c.Mission.Cargo.Name}  健全度 {c.Integrity:P0}   報酬 {c.Payout:F0}").ToList();
-        PortReport.Add($"所要 {Instruments.Span(v.Time)}   残燃料 {v.Fuel:F2}   船体 {v.Hull:P0}");
+        PortReport.Add($"所要 {Instruments.Span(v.Time)}   残燃料 {v.Fuel:F2}   推進剤 {Instruments.Speed(v.SublightDeltaV)}   船体 {v.Hull:P0}");
         Earned = here.Sum(c => c.Payout);
         if (v.TollsDue > 0) PortReport.Add($"通行税  -{v.TollsDue:F0}");
         s.Credits = Math.Max(0, s.Credits + Earned - v.TollsDue);
         s.Deliveries += here.Count;
         s.Hold = v.Hold.Except(here).Select(c => c.Copy()).ToList();
         s.HeldFuel = v.Fuel;
+        s.HeldReaction = v.ReactionMass;
         s.HeldHull = v.Hull;
         s.HeldLife = v.LifeRemaining;
         var from = s.TotalDays;

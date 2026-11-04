@@ -35,11 +35,18 @@ public static class Tuning
 
     // Normal space
     public const double SublightThrust = 0.01;     // AU/day^2, about 0.2 m/s², a fiftieth of a g
-    public const double SublightFuelFactor = 15;   // FTL delta-v per sublight AU/day: a full tank is about 0.08 AU/day, some 130 km/s
+    /// <summary>
+    /// Normal space burns reaction mass of its own, apart from the FTL drive's fuel: AU/day of exhaust
+    /// (about 1,700 km/s), and a tank of this share of the hull's dry mass. That is some 100 km/s for a
+    /// small ship come down from a jump with a load and half its fuel, about 70 km/s leaving full. It is
+    /// carried through hyperspace too, so a full tank costs the jump a little.
+    /// </summary>
+    public const double SublightExhaust = 1.0, ReactionMassPerDryMass = 0.14;
+    /// <summary>Reaction mass is water and the like: every port has it, cheap, at this price per unit of mass.</summary>
+    public const double ReactionMassPrice = 40;
     public const double DockRange = 2e-5;          // AU, about 3,000 km
     public const double DockRelativeSpeed = 2e-4; // AU/day, about 0.35 km/s
     public const double HostClearance = 3;         // a station's orbit keeps this many radii of its host's body
-    public const double RendezvousFuelReserve = 0.5;  // covers about 90% of rendezvous, flown well
 
     // Flyby hazards
     public const double HeatCoefficient = 0.02;

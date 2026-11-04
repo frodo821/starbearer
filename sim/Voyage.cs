@@ -12,7 +12,8 @@ public sealed record Cargo(string Name, double Mass, double HeatTolerance, doubl
     public string? Ware { get; init; }
 }
 /// <summary>The ship as the last dock left it.</summary>
-public sealed record ShipState(double Fuel, double Hull, double Life);
+/// <param name="ReactionMass">Normal space's reaction mass; null fills the tank.</param>
+public sealed record ShipState(double Fuel, double Hull, double Life, double? ReactionMass = null);
 
 /// <summary>Everything that changes during a voyage. Sky rendering reads true state, the planner reads the estimate.</summary>
 public sealed class Voyage
@@ -58,8 +59,11 @@ public sealed class Voyage
     public Vec3d EstimatedPosition => TruePosition + _navError;
     public Vec3d[] TruePositions => _truth;
     public Vec3d[] ChartPositions => _chart;
-    public double Mass => Class.DryMass + CargoMass + Fuel;
-    public double DeltaVRemaining => Tuning.ExhaustVelocity * Math.Log(Mass / (Class.DryMass + CargoMass));
+    /// <summary>Reaction mass for normal space, apart from the drive's fuel (see Tuning.SublightExhaust).</summary>
+    public double ReactionMass { get; private set; }
+    public double Mass => Class.DryMass + CargoMass + Fuel + ReactionMass;
+    /// <summary>The FTL drive's delta-v: its fuel against everything else carried, reaction mass included.</summary>
+    public double DeltaVRemaining => Tuning.ExhaustVelocity * Math.Log(Mass / (Mass - Fuel));
     public double SublightThrust => Tuning.SublightThrust * Class.Thrust;
     public double FlightThrust => Tuning.MaxThrust * Class.Thrust;
 
@@ -104,6 +108,7 @@ public sealed class Voyage
         _station = NextDoor(origin);
         Class = shipClass ?? Ships.Courier;
         Fuel = ship?.Fuel ?? Class.Tank;
+        ReactionMass = ship?.ReactionMass ?? Class.ReactionTank;
         Hull = ship?.Hull ?? 1;
         LifeSupply = ship?.Life ?? Tuning.LifeSupportDays;
         ClosestApproach = closestApproach;
@@ -265,11 +270,23 @@ public sealed class Voyage
         Hold = hold.Select(c => c.Copy()).ToList();
         if (_station == OriginStation) _station = NextDoor(OriginStation);   // a job taken at the port for next door
         Fuel = ship.Fuel;
+        ReactionMass = ship.ReactionMass ?? Class.ReactionTank;
         Hull = ship.Hull;
         LifeSupply = ship.Life + (Time - _dockedDays);
     }
 
-    public double SublightDeltaV => DeltaVRemaining / Tuning.SublightFuelFactor;
+    /// <summary>Normal space's delta-v (AU/day), from the reaction mass against the whole ship.</summary>
+    public double SublightDeltaV => Tuning.SublightExhaust * Math.Log(Mass / (Mass - ReactionMass));
+
+    /// <summary>Spends reaction mass by the rocket equation. Returns the delta-v actually delivered.</summary>
+    double SpendSublight(double dv)
+    {
+        dv = Math.Min(dv, SublightDeltaV);
+        if (dv > 0) Docked = false;
+        var m1 = Mass / Math.Exp(dv / Tuning.SublightExhaust);
+        ReactionMass = Math.Max(0, ReactionMass - (Mass - m1));
+        return dv;
+    }
 
     /// <summary>Normal-space flight. thrust is a unit vector, or zero to coast.</summary>
     public void AdvanceSublight(double days, Vec3d thrust)
@@ -288,18 +305,18 @@ public sealed class Voyage
                 Sublight.Propagate(mu, ref p, ref v, wait);
                 PassSublightTime(wait); left -= wait;
                 var impulse = Sublight.Impulse(p, v, due);
-                var done = SpendDeltaV(impulse.Length * Tuning.SublightFuelFactor) / Tuning.SublightFuelFactor;
+                var done = SpendSublight(impulse.Length);
                 if (impulse.Length > 0) v += impulse.Normalized() * done;
                 Nodes.Remove(due);
                 continue;
             }
             var a = Vec3d.Zero;
             Thrusting = false;
-            if (thrust.LengthSq > 0 && Fuel > 0)
+            if (thrust.LengthSq > 0 && ReactionMass > 0)
             {
                 var throttle = thrust.Length;
                 var want = SublightThrust * throttle * dt;
-                var done = SpendDeltaV(want * Tuning.SublightFuelFactor) / Tuning.SublightFuelFactor;
+                var done = SpendSublight(want);
                 a = thrust.Normalized() * (done / dt);
                 Thrusting = true;
             }
@@ -450,7 +467,7 @@ public sealed class Voyage
         dv = Math.Min(dv, DeltaVRemaining);
         if (dv > 0) Docked = false;
         var m1 = Mass / Math.Exp(dv / Tuning.ExhaustVelocity);
-        Fuel = Math.Max(0, m1 - Class.DryMass - CargoMass);
+        Fuel = Math.Max(0, Fuel - (Mass - m1));
         return dv;
     }
 
@@ -575,7 +592,7 @@ public sealed class Voyage
 
     /// <summary>Puts the ship at a state relative to the star, leaving any planet.</summary>
     public void PlaceSublightForTest(Vec3d position, Vec3d velocity) { Primary = G.System(SystemStar); SubPosition = position; SubVelocity = velocity; SyncTruePosition(); }
-    public void RefillForTest() => Fuel = Class.Tank;
+    public void RefillForTest() { Fuel = Class.Tank; ReactionMass = Class.ReactionTank; }
     public void ForceDeathForTest() => Kill(DeathCause.Collision);
 
     void Kill(DeathCause c) { Death = c; Phase = Phase.Dead; }

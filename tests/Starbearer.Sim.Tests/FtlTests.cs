@@ -149,7 +149,7 @@ public partial class SimTests
         Assert.InRange(v.Velocity.Y, 0.09, 0.11);
         var fuel = v.Fuel;
         v.Advance(0.1, new Vec3d(0, 0.1, 0), false);    // a tenth of the throttle
-        Assert.InRange(fuel - v.Fuel, 0, 0.02);
+        Assert.InRange(fuel - v.Fuel, 0, 0.025);   // about 0.01 of delta-v
     }
 
     [Fact]
@@ -174,7 +174,7 @@ public partial class SimTests
         var to = g.Stars.Where(s => s != from).MinBy(s => (s.Position - from.Position).Length)!;
         var way = (to.Position - from.Position).Normalized();
         var start = from.Position + way * (Sublight.SystemRadius(from) * 1.01 / Sublight.AuPerLy);
-        var speed = Tuning.ExhaustVelocity * Math.Log(2) / Tuning.SublightFuelFactor * 10;   // ten times what any ship carries
+        var speed = Tuning.SublightExhaust * Math.Log(1 + Tuning.ReactionMassPerDryMass) * 5;   // five times what an empty ship with a full tank carries
         var n = Sublight.NextPrimary(g, from.Id, start, way * speed, 0);
         Assert.Equal(to.Id, n!.Value.Star);
         Assert.True(n.Value.Time > 365 * 1000, $"{n.Value.Time / 365:F0} years");   // between the stars there is only hyperspace
