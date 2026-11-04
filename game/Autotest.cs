@@ -324,8 +324,7 @@ public partial class Autotest : Node
         {
             Check("tapping empty space hides the handles", !_g.HandlesOpen);
             Shot("02b_node_handles_hidden");
-            var far = _g.SubForecast!.Track[_g.SubForecast.DrawnCount - 20].Position;
-            Click(MouseButton.Left, _g.OrbitPointForTest(far));
+            Click(MouseButton.Left, ClearOfMarkers(_g.SubForecast!.DrawnCount - 20));
         });
         Do(() =>
         {
@@ -342,13 +341,13 @@ public partial class Autotest : Node
         Do(() =>
         {
             Check("backspace still works with a stale selection", _g.V!.Nodes.Count == 0);
-            Click(MouseButton.Left, _g.OrbitPointForTest(_g.SubForecast!.Track[120].Position));
+            Click(MouseButton.Left, ClearOfMarkers(120));
         });
         Do(() => { Check("node re-added", _g.V!.Nodes.Count == 1); Click(MouseButton.Left, _g.DeleteButtonForTest); });
         Do(() =>
         {
             Check("delete button removes the node", _g.V!.Nodes.Count == 0);
-            Click(MouseButton.Left, _g.OrbitPointForTest(_g.SubForecast!.Track[120].Position));
+            Click(MouseButton.Left, ClearOfMarkers(120));
         });
         Do(() => Press(Key.Delete));
         Do(() =>
@@ -735,6 +734,67 @@ public partial class Autotest : Node
         Do(() =>
         {
             Check("the company is carried on from the title", _g.V!.Docked && _g.Save!.Retries == 2 && _g.SaveFilesForTest == 1);
+            Press(Key.Enter);
+        });
+        Do(() =>
+        {
+            // A shuttle hired to ride aboard; out of port, the ship is left in orbit and the shuttle flies off.
+            _credits = _g.Save!.Credits;
+            _g.RentShuttle(aboard: true);
+            Check("a shuttle is hired aboard for its deposit", _g.CarriedShuttle != null && _g.Save.Credits == _credits - Tuning.ShuttleDeposit && _g.V!.CarriedMass > 0);
+            Shot("16_shuttle_hire");
+            Press(Key.Enter);
+        });
+        Do(() => Press(Key.U));
+        Do(() =>
+        {
+            Check("Q is offered once out of port with a shuttle aboard", _g.HudForTest.HasButtonForTest(Key.Q) && _g.LaunchRefusal() == null);
+            Press(Key.Q);
+        });
+        Do(() =>
+        {
+            var s = _g.Save!;
+            Check("the pilot flies off in the shuttle, the ship left on its orbit",
+                s.Ship.Rental != null && _g.V!.Class == Ships.Shuttle && s.Fleet.Count(x => x.Parked != null) == 1 && _g.CarriedShuttle == null);
+            _g.SetTarget(_g.ParkedHere().First());
+        });
+        Do(() =>
+        {
+            Check("the ship left in orbit can be the target, and alongside it can be boarded", _g.GoalShip != null && _g.BoardRefusal() == null);
+            Shot("16a_shuttle_beside_ship");
+            Press(Key.U);
+        });
+        Do(() =>
+        {
+            var s = _g.Save!;
+            Check("U boards it again, the shuttle back aboard", s.Ship.Rental == null && _g.CarriedShuttle != null && s.Fleet.All(x => x.Parked == null) && _g.V!.Class != Ships.Shuttle);
+            Press(Key.U);
+        });
+        Do(() =>
+        {
+            Check("back in port", _g.Screen == Screen.Port);
+            _credits = _g.Save!.Credits;
+            _g.ReturnShuttle(_g.CarriedShuttle!);
+            Check("a shuttle given back returns what the rent left of the deposit", _g.CarriedShuttle == null && _g.Save.Credits > _credits);
+            _g.RentShuttle(aboard: true);
+            _g.CarriedShuttle!.Rental!.Since -= 1000;   // long overdue
+            Press(Key.Enter);
+        });
+        Do(() => Press(Key.U));
+        Do(() => Press(Key.U));
+        Do(() =>
+        {
+            var s = _g.Save!;
+            Check("an overdue shuttle is taken back at the port, and its debt bars the next hire",
+                _g.Screen == Screen.Port && _g.CarriedShuttle == null && s.RentDebt > 0 && Rentals.Refusal(s, true) != null && _g.PortReport.Any(l => l.Contains("没収")));
+            Shot("16b_shuttle_taken_back");
+            _g.Purchase(x => x.Credits += 500);
+            _g.PayRentDebt();
+            Check("the debt can be paid off", s.RentDebt == 0 && Rentals.Refusal(s, false) == null);
+            Press(Key.Enter);
+        });
+        Do(() =>
+        {
             _g.Save!.Modules.Add(Modules.Transfer);
             _g.Save.Modules.Add(Modules.AutoBurn);
             Press(Key.U);

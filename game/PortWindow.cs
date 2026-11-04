@@ -102,6 +102,15 @@ public partial class PortWindow : PanelContainer
     }
 
     /// <summary>A line across the window that wraps rather than widening it.</summary>
+    /// <summary>A shuttle's hire as it stands: days, the rent run up against the deposit, and whether it is overdue.</summary>
+    string RentalLine(OwnedShip shuttle)
+    {
+        var r = shuttle.Rental!;
+        var day = _game.GalaxyDay;
+        var rent = Rentals.Rent(r, day);
+        return $"借用 {Math.Max(0, day - r.Since):F0} 日   レンタル料 {rent:F0} / 保証金 {r.Deposit:F0}" + (rent > r.Deposit ? "   延滞: 次の港で没収" : $"   あと {(r.Deposit - rent) / Tuning.ShuttleRentPerDay:F0} 日");
+    }
+
     static Label Wrapped(string s, int size, Color? c = null)
     {
         var l = Text(s, size, c);
@@ -167,14 +176,27 @@ public partial class PortWindow : PanelContainer
             var info = new VBoxContainer();
             info.AddChild(Text(ship.Type.Name + (ship.Id == s.Flown ? "（乗船中）" : ""), 16, ship.Id == s.Flown ? Good : null));
             info.AddChild(Text($"燃料 {Instruments.Tonnes(ship.Fuel)}/{Instruments.Tonnes(ship.Type.Tank)}   船体 {ship.Hull:P0}   積荷 {ship.Hold.Count} 件   {Spec(ship.Fitted, ship.Pressurized)}", 13, Dim));
+            if (ship.Rental != null) info.AddChild(Text(RentalLine(ship), 13, Rentals.Overdue(ship, _game.GalaxyDay) ? Warn : Dim));
             if (ship.Id == s.Flown) { box.AddChild(Row(info)); continue; }
+            if (ship.Rental != null)
+            {
+                box.AddChild(Row(info, Press("乗り換え", () => _game.BoardShip(ship.Id)), Press($"返却 +{Rentals.Refund(ship.Rental, _game.GalaxyDay):F0}", () => _game.ReturnShuttle(ship))));
+                continue;
+            }
             var sale = Hangar.SaleRefusal(s, g, ship);
             box.AddChild(Row(info, Press("乗り換え", () => _game.BoardShip(ship.Id)),
                 Press($"売却 {Ships.SaleValue(ship):F0}", () => _game.SellShip(ship.Id), sale == null)));
         }
-        var away = s.Fleet.Where(x => x.Station != star).ToList();
+        if (_game.CarriedShuttle is { } aboard)
+        {
+            var info = new VBoxContainer();
+            info.AddChild(Text($"{aboard.Type.Name}（{s.Ship.Type.Name} に搭載）", 16));
+            info.AddChild(Text(RentalLine(aboard), 13, Rentals.Overdue(aboard, _game.GalaxyDay) ? Warn : Dim));
+            box.AddChild(Row(info, Press("乗り換え", () => _game.BoardShip(aboard.Id)), Press($"返却 +{Rentals.Refund(aboard.Rental!, _game.GalaxyDay):F0}", () => _game.ReturnShuttle(aboard))));
+        }
+        var away = s.Fleet.Where(x => x.Station != star && x.Carrier != s.Flown).ToList();
         if (away.Count > 0)
-            box.AddChild(Wrapped("ほかの港: " + string.Join("、", away.Select(x => $"{x.Type.Name}（{Missions.Label(g, x.Station)}）")), 13, Dim));
+            box.AddChild(Wrapped("ほかの港: " + string.Join("、", away.Select(x => $"{x.Type.Name}（{Rentals.Place(s, g, x)}）")), 13, Dim));
         var sold = Ships.SoldAt(g, star);
         if (sold.Length == 0) return box;
         box.AddChild(Text("造船", 18, Good));
@@ -224,6 +246,12 @@ public partial class PortWindow : PanelContainer
         void Sale(string name, double cost, bool need, Action<SaveData> buy, string key) =>
             box.AddChild(Row(Text(name, 15), Press($"{cost:F0}", () => _game.Purchase(buy), need, key)));
         Sale($"推進剤（亜光速） {Instruments.Tonnes(s.HeldReaction)} / {Instruments.Tonnes(s.Ship.Fitted.ReactionTank)}", Supply.ReactionMassCost(s), s.HeldReaction < s.Ship.Fitted.ReactionTank - 1e-6, Supply.BuyReactionMass, "6");
+        if (s.RentDebt > 0)
+            box.AddChild(Row(Text($"シャトルの延滞金 {s.RentDebt:F0}（払うまで借りられない）", 15, Warn), Press("払う", _game.PayRentDebt, s.Credits > 0)));
+        else if (_game.CarriedShuttle == null)
+            box.AddChild(Row(Text($"レンタルシャトル  保証金 {Tuning.ShuttleDeposit:F0}  1日 {Tuning.ShuttleRentPerDay:F2}", 15),
+                Press("借りて載せる", () => _game.RentShuttle(true), Rentals.Refusal(s, true) == null),
+                Press("借りて乗る", () => _game.RentShuttle(false), Rentals.Refusal(s, false) == null)));
         Sale($"生命維持 残 {s.HeldLife:F0} 日", (Tuning.LifeSupportDays - s.HeldLife) * Tuning.LifePricePerDay, s.HeldLife < Tuning.LifeSupportDays - 0.5, Supply.BuyLife, "4");
         Sale($"船体 {s.HeldHull:P0}", (1 - s.HeldHull) * Tuning.HullRepairPrice, s.HeldHull < 0.999, Supply.RepairHull, "5");
         box.AddChild(Wrapped("足りなければ買える分だけ。燃料は FTL、推進剤は亜光速の噴射に使う。燃料は港の在庫から、推進剤はどの港でも安い。出港に足る燃料も買えなければ破産", 13, Dim));

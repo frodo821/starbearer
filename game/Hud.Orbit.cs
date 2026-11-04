@@ -206,6 +206,7 @@ public partial class Hud
         DrawBodies();
         DrawTarget();
         DrawLocalStation();
+        DrawParkedShips();
         if (Game.SubForecast is { } fc)
         {
             DrawPaths(fc);
@@ -378,6 +379,21 @@ public partial class Hud
         // Drop line from the ship to the station's plane, so height reads in 3D.
         var height = v.SubPosition.Dot(st.PlaneNormal);
         DrawDashedLine(OrbitPoint(v.SubPosition), OrbitPoint(v.SubPosition - st.PlaneNormal * height), new Color(Good, 0.5f), 1, 3);
+    }
+
+    /// <summary>The company's ships left in orbit in this system: their orbits, and where they are on them.</summary>
+    void DrawParkedShips()
+    {
+        var t = Game.V!.AbsoluteTime;
+        var col = new Color(1f, 0.85f, 0.45f);
+        foreach (var po in Game.ParkedHere())
+        {
+            var host = po.Host.StarPosition(t);
+            Polyline3(a => host + po.Position(t + a / Math.Tau * po.Period), new Color(col, 0.3f), 1);
+            var at = StarPoint(host + po.Position(t));
+            DrawPolygon(new[] { at + new Vector2(0, -6), at + new Vector2(5, 0), at + new Vector2(0, 6), at + new Vector2(-5, 0) }, new[] { col });
+            Text(at + new Vector2(8, -6), Game.NameOf(po), col, 12);
+        }
     }
 
     /// <summary>The plan coloured by stage, with the real path on top: where the ship goes if nothing more is flown.</summary>

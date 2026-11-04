@@ -61,6 +61,15 @@ public partial class Hud
         Bar(x, ref y, "積荷", v.CargoIntegrity, v.CargoIntegrity < 0.6 ? Warn : Ink, $"{v.CargoIntegrity:P0}");
         Bar(x, ref y, "熱", Math.Min(v.Heat, 1.5) / 1.5, v.Heat > 1 ? Bad : v.Heat > v.HeatTolerance ? Warn : Ink, $"{v.Heat:F2}");
         Bar(x, ref y, "生命", v.LifeRemaining / Tuning.LifeSupportDays, Ink, v.Docked ? $"{v.LifeRemaining:F0}日 停泊中" : $"{v.LifeRemaining:F0}日");
+        // A hired shuttle, flown or riding aboard: how long its deposit still covers.
+        if ((Game.Save!.Ship.Rental != null ? Game.Save.Ship : Game.CarriedShuttle) is { Rental: { } hire } rented)
+        {
+            var rent = Rentals.Rent(hire, Game.GalaxyDay);
+            var covered = (hire.Deposit - rent) / Tuning.ShuttleRentPerDay;
+            var aboard = rented.Id != Game.Save.Flown ? "搭載" : "借用";
+            Text(new Vector2(x, y + 12), covered > 0 ? $"シャトル{aboard}  保証金はあと {covered:F0} 日" : "シャトル延滞: 次の港で没収", covered > 0 ? (covered < 60 ? Warn : Dim) : Bad, 13);
+            y += 22;
+        }
         y += 8;
         Text(new Vector2(x, y), v.Phase == Phase.Sublight
             ? $"推力 {Instruments.Force(v.Class.SublightForce * Game.Helm.Throttle)}   加速 {Instruments.Acceleration(Game.EngineAcceleration)}"

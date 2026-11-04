@@ -159,6 +159,7 @@ public partial class Main
                 if (k.Keycode == Key.G) ToggleAutoBurn();
                 if (k.Keycode == Key.C) CycleTarget();
                 if (k.Keycode == Key.K) ToggleGate();
+                if (k.Keycode == Key.Q) LaunchShuttle();
                 if (k.Keycode == Key.R) SetFocus(new FocusShip());
                 if (k.Keycode >= Key.Key1 && k.Keycode < Key.Key1 + Rates.Length) { SubRateIndex = (int)(k.Keycode - Key.Key1); Paused = false; ToNode = false; Aligning = false; }
                 break;
@@ -189,7 +190,7 @@ public partial class Main
                 if (k.Keycode == Key.Escape) OpenPause();
                 break;
             case Screen.Dead:
-                if (k.Keycode == Key.R && !Bankrupt) Retry();
+                if (k.Keycode == Key.R && CanRetry) Retry();
                 if (k.Keycode == Key.X) EndVoyageForGood();
                 if (k.Keycode == Key.Escape) OpenPause();
                 break;

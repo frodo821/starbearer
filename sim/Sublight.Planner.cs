@@ -268,7 +268,7 @@ public static partial class Sublight
             var reached = result.Enter?.Body == target;
             if (target is Center ? !reached : !reached && (result.Closest is not { } meet || meet.Distance > 0.5 * target.OrbitRadius)) continue;
             // A body is only a way in: its sphere of influence takes over before there is anything to match.
-            if (target is Station && MatchAtClosest(star, target, p, v, t0, plan, horizon) is { } match) plan.Add(match);
+            if (Alongside(target) && MatchAtClosest(star, target, p, v, t0, plan, horizon) is { } match) plan.Add(match);
             return plan;
         }
         return null;

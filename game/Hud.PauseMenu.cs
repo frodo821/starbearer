@@ -48,7 +48,7 @@ public partial class Hud
             var (label, detail) = item switch
             {
                 Main.PauseItem.Resume => ("続ける", "Esc"),
-                Main.PauseItem.Restart => ("最後の入港からやり直す", Game.Bankrupt ? "破産したのでやり直せない" : "再開の回数に数える"),
+                Main.PauseItem.Restart => ("最後の入港からやり直す", !Game.CanRetry ? "この終わり方はやり直せない" : "再開の回数に数える"),
                 Main.PauseItem.Title => ("タイトルへ", "セーブの切り替え・新しい銀河"),
                 _ => ("ゲームを終了", ""),
             };

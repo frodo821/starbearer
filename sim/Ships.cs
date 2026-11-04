@@ -56,6 +56,13 @@ public static class Ships
     }
 
     public static readonly ShipClass Courier = ContainerShip(Small, "courier");
+
+    /// <summary>
+    /// The rental shuttle: a hull a third of a small ship's, no bays at all, only to move the pilot. Its
+    /// tank keeps a small ship's share, so it jumps as far; it is hired, never built or sold (see Rentals).
+    /// </summary>
+    static readonly Size Tiny = new("tiny", "超小型", 0, 0.3, 0.54, 0.8, 1.2, true, 0);
+    public static readonly ShipClass Shuttle = new("shuttle", "レンタルシャトル", Array.Empty<Bay>(), 0, Tiny.DryMass, Tiny.Tank, Tiny.Drag, Tiny.Thrust, Tiny.Gates, EngineForce(Tiny));
     public static readonly ShipClass Tanker = TankerShip(Large);
     public static readonly ShipClass Bulker = BulkShip(Large);
 
@@ -67,7 +74,7 @@ public static class Ships
         ContainerShip(Large), Tanker, GasShip(Large), Bulker,
     };
 
-    public static ShipClass Get(string id) => All.FirstOrDefault(s => s.Id == id) ?? Courier;
+    public static ShipClass Get(string id) => id == Shuttle.Id ? Shuttle : All.FirstOrDefault(s => s.Id == id) ?? Courier;
 
     /// <summary>
     /// What a shipyard builds, from the seed. Every one builds the small container ship; each of the others
@@ -95,6 +102,10 @@ public sealed class OwnedShip
     public int Station { get; set; }
     /// <summary>Where it was left in orbit, if it was: it coasts on from there. Null for a ship at a station.</summary>
     public ParkedState? Parked { get; set; }
+    /// <summary>The ship carrying it aboard, by id; 0 if none. Only a rental shuttle rides in another ship.</summary>
+    public int Carrier { get; set; }
+    /// <summary>Its hire, if it is a rental shuttle.</summary>
+    public RentalState? Rental { get; set; }
     public double Fuel { get; set; } = Ships.Courier.Tank;
     /// <summary>Reaction mass for normal space. Below zero (a save from before it was kept apart) reads as full.</summary>
     public double ReactionMass { get; set; } = -1;
@@ -110,6 +121,8 @@ public sealed class OwnedShip
     /// <summary>The hull as it flies: its class, plus the weight of the pressurizers fitted to it.</summary>
     [JsonIgnore] public ShipClass Fitted => Type with { DryMass = Type.DryMass + Pressurized.Sum(i => Type.Bays[i].Volume) * Tuning.PressureMassPerVolume };
     public ShipState State => new(Fuel, Hull, Life, ReactionMass < 0 ? null : ReactionMass);
+    /// <summary>What it weighs with its tanks as they are: the load it is to a ship carrying it.</summary>
+    [JsonIgnore] public double Mass => Fitted.DryMass + Fuel + (ReactionMass < 0 ? Fitted.ReactionTank : ReactionMass) + Hold.Sum(c => c.Mission.Cargo.Mass);
 
     /// <summary>A new ship as a shipyard hands it over: full tank and supplies, empty bays.</summary>
     public static OwnedShip Build(ShipClass c, int id, int station) => new() { Id = id, Class = c.Id, Station = station, Fuel = c.Tank, ReactionMass = c.ReactionTank };

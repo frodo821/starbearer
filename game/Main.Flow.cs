@@ -102,6 +102,8 @@ public partial class Main
         s.MarketIn(G!);   // the stations built in the war come back with it, the port this ship lies at among them
         V = new Voyage(G!, s.PortStation, G!.StarOf(s.PortStation), s.Hold, (double[])s.ClosestApproach.Clone(),
             s.Seed ^ (ulong)(s.Deliveries * 31 + ++_attempt * 1009), s.TotalDays, s.Ship.State, s.Ship.Fitted);
+        V.CarriedMass = Rentals.CarriedMass(s, s.Flown);
+        if (s.Stranded) { Screen = Screen.Dead; return; }
         if (Supply.Bankrupt(s, G!)) { Bankrupt = true; Screen = Screen.Dead; return; }
         SteerForCourse();
         PlanDir = (V.ChartPositions[V.TargetStar] - V.EstimatedPosition).Normalized();
@@ -121,8 +123,14 @@ public partial class Main
         _forecastDirty = true;
     }
 
+    /// <summary>Whether the end can be retried from the last port call: a bankruptcy or a pilot stranded without a ship can't.</summary>
+    public bool CanRetry => !Bankrupt && Save?.Stranded != true;
+
     public void Retry()
     {
+        if (!CanRetry) return;
+        // From the checkpoint on disk: the fleet in memory has moved on with the flight (ships left in orbit, shuttles).
+        if (_slot != null && Read(_slot).Data is { Current: true } disk) Save = disk;
         Save!.Retries++;
         WriteSave();
         Board();

@@ -55,7 +55,7 @@ public partial class Hud
         var bound = v.Hold.Where(c => c.IsJob).Select(c => g.StarOf(c.Mission.Target)).ToHashSet();
         // The company's other ships, where they wait.
         var save = Game.Save!;
-        var parked = save.Fleet.Where(x => x.Id != save.Flown).GroupBy(x => g.StarOf(x.Station)).ToDictionary(k => k.Key, k => k.Count());
+        var parked = save.Fleet.Where(x => x.Id != save.Flown && x.Carrier != save.Flown).GroupBy(x => Rentals.StarOf(save, g, x)).ToDictionary(k => k.Key, k => k.Count());
         for (int i = 0; i < g.Stars.Length; i++)
         {
             var s = g.Stars[i];

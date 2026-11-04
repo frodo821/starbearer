@@ -82,7 +82,11 @@ public partial class Main
     }
 
     /// <summary>A target as the pilot reads it: a body by name, a station by what it is.</summary>
-    public string NameOf(IOrbiter? o) => o switch { Center c => c.Name, Station st when G!.IsStation(st.Id) => Missions.KindLabel(G.KindOf(st.Id)), Station => "港", _ => "" };
+    /// <summary>The company's ships left in orbit in this system, as orbits to steer for.</summary>
+    public System.Collections.Generic.IEnumerable<ParkedOrbit> ParkedHere() =>
+        Save!.Fleet.Where(x => x.Parked is { } p && p.Star == V!.SystemStar).Select(x => x.Parked!.Orbit(G!, x.Id));
+
+    public string NameOf(IOrbiter? o) => o switch { Center c => c.Name, ParkedOrbit po => $"自船 {Save!.Fleet.FirstOrDefault(x => x.Id == po.ShipId)?.Type.Name}", Station st when G!.IsStation(st.Id) => Missions.KindLabel(G.KindOf(st.Id)), Station => "港", _ => "" };
 
     /// <summary>Why there is nothing to steer for from here.</summary>
     string NoWaypoint => V!.Goal switch
@@ -109,6 +113,7 @@ public partial class Main
         if (v.LocalStation is { } st) list.Add(st);
         list.AddRange(G!.StationsIn(v.SystemStar).Where(id => id != v.LocalStation?.Id).Select(G.StationAt));
         list.AddRange(G!.System(v.SystemStar).Tree.Skip(1).Where(c => c.Key != v.Primary.Key));
+        list.AddRange(ParkedHere());
         return list;
     }
 

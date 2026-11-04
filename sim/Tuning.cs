@@ -30,6 +30,12 @@ public static class Tuning
     /// well and braking at the end included). So a gate is always the cheaper way, by half.
     /// </summary>
     public const double GateTollShare = 0.5, FtlFuelPerLyMass = 0.014;
+    /// <summary>
+    /// A rental shuttle: the deposit taken when it is hired, and the rent per day that comes out of it.
+    /// The deposit lasts a little over a year; past it the shuttle is overdue, taken back at the next port
+    /// it calls at, and what it owes beyond the deposit is a debt to be paid before the next hire.
+    /// </summary>
+    public const double ShuttleDeposit = 60, ShuttleRentPerDay = 0.15;
     public const double PortWaitDays = 10;         // a wait at the port, for stock to come back
     public const double DepartureFuelFloor = 0.8;  // below this a ship can't reach another station
 

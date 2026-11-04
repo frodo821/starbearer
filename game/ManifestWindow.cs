@@ -117,7 +117,7 @@ public partial class ManifestWindow : PanelContainer
             _root.AddChild(new HSeparator());
             _root.AddChild(Text("ほかの船", 15, Good));
             foreach (var x in away)
-                _root.AddChild(Text($"{x.Type.Name}  {Missions.Label(g, x.Station)}   積荷 {x.Hold.Count} 件   燃料 {Instruments.Tonnes(x.Fuel)}/{Instruments.Tonnes(x.Type.Tank)}", 13, Dim));
+                _root.AddChild(Text($"{x.Type.Name}  {Rentals.Place(s, g, x)}   積荷 {x.Hold.Count} 件   燃料 {Instruments.Tonnes(x.Fuel)}/{Instruments.Tonnes(x.Type.Tank)}", 13, Dim));
         }
     }
 }

@@ -145,6 +145,7 @@ public partial class Main
             Message = "出港した。ここから生命維持を消費する";
             _forecastDirty = true;
         }
+        else if (GoalShip != null) BoardGoalShip();
         else if (v.CanDock && !DockAdmitted) Message = $"{Factions.OwnerName(G!, v.LocalStation!.Id)} は入港を拒否した（敵対）";
         else if (v.RequestDock()) Dock();
         else Message = $"港まで {Instruments.Distance(Tuning.DockRange)}、相対 {Instruments.Speed(Tuning.DockRelativeSpeed)} 以内で入港できる（X 接近、Z 相対0 で寄せる）";
@@ -169,6 +170,7 @@ public partial class Main
         var s = Save!;
         VisitingPort = false;
         V!.Restock(s.Ship.State, s.Hold);
+        V.CarriedMass = Rentals.CarriedMass(s, s.Flown);
         SteerForCourse();
         Message = "";
         Screen = Screen.Orbit;
@@ -200,9 +202,11 @@ public partial class Main
         foreach (var c in here) Missions.Deliver(s, G!, c);
         if (StandingChange(before) is { } moved) PortReport.Add(moved);
         s.PortStation = station;
+        PortReport.AddRange(TakeBackOverdue(station));
         PortReport.AddRange(WarNews(from, s.TotalDays));
         s.ClosestApproach = v.ClosestApproach;
         WriteSave();
+        if (s.Stranded) { VisitingPort = false; Screen = Screen.Dead; return; }
         VisitingPort = false;
         Message = "";
         Screen = Screen.Port;

@@ -178,6 +178,12 @@ public static partial class Sublight
         return best;
     }
 
+    /// <summary>The body a station or a parked ship circles; null for a station built round a bare star, or a body.</summary>
+    public static Center? HostOf(IOrbiter? o) => o switch { Station st => st.Host, ParkedOrbit po => po.Host, _ => null };
+
+    /// <summary>Whether a goal is met by coming alongside it (a station or a ship), not by falling into its reach (a body).</summary>
+    public static bool Alongside(IOrbiter? o) => o is Station or ParkedOrbit;
+
     /// <summary>What to steer for from a body to reach a goal, a station or a body: the goal itself when it
     /// circles this body, else the body one level down toward it. Null when the ship has to climb out first,
     /// or is already circling the goal.</summary>
@@ -186,9 +192,9 @@ public static partial class Sublight
         Center? host;
         switch (goal)
         {
-            case Station st:
-                if (st.Host == null || st.Host.Key == from.Key) return st;
-                host = st.Host;
+            case Station or ParkedOrbit:
+                if (HostOf(goal) is not { } around || around.Key == from.Key) return goal;
+                host = around;
                 break;
             case Center body: host = body; break;
             default: return null;

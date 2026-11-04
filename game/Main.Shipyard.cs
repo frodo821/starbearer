@@ -52,10 +52,16 @@ public partial class Main
     public void BoardShip(int id)
     {
         var s = Save!;
-        if (id == s.Flown || !Hangar.Board(s, id)) return;
+        if (id == s.Flown) return;
+        var left = s.Ship;
+        // The shuttle riding in the ship flown is boarded off it, here at the port.
+        if (s.Fleet.FirstOrDefault(x => x.Id == id) is { } aboard && aboard.Carrier == s.Flown) { aboard.Carrier = 0; aboard.Station = s.PortStation; }
+        if (!Hangar.Board(s, id)) return;
         VisitingPort = false;   // leaving the port boards the new ship from the checkpoint
         SteerForCourse();
         Message = $"{s.Ship.Type.Name} に乗り換えた";
+        // A shuttle left behind at a port is given back there.
+        if (left.Rental != null) Message += $"。シャトルを返した（保証金から {Rentals.Return(s, left, GalaxyDay):F0} が戻った）";
         PortChanged();
     }
 

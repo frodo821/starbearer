@@ -100,9 +100,10 @@ public partial class Hud : Control
             _ => "",
         };
         if (Game.Bankrupt) why = "破産した。出港に足る燃料が買えない";
+        if (s.Stranded) why = "シャトルを没収され、この港に乗れる船がない";
         Centered(300, why, Bad, 40);
         Centered(370, $"飛行 {Instruments.Span(v.Time)}   配達 {s.Deliveries} 件   再開 {s.Retries} 回", Ink, 20);
-        if (!Game.Bankrupt) Centered(480, "R  最後の入港から再開", Ink, 22);
+        if (Game.CanRetry) Centered(480, "R  最後の入港から再開", Ink, 22);
         Centered(520, "X  ここで終える（この銀河は失われる）", Warn, 22);
     }
 }

@@ -113,10 +113,11 @@ public partial class Main
                 list.Add(("港", new Command[] { new(Key.U, "U", "出港"), new(Key.Enter, "Enter", "港の施設") }));
             else
             {
-                var port = new List<Command> { new(Key.U, "U", v.CanDock && !DockAdmitted ? "入港拒否" : "入港", v.CanDock && DockAdmitted) };
+                var port = new List<Command> { GoalShip != null ? new(Key.U, "U", "乗り換え", BoardRefusal() == null) : new(Key.U, "U", v.CanDock && !DockAdmitted ? "入港拒否" : "入港", v.CanDock && DockAdmitted) };
                 if (v.AtGate) port.Add(new(Key.K, "", !v.Class.Gates ? "ゲート不可" : v.GateBooked != null ? "通過を取消" : !GateOpen ? "ゲート停止" : !GateAdmitted ? "通航拒否" : $"ゲート通過 {GateToll:F0}", v.Class.Gates && (GateOpen && GateAdmitted || v.GateBooked != null)));
                 list.Add(("港", port.ToArray()));
             }
+            if (!v.Docked && CarriedShuttle != null) list.Add(("シャトル", new Command[] { new(Key.Q, "Q", "シャトルで発つ", LaunchRefusal() == null) }));
             list.Add(("FTL", new Command[] { new(Key.J, "J", v.Docked ? "発進計画" : "FTL発進") }));
             list.Add(("表示", new Command[] { new(Key.Tab, "Tab", OrbitSky ? "軌道図" : "空"), WindsCommand, JobsCommand }));
             list.Add(("", new Command[] { MenuCommand }));

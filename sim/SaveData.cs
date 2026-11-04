@@ -32,6 +32,10 @@ public sealed class SaveData
     public string OffersAt { get; set; } = "";
     /// <summary>How each faction regards the company, by faction id (see Factions).</summary>
     public double[] Standing { get; set; } = new double[Tuning.FactionCount];
+    /// <summary>What overdue shuttles owe beyond their deposits: no shuttle is hired again until it is paid.</summary>
+    public double RentDebt { get; set; }
+    /// <summary>An overdue shuttle was taken back at a port where the company had no other ship: the end.</summary>
+    public bool Stranded { get; set; }
     /// <summary>The galaxy's stock, as of the checkpoint.</summary>
     public Market? Market { get; set; }
 

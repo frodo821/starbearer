@@ -165,6 +165,7 @@ public static class War
     public static List<OwnedShip> Casualties(SaveData s, Galaxy g)
     {
         var lost = s.Fleet.Where(x => x.Id != s.Flown && g.IsStation(x.Station) && !g.Alive(x.Station)).ToList();
+        lost.AddRange(s.Fleet.Where(x => x.Carrier != 0 && lost.Any(l => l.Id == x.Carrier)));   // a shuttle aboard goes with its ship
         foreach (var x in lost) s.Fleet.Remove(x);
         return lost;
     }

@@ -38,7 +38,7 @@ public sealed class Voyage
     public double NavSigma { get; private set; } = Tuning.SightError;
 
     /// <summary>The hull flown: its mass, tank, drag, thrust and whether gates take it.</summary>
-    public ShipClass Class { get; }
+    public ShipClass Class { get; private set; }
     public double Fuel { get; private set; }
     public double Hull { get; private set; } = 1;
     public double Heat { get; private set; }
@@ -61,7 +61,9 @@ public sealed class Voyage
     public Vec3d[] ChartPositions => _chart;
     /// <summary>Reaction mass for normal space, apart from the drive's fuel (see Tuning.SublightExhaust).</summary>
     public double ReactionMass { get; private set; }
-    public double Mass => Class.DryMass + CargoMass + Fuel + ReactionMass;
+    public double Mass => Class.DryMass + CargoMass + Fuel + ReactionMass + CarriedMass;
+    /// <summary>A rental shuttle riding aboard, as weight (see Rentals).</summary>
+    public double CarriedMass { get; set; }
     /// <summary>The FTL drive's delta-v: its fuel against everything else carried, reaction mass included.</summary>
     public double DeltaVRemaining => Tuning.ExhaustVelocity * Math.Log(Mass / (Mass - Fuel));
     /// <summary>Normal space's acceleration at full throttle (AU/day²): the engine's force against the ship's mass now.</summary>
@@ -168,7 +170,7 @@ public sealed class Voyage
     {
         var t = AbsoluteTime;
         if (o is Center c) return (c.StarPosition(t) - Primary.StarPosition(t), c.StarVelocity(t) - Primary.StarVelocity(t));
-        var host = (o as Station)?.Host ?? G.System(SystemStar);
+        var host = Sublight.HostOf(o) ?? G.System(SystemStar);
         return (host.StarPosition(t) - Primary.StarPosition(t) + o.Position(t), host.StarVelocity(t) - Primary.StarVelocity(t) + o.Velocity(t));
     }
 
@@ -262,6 +264,32 @@ public sealed class Voyage
         if (!CanDock) return false;
         Phase = Phase.Arrived;
         return true;
+    }
+
+    /// <summary>
+    /// The pilot changes ship where the voyage stands: into a shuttle out of the ship it rode in, or back
+    /// aboard a ship left in orbit. The clock, the charts and the place go on; the hull, its tanks, its
+    /// bays and what it carries are the other ship's.
+    /// </summary>
+    public void Reship(ShipClass shipClass, ShipState ship, IEnumerable<Consignment> hold, double carried)
+    {
+        Class = shipClass;
+        Fuel = ship.Fuel;
+        ReactionMass = ship.ReactionMass ?? shipClass.ReactionTank;
+        Hull = ship.Hull;
+        LifeSupply = ship.Life + (Time - _dockedDays);
+        Hold = hold.Select(c => c.Copy()).ToList();
+        CarriedMass = carried;
+        Nodes.Clear();
+        AutoBurn = false;
+    }
+
+    /// <summary>Puts the ship on a state around a body of its system: alongside a ship it has come to board.</summary>
+    public void MatchState(Center primary, Vec3d position, Vec3d velocity)
+    {
+        Primary = primary;
+        (SubPosition, SubVelocity) = (position, velocity);
+        SyncTruePosition();
     }
 
     /// <summary>Takes on what was bought and loaded at the port while docked.</summary>

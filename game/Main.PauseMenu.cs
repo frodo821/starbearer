@@ -22,7 +22,7 @@ public partial class Main
     /// <summary>Days of the voyage since the last port call that leaving now throws away (0 at the port, where every change is saved).</summary>
     public double PauseLoss => Screen is Screen.Port || V == null ? 0 : V.Time;
 
-    public bool PauseEnabled(PauseItem item) => item != PauseItem.Restart || (Save != null && !Bankrupt);
+    public bool PauseEnabled(PauseItem item) => item != PauseItem.Restart || (Save != null && CanRetry);
 
     void OpenPause()
     {
