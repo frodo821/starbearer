@@ -50,10 +50,19 @@ public partial class Main
             if (mb.ButtonIndex == MouseButton.Left)
             {
                 _looking = mb.Pressed;
+                if (mb.Pressed && mb.DoubleClick && _hud.FocusAt(mb.Position) is { } focus)
+                {
+                    // A double tap puts the chart's pivot on what is under it; the first tap's doing is undone.
+                    _hud.UndoTap(mb.Position);
+                    SetFocus(focus);
+                    _pressAt = mb.Position; _dragged = true;
+                    return;
+                }
                 if (mb.Pressed) { _pressAt = mb.Position; _dragged = false; _hud.OrbitPress(mb.Position); }
                 else { if (!_dragged && !_hud.OrbitHolding) _hud.OrbitTap(mb.Position); _hud.OrbitRelease(); }
             }
         }
+        if (e is InputEventMouseMotion hover) _hud.OrbitHover(hover.Position);
         if (e is InputEventMouseMotion mm && _looking)
         {
             if (mm.Position.DistanceTo(_pressAt) > 5) _dragged = true;
@@ -150,7 +159,7 @@ public partial class Main
                 if (k.Keycode == Key.G) ToggleAutoBurn();
                 if (k.Keycode == Key.C) CycleTarget();
                 if (k.Keycode == Key.K) ToggleGate();
-                if (k.Keycode == Key.R) Chart.Glide(PrimaryOnChart, ChartView.ZoomFor(V!.Primary));
+                if (k.Keycode == Key.R) SetFocus(new FocusShip());
                 if (k.Keycode >= Key.Key1 && k.Keycode < Key.Key1 + Rates.Length) { SubRateIndex = (int)(k.Keycode - Key.Key1); Paused = false; ToNode = false; Aligning = false; }
                 break;
             case Screen.Plan:

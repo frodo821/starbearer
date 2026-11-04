@@ -64,6 +64,25 @@ public partial class Autotest : Node
         Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = b, Position = at, GlobalPosition = at, Pressed = false });
     }
 
+    /// <summary>A point of the drawn path from a track index on, clear of the markers on it: a tap on a marker pins its figures instead.</summary>
+    Vector2 ClearOfMarkers(int from)
+    {
+        var f = _g.SubForecast!;
+        for (int i = from; i < from + f.DrawnCount; i++)
+        {
+            var at = _g.OrbitPointForTest(f.Track[i % f.DrawnCount].Position);
+            if (!_g.HudForTest.MarkerNearForTest(at, 22)) return at;
+        }
+        return _g.OrbitPointForTest(f.Track[from].Position);
+    }
+
+    static void DoubleClick(Vector2 at)
+    {
+        Click(MouseButton.Left, at);
+        Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Position = at, GlobalPosition = at, Pressed = true, DoubleClick = true });
+        Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Position = at, GlobalPosition = at, Pressed = false });
+    }
+
     static void Pan(float x, float y) => Input.ParseInputEvent(new InputEventPanGesture { Delta = new Vector2(x, y), Position = new Vector2(700, 400) });
 
     static void Drag(Vector2 from, Vector2 by)
@@ -259,8 +278,7 @@ public partial class Autotest : Node
         Do(() =>
         {
             Check("releasing a hold button lets go, and leaves no node", _g.HeldButton == null && _g.V!.Nodes.Count == 0);
-            var pt = _g.SubForecast!.Track[120].Position;
-            Click(MouseButton.Left, _g.OrbitPointForTest(pt));
+            Click(MouseButton.Left, ClearOfMarkers(120));
         });
         Do(() =>
         {
@@ -369,7 +387,7 @@ public partial class Autotest : Node
             Check("tapping the target again clears it", _g.V!.Goal == null && _g.V.Waypoint == null && _g.V.Nodes.Count == 0);
             _g.SetTarget(_g.V.LocalStation);
             Check("a circular orbit has no apsides to mark", _g.ApsisPointForTest(true) == null && _g.ApsisPointForTest(false) == null);
-            Click(MouseButton.Left, _g.OrbitPointForTest(_g.SubForecast!.Track[60].Position));
+            Click(MouseButton.Left, ClearOfMarkers(60));
         });
         Do(() => { _g.Selected!.Prograde = _g.V!.SubVelocity.Length * 0.05; _g.NodeEdited(); });   // eccentric, still bound
         Do(() =>
@@ -377,12 +395,55 @@ public partial class Autotest : Node
             var ap = _g.SubForecast!.Legs.SelectMany(l => l.Apsides).Where(x => x.Apo && x.Time >= _g.V!.AbsoluteTime).ToList();
             _time = ap.Count > 0 ? ap[0].Time : double.NaN;
             Check("a burn's orbit shows its apoapsis and periapsis", ap.Count > 0 && _g.ApsisPointForTest(true) != null && _g.ApsisPointForTest(false) != null);
-            Shot("02f_apsides");
+            Check("Ap and Pe show their mark, not their figures, until asked", !_g.HudForTest.PinnedForTest("Ap0"));
             if (_g.ApsisPointForTest(true) is { } at) Click(MouseButton.Left, at);
         });
         Do(() =>
         {
-            Check("tapping Ap puts a node on it", _g.V!.Nodes.Count == 2 && _g.V.Nodes.Any(n => Math.Abs(n.Time - _time) < 1e-9));
+            Check("tapping Ap keeps its figures on, as in KSP", _g.HudForTest.PinnedForTest("Ap0") && _g.V!.Nodes.Count == 1);
+            Shot("02f_apsides");
+            if (_g.ApsisPointForTest(true) is { } at) Click(MouseButton.Right, at);
+        });
+        Do(() =>
+        {
+            var item = _g.HudForTest.MenuItemForTest("ここにノードを置く");
+            Check("Ap's menu offers a node on it", item != null);
+            if (item is { } at) Click(MouseButton.Left, at);
+        });
+        Do(() =>
+        {
+            Check("the menu puts a node on Ap", _g.V!.Nodes.Count == 2 && _g.V.Nodes.Any(n => Math.Abs(n.Time - _time) < 1e-9));
+            _g.HandlesOpen = false;   // the new node's panel would sit over the body
+        });
+        Do(() =>
+        {
+            if (_picked != null) DoubleClick(_g.BodyPointForTest(_picked));
+        });
+        Do(() =>
+        {
+            Check($"a double tap on a body puts the chart's pivot on it, its first tap undone [focus {_g.Focus} msg {_g.Message}]",
+                _g.Focus is FocusBody fb && fb.Body == _picked && _g.V!.Goal != _picked);
+            Shot("02h_focus_body");
+            Press(Key.R);
+        });
+        Do(() =>
+        {
+            Check("R gives the ship the focus", _g.Focus is FocusShip);
+            var last = _g.V!.Nodes.OrderBy(x => x.Time).Last();
+            _g.SelectNode(last);
+            _g.SetFocus(new FocusNode(last));
+            _zoom = _g.Chart.Zoom;
+            _g.Chart.Zoom *= 40;
+        });
+        Do(() =>
+        {
+            var box = _g.HudForTest.NodePanelForTest;
+            var at = _g.HudForTest.NodePointForTest(_g.Selected!);
+            Check("a node can be the focus", _g.Focus is FocusNode && at is { } p && p.DistanceTo(_g.HudForTest.Size / 2) < 300);
+            Check("zoomed in on a node, its panel stays beside it", box is { } b && at is { } q && Math.Abs(b.GetCenter().X - q.X) < 450 && Math.Abs(b.GetCenter().Y - q.Y) < 250);
+            Shot("02i_node_zoomed");
+            _g.Chart.Zoom = _zoom;
+            Press(Key.R);
             Input.ParseInputEvent(new InputEventKey { Keycode = Key.Backspace, PhysicalKeycode = Key.Backspace, ShiftPressed = true, Pressed = true });   // shift clears them all
         });
         Do(() => { if (_picked != null) Click(MouseButton.Right, _g.BodyPointForTest(_picked)); });

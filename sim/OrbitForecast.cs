@@ -93,8 +93,8 @@ public sealed class OrbitForecast
     public OrbitForecast? LegOf(Maneuver node) => Legs.FirstOrDefault(l => l.Stages.Any(s => s.Node == node));
     public Stage? StageOf(Maneuver node) => LegOf(node)?.Stages.First(s => s.Node == node);
     public List<Stage> Stages { get; } = new();
-    /// <summary>Points where the path crosses the station's plane: ascending when the flag is true.</summary>
-    public List<(Vec3d Position, bool Ascending)> PlaneCrossings { get; } = new();
+    /// <summary>Points where the path crosses the station's plane (ascending when the flag is true), when, and how far apart the two planes are there (degrees).</summary>
+    public List<(Vec3d Position, bool Ascending, double Time, double Inclination)> PlaneCrossings { get; } = new();
     /// <summary>What Closest, Crossing and PlaneCrossings are measured against: a station or a body circling Center.</summary>
     public IOrbiter? Watched { get; init; }
     public Approach? Closest { get; set; }

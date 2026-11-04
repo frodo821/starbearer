@@ -59,6 +59,13 @@ public sealed class ChartView
 
     public void StopGlide() => _glide = null;
 
+    /// <summary>Follows another point from now: the chart glides onto it, or stays where it is and goes with it.</summary>
+    public void Refocus(Vec3d point, bool glide = true)
+    {
+        _followed = point;
+        if (glide) Glide(point, Zoom);
+    }
+
     public void Update(double delta)
     {
         if (_glide is not { } to) return;

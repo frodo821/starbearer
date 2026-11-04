@@ -121,7 +121,10 @@ public static partial class Sublight
         {
             var (before, after) = (hop.P0.Dot(_station.PlaneNormal), p.Dot(_station.PlaneNormal));
             if (before * after < 0 && _result.PlaneCrossings.Count < 4)
-                _result.PlaneCrossings.Add((hop.At(before / (before - after)).P, before < 0));
+            {
+                var (at, vel, when) = hop.At(before / (before - after));
+                _result.PlaneCrossings.Add((at, before < 0, when, RelativeInclination(_station, at, vel)));
+            }
         }
 
         public void Observe(Hop hop, Vec3d p, Vec3d v)

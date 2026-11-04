@@ -109,7 +109,8 @@ public partial class Main : Node3D
         if (Screen == Screen.Orbit) UpdateOrbit(delta);
         if (Screen == Screen.Plan) UpdatePlan(delta);
         if (Screen == Screen.Flight) UpdateFlight(delta);
-        if (Screen == Screen.Orbit) Chart.Follow(PrimaryOnChart, v.Primary.Parent != null);
+        if (Screen == Screen.Orbit) FollowFocus();
+        else if (Screen == Screen.Flight) Focus = null;   // out of the system, nothing of it to follow
         TickForecast(delta);
         _sky?.UpdateSky(v.TruePositions, SkyFromForTest ?? v.TruePosition, v.Phase == Phase.Flight ? v.Velocity : null, delta);
         ShowWorlds();

@@ -151,7 +151,9 @@ public partial class Hud
         DrawDashedLine(ps, pt, Warn, 1, 3);
         DrawArc(ps, 6, 0, Mathf.Tau, 16, Warn, 1.4f, true);
         DrawArc(pt, 6, 0, Mathf.Tau, 4, Good, 1.4f, true);
-        Text(ps + new Vector2(9, 16), Instruments.Distance(a.Distance), Warn, 13);
+        if (!Marker("最接近", ps).Shown) return;
+        Text(ps + new Vector2(9, 16), "最接近 " + Instruments.Distance(a.Distance), Warn, 13);
+        Text(ps + new Vector2(9, 31), $"{Instruments.Countdown(a.Time - Game.V!.AbsoluteTime)}  相対 {Instruments.Speed(a.RelativeSpeed)}", new Color(Warn, 0.7f), 11);
     }
 
     /// <summary>The path around a star not yet reached, coloured by the stage flown so far.</summary>
@@ -186,6 +188,8 @@ public partial class Hud
         var v = Game.V!;
         var star = v.System;
         DrawRect(new Rect2(Vector2.Zero, Size), new Color(0.01f, 0.015f, 0.035f, 0.9f));
+        ResetMarkers();
+        DrawFocus();
         DrawGalaxyLayer(v.SystemStar);
         var c = StarPoint(Vec3d.Zero);
         var col = Sky.StarColor(star.Temperature);
@@ -206,11 +210,15 @@ public partial class Hud
         {
             DrawPaths(fc);
             DrawApsides(fc);
-            foreach (var (pos, asc) in fc.PlaneCrossings)
+            foreach (var (pos, asc, time, incl) in fc.PlaneCrossings.Where(x => x.Time >= v.AbsoluteTime))
             {
                 var p = OrbitPoint(pos);
-                DrawArc(p, 5, 0, Mathf.Tau, 12, new Color(1f, 0.5f, 0.9f), 1.4f, true);
-                Text(p + new Vector2(7, 4), asc ? "AN" : "DN", new Color(1f, 0.5f, 0.9f), 12);
+                var pink = new Color(1f, 0.5f, 0.9f);
+                DrawArc(p, 5, 0, Mathf.Tau, 12, pink, 1.4f, true);
+                Text(p + new Vector2(7, 4), asc ? "AN" : "DN", pink, 12);
+                if (!Marker(asc ? "AN" : "DN", p).Shown) continue;
+                Text(p + new Vector2(7, 19), $"相対傾斜 {incl:F1}°", pink, 12);
+                Text(p + new Vector2(7, 33), Instruments.Countdown(time - v.AbsoluteTime), new Color(pink, 0.6f), 11);
             }
             if (fc.Watched is { } watched)
             {
@@ -253,8 +261,10 @@ public partial class Hud
         {
             DrawCircle(at, 4.5f, ApsisColor);
             DrawArc(at, 7, 0, Mathf.Tau, 16, new Color(ApsisColor, 0.6f), 1.2f, true);
-            Text(at + new Vector2(9, a.Apo ? -8 : 16), $"{(a.Apo ? "Ap" : "Pe")} {Instruments.Distance(a.Radius)}", ApsisColor, 12);
-            Text(at + new Vector2(9, a.Apo ? 6 : 30), Instruments.Countdown(a.Time - now), new Color(ApsisColor, 0.6f), 11);
+            // The mark and its name always; how high and when, on the pointer or pinned by a tap.
+            var shown = Marker(a.Apo ? "Ap" : "Pe", at).Shown;
+            Text(at + new Vector2(9, a.Apo ? -8 : 16), (a.Apo ? "Ap" : "Pe") + (shown ? " " + Instruments.Distance(a.Radius) : ""), ApsisColor, 12);
+            if (shown) Text(at + new Vector2(9, a.Apo ? 6 : 30), Instruments.Countdown(a.Time - now), new Color(ApsisColor, 0.6f), 11);
         }
     }
 
@@ -433,7 +443,10 @@ public partial class Hud
         var (minX, maxX) = (NavRight + 8, Size.X - ShipWidth - 20 - NodePanelWidth);
         var outward = np.X >= (lo + hi) / 2 ? right : left;
         var other = outward == right ? left : right;
-        var x = outward >= minX && outward <= maxX ? outward : other >= minX && other <= maxX ? other : Mathf.Clamp(outward, minX, Size.X - NodePanelWidth - 10);
+        // Zoomed in, the path runs off the screen and there is no outside of it: then beside the node.
+        var beside = new[] { np.X + HandleReach + 24, np.X - HandleReach - 24 - NodePanelWidth };
+        var x = new[] { outward, other }.Concat(beside).Cast<float?>().FirstOrDefault(c => c >= minX && c <= maxX)
+            ?? Mathf.Clamp(np.X + HandleReach + 24, minX, Size.X - NodePanelWidth - 10);
         var y = Mathf.Clamp(np.Y - NodePanelHeight / 2, NavTop, ClusterTop - NodePanelHeight - 8);   // clear of the helm below
         return new Rect2(x, y, NodePanelWidth, NodePanelHeight);
     }
@@ -449,6 +462,8 @@ public partial class Hud
     }
 
     public double NodeStepForTest => NodeStep(Game.Selected!);
+    public Rect2? NodePanelForTest => Game.Selected is { } n ? NodePanelBox(n) : null;
+    public Vector2? NodePointForTest(Maneuver n) => NodePoint(n);
 
     /// <summary>Where the + (or −) of an axis sits in the open node's panel.</summary>
     public Vector2 NodeNudgeForTest(int axis, bool plus)

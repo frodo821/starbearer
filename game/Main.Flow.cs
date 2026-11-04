@@ -108,6 +108,7 @@ public partial class Main
         PlanDv = 0.35;
         Forecast = null; SubForecast = null; SubCurrent = null; PlanFrozen = false; Selected = null;
         OrbitSky = false; Paused = true;
+        Focus = null;
         Chart.Show(PrimaryOnChart, ChartView.ZoomFor(V.Primary));
         LookAt(PlanDir);
         Screen = Screen.Orbit;

@@ -82,6 +82,7 @@ public partial class Hud
         var v = Game.V!;
         yield return o == v.Goal ? new("目標を解除", () => Game.SetTarget(null)) : new("目標にする", () => Game.SetTarget(o));
         yield return new("遷移案", () => Game.PlanFor(o, Key.H));
+        if (o is Center body) yield return new("視点の中心にする", () => Game.SetFocus(new FocusBody(body)));
         if (o is Station here) yield return new("港の情報（市場・仕事）", () => Game.ShowStationInfo(here.Id));
         if (o is Station) yield return new("合流案", () => Game.PlanFor(o, Key.M));
         if (Game.Owns(Modules.Transfer)) yield return new("計算機で計画", () => Game.PlanFor(o, Key.T));
@@ -135,6 +136,15 @@ public partial class Hud
         var v = Game.V!;
         // As with a tap, a station close by its body yields to the body when the body is nearer.
         var near = OrbiterAt(at) as Center;
+        if (ApsisAt(at) is { } apsis && MarkerAt(at) is { } key)
+        {
+            OpenMenu(at, key.StartsWith("Ap") ? "遠点 (Ap)" : "近点 (Pe)", new MenuItem[]
+            {
+                new("ここにノードを置く", () => Game.AddNode(apsis)),
+                new(_pinned.Contains(key) ? "数値の表示を外す" : "数値を表示しておく", () => TogglePin(key)),
+            });
+            return;
+        }
         if (StationUnder(at) is { } st && (near == null || StationPoint(st).DistanceTo(at) <= BodyPoint(near).DistanceTo(at)))
             OpenMenu(at, Missions.KindLabel(Game.G!.KindOf(st.Id)) + (Factions.OwnerName(Game.G, st.Id) is { Length: > 0 } owner ? $"（{owner}）" : "")
                 + (v.Hold.Any(c => c.IsJob && c.Mission.Target == st.Id) ? "  届け先" : v.SystemStar == v.TargetStar ? "  目的地" : ""), OrbiterMenu(st));

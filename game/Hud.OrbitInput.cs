@@ -13,19 +13,28 @@ public partial class Hud
     public void OrbitTap(Vector2 at)
     {
         var v = Game.V!;
+        _lastTap = null;
         foreach (var n in v.Nodes)
             if (NodePoint(n) is { } np && np.DistanceTo(at) < 14) { Game.SelectNode(n); return; }
-        // An apsis marker puts a node right on it.
-        if (ApsisAt(at) is { } apsis) { Game.AddNode(apsis); return; }
+        // A marker (Ap, Pe, AN, DN, the closest approach) keeps its figures on, or lets them go. A node on
+        // an apsis is put from its menu (right click).
+        if (MarkerAt(at) is { } marker) { TogglePin(marker); Tapped(at, () => TogglePin(marker)); return; }
         // A tap on a station not yet the target picks it: in a system with several, that is how the pilot
         // chooses one. The target itself is left to the path it sits on.
         // A station close by its body can sit under the same tap: the nearer of the two is meant.
         var body = OrbiterAt(at) as Center;
+        var goal = v.Goal;
         if (StationUnder(at) is { } station && station != v.Goal
-            && (body == null || StationPoint(station).DistanceTo(at) <= BodyPoint(body).DistanceTo(at))) { Game.SetTarget(station); return; }
+            && (body == null || StationPoint(station).DistanceTo(at) <= BodyPoint(body).DistanceTo(at))) { Game.SetTarget(station); Tapped(at, () => Game.SetTarget(goal)); return; }
         // A tap on a body targets it; on the target again, lets it go.
-        if (OrbiterAt(at) is { } picked) { Game.SetTarget(picked == v.Goal ? null : picked); return; }
-        if (Game.SubForecast is { } fc && EarliestNear(fc, at, 14) is { } time) { Game.AddNode(time); return; }
+        if (OrbiterAt(at) is { } picked) { Game.SetTarget(picked == v.Goal ? null : picked); Tapped(at, () => Game.SetTarget(goal)); return; }
+        if (Game.SubForecast is { } fc && EarliestNear(fc, at, 14) is { } time)
+        {
+            Game.AddNode(time);
+            var added = Game.Selected!;
+            Tapped(at, () => { Game.SelectNodeQuietly(added); Game.DeleteNode(); });
+            return;
+        }
         Game.HandlesOpen = false;
     }
 

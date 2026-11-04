@@ -124,6 +124,7 @@ public partial class Main
         Screen = Screen.Orbit;
         MapOpen = false; Selected = null; Paused = true; PlanFrozen = false;
         OrbitSky = false;
+        Focus = null;
         Chart.Glide(PrimaryOnChart, ChartView.ZoomFor(V.Primary));
         // No banner for the descent either: the system comes up around the ship.
         Message = V.LocalStation == null ? "この星系に港はない。J で再発進できる"

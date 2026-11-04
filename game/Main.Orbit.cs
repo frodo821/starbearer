@@ -146,6 +146,7 @@ public partial class Main
         ShowCue(new StateCue("ゲート通過", $"{v.System.Name} 星系 / {region} 宙域", new Color(0.8f, 0.6f, 1f), Major: true, Outward: true));
         Message = $"{v.System.Name} のゲートへ出た。通行税 {v.TollsDue:F0} は次の入港で精算";
         Selected = null;
+        Focus = null;
         Chart.Show(PrimaryOnChart, ChartView.ZoomFor(v.Primary));
         Replan();
     }
