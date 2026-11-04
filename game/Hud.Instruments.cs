@@ -48,7 +48,7 @@ public partial class Hud
         if (v.Hold.Count > 0) { Text(new Vector2(x, y), $"耐熱 {v.HeatTolerance:F2}", Dim, 13); y += 18; }
         foreach (var c in v.Hold.Take(3)) { Text(new Vector2(x, y), c.IsJob ? $"{c.Mission.Cargo.Name} → {g.StarAt(c.Mission.Target).Name}" : $"{c.Mission.Cargo.Name} {c.Mission.Cargo.Volume:F0} 単位（自分の荷）", c.IsJob && g.StarOf(c.Mission.Target) == v.TargetStar ? Ink : Dim, 13); y += 18; }
         y += 6;
-        Bar(x, ref y, "燃料", v.Fuel / v.Class.Tank, Ink, $"Δv {v.DeltaVRemaining:F2}");
+        Bar(x, ref y, "燃料", v.Fuel / v.Class.Tank, Ink, Instruments.WellDeltaV(v.DeltaVRemaining));
         if (Game.Screen == Screen.Plan)
         {
             // Ghost of what the kick would spend.
@@ -78,7 +78,7 @@ public partial class Hud
 
         Section(x, ref y, width, "航法");
         void Line(string s, Color c, int size = 15) { Text(new Vector2(x, y + 14), s, c, size); y += 20; }
-        Line($"速度 {(v.Phase == Phase.Sublight ? v.SubVelocity : v.Velocity).Length:F3}   位置誤差 ±{v.NavSigma:F3} ly", v.NavSigma > 0.1 ? Warn : Ink);
+        Line($"速度 {(v.Phase == Phase.Sublight ? Instruments.Speed(v.SubVelocity.Length) : $"{v.Velocity.Length:F3} ly/日")}   位置誤差 ±{v.NavSigma:F3} ly", v.NavSigma > 0.1 ? Warn : Ink);
         if (Game.Screen == Screen.Flight && v.Phase != Phase.Sublight)
         {
             var speed = v.Velocity.Length;
@@ -92,11 +92,11 @@ public partial class Hud
         }
         if (Game.Screen == Screen.Plan)
         {
-            Line($"キック Δv {Game.PlanDv:F3}  (燃料 {v.FuelFor(Game.PlanDv):F2})", Warn, 17);
+            Line($"キック Δv {Instruments.WellDeltaV(Game.PlanDv)}  (燃料 {v.FuelFor(Game.PlanDv):F2})", Warn, 17);
             if (v.Phase == Phase.Sublight)
             {
                 var gain = v.SubVelocity.Dot(Game.PlanDir.Normalized());
-                Line($"軌道速度の寄与 {gain:+0.00;-0.00}  {(gain >= 0 ? "追い風" : "向かい風")}", gain >= 0 ? Good : Warn);
+                Line($"軌道速度の寄与 {(gain >= 0 ? "+" : "-")}{Instruments.Speed(Math.Abs(gain))}  {(gain >= 0 ? "追い風" : "向かい風")}", gain >= 0 ? Good : Warn);
             }
         }
         if (Game.Screen == Screen.Flight) { y += 4; ButtonRow(x, y, Game.FlightNavCommands()); y += ButtonHeight + 4; }
@@ -108,7 +108,7 @@ public partial class Hud
             {
                 var isT = e.Star == v.TargetStar;
                 var line = $"{Instruments.Span(e.Time)}  {g.Stars[e.Star].Name}  近日 {e.Periapsis:F2}";
-                if (isT) line += $"  減速 Δv {Game.CaptureDv(e):F2}";
+                if (isT) line += $"  減速 Δv {Instruments.WellDeltaV(Game.CaptureDv(e))}";
                 Line(line, isT ? Good : Ink, 14);
                 if (isT)
                 {
@@ -277,7 +277,7 @@ public partial class Hud
         {
             var need = Game.CaptureDv(fc.Encounters.First(e => e.Star == v.TargetStar));
             var have = v.DeltaVRemaining - (Game.Screen == Screen.Plan ? Game.PlanDv : 0);
-            line += $"   捕獲に Δv {need:F2} / 残 {Math.Max(have, 0):F2}";
+            line += $"   捕獲に Δv {Instruments.WellDeltaV(need)} / 残 {Instruments.WellDeltaV(Math.Max(have, 0))}";
             Text(new Vector2(x0, top + 28), line, need > have ? Bad : Good, 15);
         }
         else Text(new Vector2(x0, top + 28), line, endCol, 15);

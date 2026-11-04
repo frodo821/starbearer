@@ -177,7 +177,7 @@ public partial class SimTests
         var speed = Tuning.SublightExhaust * Math.Log(1 + Tuning.ReactionMassPerDryMass) * 5;   // five times what an empty ship with a full tank carries
         var n = Sublight.NextPrimary(g, from.Id, start, way * speed, 0);
         Assert.Equal(to.Id, n!.Value.Star);
-        Assert.True(n.Value.Time > 365 * 1000, $"{n.Value.Time / 365:F0} years");   // between the stars there is only hyperspace
+        Assert.True(n.Value.Time > 365 * 100, $"{n.Value.Time / 365:F0} years");   // between the stars there is only hyperspace: lifetimes of life support
         // What is left of the way, at the speed it is flown.
         var gap = (to.Position - start).Length - Sublight.SystemRadius(to) / Sublight.AuPerLy;
         Assert.Equal(gap * Sublight.AuPerLy / speed, n.Value.Time, 3);

@@ -41,7 +41,11 @@ public static class Instruments
         Math.Abs(au) >= 0.1 ? $"{au:F3} AU" : Math.Abs(au) * KmPerAu >= 1e5 ? $"{au * KmPerAu / 1e3:N0}千 km" : $"{au * KmPerAu:N0} km";
 
     /// <summary>A speed in a system, in km/s.</summary>
-    public static string Speed(double auPerDay) => $"{auPerDay * KmPerSecondPerAuPerDay:F2} km/s";
+    public static string Speed(double auPerDay) =>
+        Math.Abs(auPerDay * KmPerSecondPerAuPerDay) >= 100 ? $"{auPerDay * KmPerSecondPerAuPerDay:F1} km/s" : $"{auPerDay * KmPerSecondPerAuPerDay:F2} km/s";
+
+    /// <summary>A delta-v of the drive, given in ly/day of the well, as the km/s it is in the system it is spent in.</summary>
+    public static string WellDeltaV(double lyPerDay) => Speed(lyPerDay * Sublight.SpeedFactor);
 
     /// <summary>A year of the clock, in days.</summary>
     public const double DaysPerYear = 365;

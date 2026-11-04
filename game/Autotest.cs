@@ -33,6 +33,7 @@ public partial class Autotest : Node
     Vector2 Size() => _g.GetViewport().GetVisibleRect().Size;
     double _dv, _throttle;
     ulong _clock;
+    double _lead;
 
     public Autotest(Main g)
     {
@@ -773,13 +774,15 @@ public partial class Autotest : Node
             Shot("06c_computer_plan");
             _count = _g.V!.Nodes.Count;
             _clock = Time.GetTicksMsec();
+            _lead = _g.IgnitionIn ?? 0;   // the computer may plan a burn that is due at once
             Press(Key.N);
         });
-        Do(() => Check($"N runs time forward instead of jumping [{_g.Message} | next {(_g.V!.Nodes.Count > 0 ? _g.V.Nodes.Min(n => n.Time) - _g.V.AbsoluteTime : -1):F3} d]", _g.ToNode && _g.CurrentRate > 0));
+        Do(() => Check($"N runs time forward instead of jumping, or drops to real time on a burn already due [{_g.Message} | ignition in {_lead:F3} d]",
+            _lead > 0.3 ? _g.ToNode && _g.CurrentRate > 0 : !_g.ToNode && _g.Aligning));
         Until(() => !_g.ToNode || Time.GetTicksMsec() - _clock > 15000);
         Do(() =>
         {
-            Check("N stops just short of ignition with the plan intact", !_g.ToNode && _g.IgnitionIn is > 0 and < 0.2 && _g.V!.Nodes.Count == _count);
+            Check("N stops just short of ignition with the plan intact", !_g.ToNode && _g.IgnitionIn < 0.2 && (_lead <= 0.3 || _g.IgnitionIn > 0) && _g.V!.Nodes.Count == _count);
             Check("arriving at a node keeps real time for lining up", _g.Aligning && !_g.Paused && _g.CurrentRate == Main.Rates[0]);
             Press(Key.G);
             Press(Key.Key6);

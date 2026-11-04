@@ -154,7 +154,7 @@ public partial class PortWindow : PanelContainer
     static string Spec(ShipClass c, IReadOnlyCollection<int>? fitted = null) =>
         string.Join(" ", c.Bays.Select((b, i) => (Label: BayLabel(b, fitted?.Contains(i) == true), b.Volume)).GroupBy(x => x.Label)
             .Select(k => $"{k.Key}{Missions.Cubic(k.Sum(x => x.Volume))}"))
-        + $"   空荷Δv {Tuning.ExhaustVelocity * Math.Log((c.DryMass + c.Tank) / c.DryMass):F2}   抵抗×{c.Drag:0.0#} 推力×{c.Thrust:0.0#} {(c.Gates ? "ゲート可" : "ゲート不可")}";
+        + $"   空荷Δv {Instruments.WellDeltaV(Tuning.ExhaustVelocity * Math.Log((c.DryMass + c.Tank) / c.DryMass))}   抵抗×{c.Drag:0.0#} 推力×{c.Thrust:0.0#} {(c.Gates ? "ゲート可" : "ゲート不可")}";
 
     /// <summary>The company's ships docked here, and at a shipyard what it builds.</summary>
     Control HangarColumn(Galaxy g, SaveData s)
