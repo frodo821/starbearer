@@ -10,8 +10,8 @@ namespace Starbearer;
 public partial class Hud
 {
 
-    /// <summary>What the ship is doing, in the one colour that also rims the screen.</summary>
-    (string Label, Color Colour) ShipState()
+    /// <summary>What the ship is doing, as the one colour that rims the screen. The words are the advice line's.</summary>
+    Color StateColour()
     {
         var v = Game.V!;
         var planning = Game.Screen == Screen.Plan;
@@ -19,23 +19,20 @@ public partial class Hud
         var speed = (v.Phase == Phase.Sublight ? v.JumpState.Velocity : v.Velocity).Length;
         return v.Phase switch
         {
-            Phase.Sublight when planning && v.Docked => ("港に停泊中  発進を計画中", Warn),
-            Phase.Sublight when planning => ("亜光速  FTL発進を計画中", Warn),
-            Phase.Sublight when v.Docked => ("港に停泊中", Good),
-            Phase.Sublight when v.Adrift => ("亜光速  恒星間を慣性航行", Warn),
-            Phase.Sublight => ("亜光速  軌道航行中", Good),
-            Phase.Stalled => ("FTL 脱落  星間で停止", Bad),
-            _ when planning => ("FTL 航行中  計画のため時間停止", Warn),
-            _ when well => ("FTL 恒星の井戸  D で降下", Warn),
-            _ when speed < Tuning.StallSpeed * 1.3 => ("FTL 巡航  失速間近", Bad),
-            _ => ("FTL 巡航", Ftl),
+            Phase.Sublight when planning => Warn,
+            Phase.Sublight when v.Adrift => Warn,
+            Phase.Sublight => Good,
+            Phase.Stalled => Bad,
+            _ when planning || well => Warn,
+            _ when speed < Tuning.StallSpeed * 1.3 => Bad,
+            _ => Ftl,
         };
     }
 
     /// <summary>Corner brackets in the state colour. Danger pulses, so it reads without looking at a gauge.</summary>
     void DrawStateFrame()
     {
-        var (_, col) = ShipState();
+        var col = StateColour();
         var pulse = col == Bad ? 0.55f + 0.45f * Mathf.Sin(Time.GetTicksMsec() / 120f) : 0.8f;
         col = new Color(col, pulse);
         const float m = 5, arm = 70;
@@ -95,8 +92,8 @@ public partial class Hud
         }
         else
         {
-            Centered(112, cue.Title, new Color(cue.Colour, fade), 22);
-            if (cue.Detail != "") Centered(136, cue.Detail, new Color(Ink, fade), 15);
+            Centered(186, cue.Title, new Color(cue.Colour, fade), 22);   // under the advice and the FTL clock
+            if (cue.Detail != "") Centered(210, cue.Detail, new Color(Ink, fade), 15);
         }
     }
 }

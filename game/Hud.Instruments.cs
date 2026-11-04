@@ -136,10 +136,10 @@ public partial class Hud
     {
         DrawNavPanel();
         DrawShipPanel();
-        // In FTL the top keeps only the clock that matters there and the heat warnings; planning a jump, the speed and range it needs.
+        // The top: the advice, then in FTL only its clock and the heat warnings; planning a jump, the speed and range it needs.
+        DrawAdvice();
         if (Game.Screen == Screen.Flight) DrawFtlClock();
-        else DrawFtlState();
-        if (Game.Screen == Screen.Plan) DrawRangeGauge();
+        if (Game.Screen == Screen.Plan) { DrawSpeedBar(); DrawRangeGauge(); }
         DrawHelm();
     }
 
@@ -167,43 +167,36 @@ public partial class Hud
         var sep = "     ";
         var width = parts.Sum(p => F.GetStringSize(p.Text, HorizontalAlignment.Left, -1, size).X) + (parts.Count - 1) * F.GetStringSize(sep, HorizontalAlignment.Left, -1, size).X;
         var x = Size.X / 2 - width / 2;
-        DrawRect(new Rect2(x - 16, 12, width + 32, 36), new Color(0, 0, 0, 0.55f));
+        var top = AdviceBottom + 6;
+        DrawRect(new Rect2(x - 16, top, width + 32, 36), new Color(0, 0, 0, 0.55f));
         for (int i = 0; i < parts.Count; i++)
         {
-            if (i > 0) { Text(new Vector2(x, 38), sep, Dim, size); x += F.GetStringSize(sep, HorizontalAlignment.Left, -1, size).X; }
-            Text(new Vector2(x, 38), parts[i].Text, parts[i].Colour, size);
+            if (i > 0) { Text(new Vector2(x, top + 26), sep, Dim, size); x += F.GetStringSize(sep, HorizontalAlignment.Left, -1, size).X; }
+            Text(new Vector2(x, top + 26), parts[i].Text, parts[i].Colour, size);
             x += F.GetStringSize(parts[i].Text, HorizontalAlignment.Left, -1, size).X;
         }
         // Heat, only when it matters: out of the shield deep in a well, or the hull or cargo heating past what they take.
-        var y = 72f;
+        var y = top + 60;
         var r = v.NearestWell(out var star);
         if (star != null && r < star.Soi * 0.7 && !Game.Shielded) { Centered(y, "シールド外! 機首を恒星へ (姿勢儀の「恒」をタップ)", Bad, 20); y += 26; }
         if (v.Heat > 1) Centered(y, $"熱 {v.Heat:F2}: 船体が傷んでいる", Bad, 18);
         else if (v.Hold.Count > 0 && v.Heat > v.HeatTolerance) Centered(y, $"熱 {v.Heat:F2}: 積荷の耐熱 {v.HeatTolerance:F2} を超えた", Warn, 18);
     }
 
-    /// <summary>Whether the ship is in FTL at all, then how close it is to falling out.</summary>
-    void DrawFtlState()
+    /// <summary>Planning a jump: the speed it leaves at against the stall line, and the capture line in a well.</summary>
+    void DrawSpeedBar()
     {
         var v = Game.V!;
-        var planning = Game.Screen == Screen.Plan;
         var inFtlWell = v.Phase != Phase.Sublight && v.NearestWell(out _) < double.MaxValue;
         var from = v.Phase == Phase.Sublight ? v.JumpState.Velocity : v.Velocity;
-        var speed = planning ? (from + Game.PlanDir * Game.PlanDv).Length : from.Length;
+        var speed = (from + Game.PlanDir * Game.PlanDv).Length;
         var well = v.NearestWell(out var nearStar);
         var captureLimit = inFtlWell && nearStar != null ? Physics.CaptureSpeed(nearStar, well) : (double?)null;
-        var (label, col) = ShipState();
-        var size = 24;
-        var w = F.GetStringSize(label, HorizontalAlignment.Left, -1, size).X + 40;
-        var box = new Rect2((Size.X - w) / 2, 14, w, 40);
-        DrawRect(box, new Color(0, 0, 0, 0.55f));
-        DrawRect(box, col, false, 2);
-        Text(box.Position + new Vector2(20, 29), label, col, size);
-
-        if (Game.Screen == Screen.Orbit) return;
+        var col = StateColour();
 
         // Speed against the stall threshold.
-        const float width = 340, top = 66, maxSpeed = 1.2f;
+        const float width = 340, maxSpeed = 1.2f;
+        const float top = AdviceBottom + 12;
         var x0 = (Size.X - width) / 2;
         DrawRect(new Rect2(x0, top, width, 12), new Color(1, 1, 1, 0.1f));
         var fill = Mathf.Clamp((float)speed / maxSpeed, 0, 1);
@@ -217,7 +210,6 @@ public partial class Hud
             var mark = x0 + width * Mathf.Clamp((float)limit / maxSpeed, 0, 1);
             DrawLine(new Vector2(mark, top - 4), new Vector2(mark, top + 16), Good, 2);
             Text(new Vector2(mark + 5, top + 30), $"捕獲 {limit:F2}", Good, 13);
-            if (!planning) Text(new Vector2(x0 + width + 10, top + 32), speed <= limit ? "今降下すれば軌道に乗る" : "機首を逆行へ向けて噴射", Good, 15);
         }
     }
 

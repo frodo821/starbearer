@@ -11,9 +11,9 @@ namespace Starbearer;
 public readonly record struct Command(Key Key, string Cap, string Name, bool Enabled = true, bool Hold = false, bool Shift = false);
 
 /// <summary>
-/// Buttons and the panels they sit in, gathered by purpose around the edges: time at the top left,
-/// navigation down the left, the ship at the top right, the helm at the bottom right, and along the
-/// bottom only what moves the ship from one kind of travel to another, with the advice line above.
+/// Buttons and the panels they sit in, gathered by purpose around the edges: the advice at the top in the
+/// middle, navigation down the left, the ship at the top right, the helm at the bottom in the middle, and
+/// along the bottom only what moves the ship from one kind of travel to another.
 /// A button drawn anywhere lights up when the advice line points at its key.
 /// </summary>
 public partial class Hud
@@ -25,9 +25,6 @@ public partial class Hud
     Key? _lit;
     Rect2 ConsoleBand => new(0, Size.Y - ConsoleHeight, Size.X, ConsoleHeight);
     static readonly Color PanelFill = new(0.01f, 0.02f, 0.05f, 0.78f);
-
-    /// <summary>Where the advice line is centred: between the navigation panel and the helm.</summary>
-    float AdviceCentre => Size.X / 2;
 
     void ClearButtons()
     {
@@ -111,17 +108,29 @@ public partial class Hud
             x = ButtonRow(x, y, commands) + 14;
         }
 
+    }
+
+    /// <summary>The top of the band the advice takes; what sits under it at the top of the screen starts here.</summary>
+    const float AdviceBottom = 68;
+
+    /// <summary>
+    /// What to do next, at the top in the middle where the eye goes first, and the last message under it.
+    /// It shrinks to keep between the side panels.
+    /// </summary>
+    void DrawAdvice()
+    {
         var (lit, advice) = Game.Advice();
-        var size = 18;
-        var w = F.GetStringSize(advice, HorizontalAlignment.Left, -1, size).X;
-        var cx = Mathf.Clamp(AdviceCentre, w / 2 + 10, Size.X - w / 2 - 10);
-        Text(new Vector2(cx - w / 2, Size.Y - ConsoleHeight - 12), advice, lit != null ? Warn : Ink, size);
-        if (Game.Message != "")
+        var room = Size.X - 2 * Mathf.Max(NavRight, ShipWidth + 20) - 40;
+        void Line(string s, float baseline, int size, Color col)
         {
-            var mw = F.GetStringSize(Game.Message, HorizontalAlignment.Left, -1, 15).X;
-            var mx = Mathf.Clamp(AdviceCentre, mw / 2 + 10, Size.X - mw / 2 - 10);
-            Text(new Vector2(mx - mw / 2, Size.Y - ConsoleHeight - 38), Game.Message, Ink, 15);
+            if (s == "") return;
+            while (size > 12 && F.GetStringSize(s, HorizontalAlignment.Left, -1, size).X > room) size--;
+            var w = F.GetStringSize(s, HorizontalAlignment.Left, -1, size).X;
+            DrawRect(new Rect2(Size.X / 2 - w / 2 - 12, baseline - size - 4, w + 24, size + 12), new Color(0, 0, 0, 0.55f));
+            Text(new Vector2(Size.X / 2 - w / 2, baseline), s, col, size);
         }
+        Line(advice, 36, 20, lit != null ? Warn : Ink);
+        Line(Game.Message, 60, 15, Ink);
     }
 
     /// <summary>A press on a button or a panel never reaches the chart or the sky underneath.</summary>

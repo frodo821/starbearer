@@ -160,8 +160,8 @@ public partial class Hud
     }
 
     const float CompassRadius = 104, HoldW = 58, HoldH = 26, HoldGap = 4, BurnWidth = 290;
-    /// <summary>Room under the helm's rows for the advice line and the message over it.</summary>
-    const float AdviceRoom = 52;
+    /// <summary>Room between the helm's rows and the bottom band.</summary>
+    const float HelmGap = 10;
 
     /// <summary>
     /// Everything a burn is flown with sits in one place at the bottom middle, as around KSP's navball:
@@ -169,7 +169,7 @@ public partial class Hud
     /// numbers to the right, time and the clock over it, the buttons that fly the ship under it.
     /// </summary>
     Vector2 CompassCentre => new(Size.X / 2, HelmRowsTop - 44 - CompassRadius);
-    float HelmRowsTop => Size.Y - ConsoleHeight - AdviceRoom - 2 * ButtonHeight - ButtonGap;
+    float HelmRowsTop => Size.Y - ConsoleHeight - HelmGap - 2 * ButtonHeight - ButtonGap;
     /// <summary>Where the time controls' row sits, and the clock line over it.</summary>
     float TimeRowTop => CompassCentre.Y - CompassRadius - 22 - ButtonHeight;
     /// <summary>The top of the helm's cluster: the chart and the node panel keep above it.</summary>
