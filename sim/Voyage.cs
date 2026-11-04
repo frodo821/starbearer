@@ -184,6 +184,15 @@ public sealed class Voyage
         }
     }
 
+    /// <summary>
+    /// The pilot a hull with no normal-space engine jumps onto (see ShipClass.NeedsPilot): the pilot's
+    /// orbit as it stood when the jump began, known to the crew from when they placed it. A descent into
+    /// that star's well comes out on it; anywhere else, wherever the well puts the ship.
+    /// </summary>
+    public ParkedOrbit? Pilot { get; private set; }
+
+    public void LockPilot(ParkedOrbit? pilot) => Pilot = pilot;
+
     public void EnterFtl()
     {
         if (Phase != Phase.Sublight) return;
@@ -201,6 +210,13 @@ public sealed class Voyage
         if (star == null) return false;
         Primary = G.System(star.Id);
         (SubPosition, SubVelocity) = Sublight.ToSystem(TruePosition - _truth[star.Id], Velocity);
+        if (Pilot is { } pilot && pilot.Star == star.Id)
+        {
+            // Out of the jump on the pilot: where it was as the jump began, carried along its orbit.
+            Primary = pilot.Host;
+            (SubPosition, SubVelocity) = pilot.StateAt(AbsoluteTime);
+            Pilot = null;
+        }
         Phase = Phase.Sublight;
         SyncTruePosition();
         return true;

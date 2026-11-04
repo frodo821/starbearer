@@ -166,6 +166,7 @@ public partial class Main
             case Screen.Plan:
                 if (k.Keycode == Key.Enter) ExecutePlan();
                 if (k.Keycode == Key.Escape) CancelPlan();
+                if (k.Keycode == Key.G) CyclePilot();
                 if (k.Keycode == Key.Tab) ToggleMap();
                 Nudge(k.Keycode, k.ShiftPressed);
                 break;

@@ -791,6 +791,42 @@ public partial class Autotest : Node
             _g.Purchase(x => x.Credits += 500);
             _g.PayRentDebt();
             Check("the debt can be paid off", s.RentDebt == 0 && Rentals.Refusal(s, false) == null);
+            // A super-large ship here; the ship left at this port will be its pilot.
+            _firstShip = s.Flown;
+            var carrier = OwnedShip.Build(Ships.Carrier, s.Fleet.Max(x => x.Id) + 1, s.PortStation);
+            s.Fleet.Add(carrier);
+            _g.BoardShip(carrier.Id);
+            Press(Key.Enter);
+        });
+        Do(() =>
+        {
+            Check("aboard the super-large ship", _g.V!.Class == Ships.Carrier && _g.V.Docked);
+            Press(Key.U);
+        });
+        Do(() => Press(Key.J));
+        Do(() =>
+        {
+            Check("planning its jump picks a pilot", _g.Screen == Screen.Plan && _g.ChosenPilot?.Id == _firstShip);
+            Shot("17_carrier_pilot");
+            Press(Key.Enter);
+        });
+        Do(() => { Check("it jumps", _g.Screen == Screen.Flight && _g.V!.Pilot != null); _g.PlaceInTargetWellForTest(); }, 20);
+        Do(() => Press(Key.D), 20);
+        Do(() =>
+        {
+            var v = _g.V!;
+            Check($"it comes out of the jump on its pilot, alongside the station it lies at [{(v.StationNow().Position - v.SubPosition).Length:E2} AU]",
+                _g.Screen == Screen.Orbit && (v.StationNow().Position - v.SubPosition).Length < Tuning.DockRange && v.Pilot == null);
+            Shot("17a_carrier_arrived");
+            Press(Key.U);
+        });
+        Do(() =>
+        {
+            var s = _g.Save!;
+            Check("and can call at that station", _g.Screen == Screen.Port);
+            var carrier = s.Ship;
+            _g.BoardShip(_firstShip);
+            s.Fleet.Remove(carrier);   // out of the way of what follows
             Press(Key.Enter);
         });
         Do(() =>

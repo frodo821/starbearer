@@ -171,7 +171,7 @@ public partial class Hud
     Vector2 CompassCentre => new(Size.X / 2, HelmBottom - 44 - CompassRadius);
     float HelmRowsTop => Size.Y - ConsoleHeight - HelmGap - 2 * ButtonHeight - ButtonGap;
     /// <summary>Docked or planning there is nothing to fly, so the rows of the helm's buttons go and the cluster closes down on the band.</summary>
-    bool HelmRowsShown => Game.Screen != Screen.Plan && Game.V is { Docked: false };
+    bool HelmRowsShown => Game.Screen != Screen.Plan && Game.V is { Docked: false } v && !(v.Class.NeedsPilot && v.Phase == Phase.Sublight);
     float HelmBottom => HelmRowsShown ? HelmRowsTop : Size.Y - ConsoleHeight - HelmGap;
     /// <summary>Where the time controls' row sits, and the clock line over it.</summary>
     float TimeRowTop => CompassCentre.Y - CompassRadius - 22 - ButtonHeight;

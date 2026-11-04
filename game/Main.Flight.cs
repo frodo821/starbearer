@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using Godot;
 using Starbearer.Sim;
@@ -12,11 +13,50 @@ public partial class Main
     public double PlanDv = 0.45;
     public bool Shielded { get; private set; }
 
+    /// <summary>Which of the pilots a super-large ship could jump onto is picked (see PilotChoices).</summary>
+    public int PilotIndex;
+
+    /// <summary>The company's ships a super-large ship can jump onto: one left in orbit, or one docked at a station.</summary>
+    public List<OwnedShip> PilotChoices() => Save!.Fleet
+        .Where(x => x.Id != Save.Flown && x.Carrier == 0 && (x.Parked != null || G!.IsStation(x.Station) && G.Alive(x.Station)))
+        .OrderBy(x => x.Id).ToList();
+
+    public OwnedShip? ChosenPilot => PilotChoices() is { Count: > 0 } list ? list[PilotIndex % list.Count] : null;
+
+    /// <summary>The pilot's orbit as it stands now, as the crew know it: its own orbit, or its station's.</summary>
+    ParkedOrbit PilotOrbit(OwnedShip pilot)
+    {
+        if (pilot.Parked is { } p) return p.Orbit(G!, pilot.Id);
+        var st = G!.StationAt(pilot.Station);
+        var t = V!.AbsoluteTime;
+        return new ParkedOrbit(st.Host ?? G.System(st.Star), st.Position(t), st.Velocity(t), t, pilot.Id);
+    }
+
+    public void CyclePilot()
+    {
+        if (!V!.Class.NeedsPilot || PilotChoices().Count == 0) return;
+        PilotIndex = (PilotIndex + 1) % PilotChoices().Count;
+        AimAtPilot();
+    }
+
+    /// <summary>The course goes to the pilot's star, and the kick is pointed there to begin with.</summary>
+    void AimAtPilot()
+    {
+        if (ChosenPilot is not { } pilot) { Message = "先導船がない。先に船を目的の星系へ送り、軌道に残すか港に入れておく"; return; }
+        var star = Rentals.StarOf(Save!, G!, pilot);
+        SetCourse(star);
+        PlanDir = (V!.ChartPositions[star] - V.EstimatedPosition).Normalized();
+        LookAt(PlanDir);
+        _forecastDirty = true;
+        Message = $"先導船: {pilot.Type.Name}（{Rentals.Place(Save!, G!, pilot)}）。G で切り替え";
+    }
+
     public void BeginJump()
     {
         if (Screen != Screen.Orbit) return;
         CutEngine("エンジン停止");
         Screen = Screen.Plan;
+        if (V!.Class.NeedsPilot) { PilotIndex = 0; AimAtPilot(); return; }
         PlanDir = (V!.ChartPositions[V.TargetStar] - V.EstimatedPosition).Normalized();
         LookAt(PlanDir);
         Message = "空をタップして方位を選び、W/S でキック量を決める";
@@ -74,6 +114,11 @@ public partial class Main
         var v = V!;
         if (v.Docked) { Message = "停泊中は発進できない。Esc で戻り、U で出港する"; return; }
         var jumping = v.Phase == Phase.Sublight;
+        if (jumping && v.Class.NeedsPilot)
+        {
+            if (ChosenPilot is not { } pilot) { Message = "先導船がないと超大型船は跳べない"; return; }
+            v.LockPilot(PilotOrbit(pilot));
+        }
         v.EnterFtl();
         v.Burn(PlanDir, PlanDv);
         // No banner for the jump: the sky and the corner frame tell it.

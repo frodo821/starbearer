@@ -18,8 +18,13 @@ namespace Starbearer.Sim;
 public sealed record ShipClass(string Id, string Name, Bay[] Bays, double Price, double DryMass, double Tank, double Drag, double Thrust, bool Gates, double SublightForce)
 {
     public double Capacity => Bays.Sum(b => b.Volume);
-    /// <summary>Reaction mass for normal space it holds when full (see Tuning.SublightExhaust).</summary>
-    public double ReactionTank => DryMass * Tuning.ReactionMassPerDryMass;
+    /// <summary>Reaction mass for normal space it holds when full (see Tuning.SublightExhaust); none for a hull with no engine for it.</summary>
+    public double ReactionTank => NeedsPilot ? 0 : DryMass * Tuning.ReactionMassPerDryMass;
+    /// <summary>
+    /// A hull with no normal-space engine: it moves only by FTL, and comes out of a jump on a pilot ship
+    /// of the company (see Voyage.Pilot), a beacon sent ahead to where it is to be.
+    /// </summary>
+    public bool NeedsPilot { get; init; }
 }
 
 public static class Ships
@@ -63,6 +68,14 @@ public static class Ships
     /// </summary>
     static readonly Size Tiny = new("tiny", "超小型", 0, 0.3, 0.54, 0.8, 1.2, true, 0);
     public static readonly ShipClass Shuttle = new("shuttle", "レンタルシャトル", Array.Empty<Bay>(), 0, Tiny.DryMass, Tiny.Tank, Tiny.Drag, Tiny.Thrust, Tiny.Gates, EngineForce(Tiny));
+    /// <summary>
+    /// The super-large ship, a station that moves: four large hulls' room in all three kinds of bay, too
+    /// big for any gate, no engine for normal space. It jumps like any ship, and comes out on its pilot.
+    /// Built at one shipyard of the galaxy's for each other hull, rarely and dearly.
+    /// </summary>
+    static readonly Size Huge = new("huge", "超大型", 96, 12, 21.6, 4.0, 0.3, false, 30000);
+    public static readonly ShipClass Carrier = Make(Huge, "carrier-huge", "母艦",
+        new[] { new Bay(BayKind.Container, 32), new Bay(BayKind.Fluid, 32), new Bay(BayKind.Bulk, 32) }, 1) with { NeedsPilot = true, SublightForce = 0 };
     public static readonly ShipClass Tanker = TankerShip(Large);
     public static readonly ShipClass Bulker = BulkShip(Large);
 
@@ -71,7 +84,7 @@ public static class Ships
     {
         Courier, TankerShip(Small), GasShip(Small), BulkShip(Small), MixedShip(Small),
         ContainerShip(Medium), TankerShip(Medium), GasShip(Medium), BulkShip(Medium), MixedShip(Medium),
-        ContainerShip(Large), Tanker, GasShip(Large), Bulker,
+        ContainerShip(Large), Tanker, GasShip(Large), Bulker, Carrier,
     };
 
     public static ShipClass Get(string id) => id == Shuttle.Id ? Shuttle : All.FirstOrDefault(s => s.Id == id) ?? Courier;
@@ -86,7 +99,7 @@ public static class Ships
         var yards = g.Ports.Where(p => g.KindOf(p) == StationKind.Shipyard).OrderBy(p => p).ToList();
         var index = yards.IndexOf(station);
         var r = new Rng(g.Seed * 2654435761 + g.SeedKey(station));
-        return All.Where((c, i) => i == 0 || (i - 1) % yards.Count == index || r.Unit() < 0.3).ToArray();
+        return All.Where((c, i) => i == 0 || (i - 1) % yards.Count == index || !c.NeedsPilot && r.Unit() < 0.3).ToArray();
     }
 
     /// <summary>What a shipyard pays for a ship: half its price, less its wear, and half what its modules cost.</summary>

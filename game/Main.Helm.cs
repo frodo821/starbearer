@@ -121,7 +121,8 @@ public partial class Main
     Vec3d EngineCommand()
     {
         var v = V!;
-        if (Helm.EngineOn && v.Phase == Phase.Sublight && v.ReactionMass <= 0) CutEngine("推進剤切れ");
+        if (Helm.EngineOn && v.Phase == Phase.Sublight && v.Class.NeedsPilot) CutEngine("超大型船は通常空間を自力で動けない（FTL と先導船で動く）");
+        else if (Helm.EngineOn && v.Phase == Phase.Sublight && v.ReactionMass <= 0) CutEngine("推進剤切れ");
         else if (Helm.EngineOn && v.Phase != Phase.Sublight && v.Fuel <= 0) CutEngine("燃料切れ");
         return Helm.Thrust();
     }

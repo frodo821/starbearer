@@ -103,7 +103,8 @@ public partial class Main
         {
             list.Add(("噴射量", new Command[] { new(Key.W, "W", "増やす", Hold: true), new(Key.S, "S", "減らす", Hold: true) }));
             list.Add(("方位", NoseCommands));
-            list.Add(("確定", new Command[] { new(Key.Enter, "Enter", "実行", !v.Docked), new(Key.Escape, "Esc", "取消"), new(Key.Tab, "Tab", MapOpen ? "空" : "星図") }));
+            list.Add(("確定", new Command[] { new(Key.Enter, "Enter", "実行", !v.Docked && (!v.Class.NeedsPilot || ChosenPilot != null)), new(Key.Escape, "Esc", "取消"), new(Key.Tab, "Tab", MapOpen ? "空" : "星図") }));
+            if (v.Class.NeedsPilot) list.Add(("先導船", new Command[] { new(Key.G, "G", ChosenPilot is { } pilot ? $"{pilot.Type.Name} ▸" : "なし", PilotChoices().Count > 1) }));
             list.Add(("表示", new Command[] { WindsCommand, JobsCommand }));
             return list;
         }

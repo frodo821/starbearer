@@ -74,7 +74,37 @@ public partial class SimTests
         v.Undock();
         v.BookGate(10);
         Assert.NotNull(v.GateBooked);
-        Assert.All(Ships.All, c => Assert.True(c.Gates));
+        Assert.All(Ships.All.Where(c => !c.NeedsPilot), c => Assert.True(c.Gates));
+        // The super-large ship is the hull too big for any gate.
+        var carrier = new Voyage(g, gate, g.StarOf(gate), Array.Empty<Consignment>(), Unseen(g), 1, shipClass: Ships.Carrier);
+        carrier.Undock();
+        carrier.BookGate(10);
+        Assert.Null(carrier.GateBooked);
+    }
+
+    [Fact]
+    public void ASuperLargeShipHasNoEngineForNormalSpaceAndComesOutOfAJumpOnItsPilot()
+    {
+        Assert.Equal(0, Ships.Carrier.ReactionTank);
+        Assert.Equal(0, Ships.Carrier.SublightForce);
+        var g = Galaxy.Generate(3);
+        var from = g.Ports[0];
+        var v = new Voyage(g, from, g.StarOf(g.Ports[1]), Array.Empty<Consignment>(), Unseen(g), 1, shipClass: Ships.Carrier);
+        v.Undock();
+        Assert.Equal(0, v.SublightDeltaV);
+        // A pilot left round a body of the next star; the ship jumps, and is put in that star's well.
+        var star = g.StarOf(g.Ports[1]);
+        var body = g.System(star).Tree.First(c => c.Parent != null);
+        var r = body.Edge * 0.2;
+        var pilot = new ParkedOrbit(body, new Vec3d(r, 0, 0), new Vec3d(0, 0, Math.Sqrt(body.Mu / r)), v.AbsoluteTime, 9);
+        v.LockPilot(pilot);
+        v.EnterFtl();
+        v.PlaceForTest(g.Stars[star].Position + new Vec3d(0.3, 0, 0), new Vec3d(-0.2, 0, 0));
+        Assert.True(v.Descend());
+        Assert.Same(body, v.Primary);
+        var (p, vel) = pilot.StateAt(v.AbsoluteTime);
+        Assert.True((v.SubPosition - p).Length < 1e-12 && (v.SubVelocity - vel).Length < 1e-12);
+        Assert.Null(v.Pilot);
     }
 
     [Fact]

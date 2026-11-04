@@ -104,6 +104,8 @@ public partial class Hud
         if (Game.Screen == Screen.Plan)
         {
             Line($"キック Δv {Instruments.WellDeltaV(Game.PlanDv)}  (燃料 {Instruments.Tonnes(v.FuelFor(Game.PlanDv))})", Warn, 17);
+            if (v.Class.NeedsPilot)
+                Line(Game.ChosenPilot is { } pilot ? $"先導船 {pilot.Type.Name}（{Rentals.Place(Game.Save!, g, pilot)}）" : "先導船なし: 跳べない", Game.ChosenPilot != null ? Good : Bad, 14);
             if (v.Phase == Phase.Sublight)
             {
                 var gain = v.SubVelocity.Dot(Game.PlanDir.Normalized());
