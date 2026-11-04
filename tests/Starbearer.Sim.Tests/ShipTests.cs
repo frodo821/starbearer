@@ -66,14 +66,15 @@ public partial class SimTests
     }
 
     [Fact]
-    public void AGateTurnsAwayAHullTooBigForIt()
+    public void ALargeHullPassesAGate()
     {
         var g = Galaxy.Generate(7);
         var gate = g.Gates[0];
         var v = new Voyage(g, gate, g.StarOf(gate), Array.Empty<Consignment>(), Unseen(g), 1, shipClass: Ships.Bulker);
         v.Undock();
         v.BookGate(10);
-        Assert.Null(v.GateBooked);
+        Assert.NotNull(v.GateBooked);
+        Assert.All(Ships.All, c => Assert.True(c.Gates));
     }
 
     [Fact]

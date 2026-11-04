@@ -29,7 +29,7 @@ public static class Ships
 
     static readonly Size Small = new("small", "小型", 8, 1.0, 1.8, 1.0, 1.0, true, 600);
     static readonly Size Medium = new("medium", "中型", 16, 1.75, 3.15, 1.3, 0.8, true, 2200);
-    static readonly Size Large = new("large", "大型", 24, 3.0, 5.4, 2.0, 0.5, false, 4500);
+    static readonly Size Large = new("large", "大型", 24, 3.0, 5.4, 2.0, 0.5, true, 4500);
 
     /// <summary>A mixed hull holds this share of a specialist's room, and is this much heavier.</summary>
     const double MixedRoom = 0.8, MixedMass = 1.2;
@@ -91,8 +91,10 @@ public sealed class OwnedShip
 {
     public int Id { get; set; }
     public string Class { get; set; } = Ships.Courier.Id;
-    /// <summary>The station it is docked at, by station id.</summary>
+    /// <summary>The station it is docked at, by station id; -1 while it is left in orbit (see Parked).</summary>
     public int Station { get; set; }
+    /// <summary>Where it was left in orbit, if it was: it coasts on from there. Null for a ship at a station.</summary>
+    public ParkedState? Parked { get; set; }
     public double Fuel { get; set; } = Ships.Courier.Tank;
     /// <summary>Reaction mass for normal space. Below zero (a save from before it was kept apart) reads as full.</summary>
     public double ReactionMass { get; set; } = -1;
