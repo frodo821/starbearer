@@ -11,7 +11,7 @@ public partial class Hud
 {
 
     /// <summary>The middle of the chart: the open space over the helm, not the screen's middle, where the helm sits.</summary>
-    Vector2 MapCentre => new(Size.X / 2, Mathf.Max(ClusterTop / 2 + 20, 180));
+    Vector2 MapCentre => new(Size.X / 2, Mathf.Max(FlyingClusterTop / 2 + 20, 180));
     Vector2 MapPoint(Vec3d p) => Game.Chart.Project(p, MapCentre * 2);
 
     /// <summary>Stars, wells and the FTL path. Shared by the galaxy map and the zoomed-out orbit view.</summary>

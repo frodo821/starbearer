@@ -168,12 +168,17 @@ public partial class Hud
     /// the dial in the centre, the attitude holds either side, the throttle to the left and the burn's
     /// numbers to the right, time and the clock over it, the buttons that fly the ship under it.
     /// </summary>
-    Vector2 CompassCentre => new(Size.X / 2, HelmRowsTop - 44 - CompassRadius);
+    Vector2 CompassCentre => new(Size.X / 2, HelmBottom - 44 - CompassRadius);
     float HelmRowsTop => Size.Y - ConsoleHeight - HelmGap - 2 * ButtonHeight - ButtonGap;
+    /// <summary>Docked or planning there is nothing to fly, so the rows of the helm's buttons go and the cluster closes down on the band.</summary>
+    bool HelmRowsShown => Game.Screen != Screen.Plan && Game.V is { Docked: false };
+    float HelmBottom => HelmRowsShown ? HelmRowsTop : Size.Y - ConsoleHeight - HelmGap;
     /// <summary>Where the time controls' row sits, and the clock line over it.</summary>
     float TimeRowTop => CompassCentre.Y - CompassRadius - 22 - ButtonHeight;
     /// <summary>The top of the helm's cluster: the chart and the node panel keep above it.</summary>
     float ClusterTop => TimeRowTop - 26;
+    /// <summary>The cluster's top in flight, with the helm's rows: the chart is centred by it, so it doesn't jump on undocking.</summary>
+    float FlyingClusterTop => HelmRowsTop - 44 - 2 * CompassRadius - 22 - ButtonHeight - 26;
     float HoldsLeft => CompassCentre.X - CompassRadius - 14 - HoldW;
     float HoldsRight => CompassCentre.X + CompassRadius + 14;
     float BurnLeft => HoldsRight + HoldW + 16;
@@ -181,10 +186,9 @@ public partial class Hud
     /// <summary>The flight controls and their readouts, gathered round the dial. Docked or planning, nothing to fly.</summary>
     void DrawHelm()
     {
-        var v = Game.V!;
         DrawTimeRow();
         DrawCompass();
-        if (Game.Screen == Screen.Plan || v.Docked) return;
+        if (!HelmRowsShown) return;
         var (thrust, nose) = Game.HelmCommands();
         ButtonRow(Size.X / 2 - RowWidth(thrust) / 2, HelmRowsTop, thrust);
         ButtonRow(Size.X / 2 - RowWidth(nose) / 2, HelmRowsTop + ButtonHeight + ButtonGap, nose);
@@ -390,7 +394,7 @@ public partial class Hud
 
     void DrawThrottle(Vector2 compass)
     {
-        const float height = 200, width = 16;
+        const float height = 170, width = 16;   // clear of the time row over the dial
         var x = HoldsLeft - 36;
         var top = compass.Y - height / 2;
         DrawRect(new Rect2(x - 8, top - 30, width + 24, height + 70), new Color(0.01f, 0.02f, 0.05f, 0.72f));
