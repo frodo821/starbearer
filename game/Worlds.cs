@@ -15,7 +15,7 @@ public partial class Worlds : Node3D
     const float Shell = 40f;
     const double Exaggeration = 2.5, SmallestAngle = 0.0035;
     static readonly SphereMesh Ball = new() { Radius = 0.5f, Height = 1f, RadialSegments = 96, Rings = 48 };
-    readonly List<(Center Body, MeshInstance3D Mesh, ShaderMaterial Look)> _shown = new();
+    readonly List<(Center Body, MeshInstance3D Mesh, ShaderMaterial Look, MeshInstance3D? Air, float AirScale)> _shown = new();
     int _system = -1;
 
     /// <summary>Colours and traits for one body, from its place in the system so it looks the same every visit.</summary>
@@ -67,19 +67,47 @@ public partial class Worlds : Node3D
         return mat;
     }
 
+    /// <summary>
+    /// How thick a world's air is (1 an Earth's) and how high it reaches over the body, as a share of
+    /// its radius (drawn many times an Earth's ~1.5%, or no one would see it). Giants are all air; rocky
+    /// worlds hold it by warmth: between, as Earth; far out, thin as Mars; close in, either none, burnt
+    /// off as Mercury, or a Venus's. Moons have none. From a stream of its own, so the surfaces stay as they were.
+    /// </summary>
+    static (double Density, double Height) Air(ulong seed, Center c)
+    {
+        var r = new Rng(seed * 6700417 + (ulong)c.Key ^ 0xA1A1_0000UL);
+        if (c.Kind == BodyKind.Giant) return (1.0, 0.05);
+        if (c.Kind != BodyKind.Rocky) return (0, 0);
+        var warmth = 1 - c.OrbitRadius / c.Parent!.Edge;
+        if (warmth > 0.7) return r.Unit() < 0.5 ? (0, 0) : (r.Range(1.8, 2.6), 0.08);
+        return warmth > 0.4 ? (r.Range(0.7, 1.1), 0.06) : (r.Range(0.15, 0.4), 0.04);
+    }
+
     void Build(Galaxy g, int star)
     {
-        foreach (var (_, mesh, _) in _shown) mesh.QueueFree();
+        foreach (var (_, mesh, _, air, _) in _shown) { mesh.QueueFree(); air?.QueueFree(); }
         _shown.Clear();
         _system = star;
         if (star < 0) return;
         var shader = GD.Load<Shader>("res://game/planet.gdshader");
+        var airShader = GD.Load<Shader>("res://game/atmosphere.gdshader");
         foreach (var body in g.System(star).Tree)
         {
             var look = Look(g.Seed, body, g.Stars[star], shader);
             var mesh = new MeshInstance3D { Mesh = Ball, MaterialOverride = look, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off };
             AddChild(mesh);
-            _shown.Add((body, mesh, look));
+            MeshInstance3D? air = null;
+            var (density, height) = Air(g.Seed, body);
+            if (density > 0)
+            {
+                var feel = new ShaderMaterial { Shader = airShader };
+                feel.SetShaderParameter("air", look.GetShaderParameter("air"));
+                feel.SetShaderParameter("density", (float)density);
+                feel.SetShaderParameter("inner", (float)(1 / (1 + height)));
+                air = new MeshInstance3D { Mesh = Ball, MaterialOverride = feel, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off };
+                AddChild(air);
+            }
+            _shown.Add((body, mesh, look, air, (float)(1 + height)));
         }
     }
 
@@ -89,7 +117,7 @@ public partial class Worlds : Node3D
     public void Show(Galaxy g, int star, Vec3d ship, double t, Vec3d along = default, double beta = 0)
     {
         if (star != _system) Build(g, star);
-        foreach (var (body, mesh, look) in _shown)
+        foreach (var (body, mesh, look, air, airScale) in _shown)
         {
             var to = body.StarPosition(t) - ship;
             var dist = Math.Max(to.Length, body.BodyRadius * 1.02);
@@ -101,6 +129,11 @@ public partial class Worlds : Node3D
             mesh.Scale = new Vector3(size, size, size);
             look.SetShaderParameter("sun", Sky.ToV((-body.StarPosition(t)).Normalized()));
             look.SetShaderParameter("spin", (float)(t * (0.4 + body.Index * 0.07) % Math.Tau));
+            if (air == null) continue;
+            air.Position = mesh.Position;
+            air.Scale = mesh.Scale * airScale;
+            air.Visible = mesh.Visible;
+            (air.MaterialOverride as ShaderMaterial)!.SetShaderParameter("sun", Sky.ToV((-body.StarPosition(t)).Normalized()));
         }
     }
 }

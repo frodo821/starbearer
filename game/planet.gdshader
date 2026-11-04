@@ -107,8 +107,6 @@ void fragment() {
 		vec3 c = kind == 0 ? rock(s, surface.y) : kind == 1 ? giant(surface * 1.0 + vec3(0, 0, 0)) : moon(s);
 		float light = clamp(dot(world_normal, normalize(sun)), 0.0, 1.0);
 		float day = smoothstep(-0.05, 0.25, dot(world_normal, normalize(sun)));
-		vec3 lit = c * (0.012 + 0.72 * pow(light, 0.8) * day);
-		float rim = pow(1.0 - facing, 3.0) * day;
-		ALBEDO = lit + air * rim * (kind == 2 ? 0.0 : 0.45);
+		ALBEDO = c * (0.012 + 0.72 * pow(light, 0.8) * day);   // the air over it is a shell of its own (atmosphere.gdshader)
 	}
 }

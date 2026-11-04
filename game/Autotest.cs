@@ -1036,6 +1036,21 @@ public partial class Autotest : Node
             }, 12);
             Do(() => Shot($"12_body_{view}"), 2);
         }
+        for (int n = 0; n < 2; n++)
+        {
+            var view = n;
+            Do(() =>
+            {
+                // From the night side, the star behind the world: its air lights up round the rim.
+                var body = _views.Where(b => b.Kind is BodyKind.Giant or BodyKind.Rocky).Skip(view).FirstOrDefault() ?? _views[0];
+                var at = _g.V!.Primary == null ? Vec3d.Zero : body.StarPosition(_g.V.AbsoluteTime);
+                var sunward = at.Length > 0 ? -at.Normalized() : new Vec3d(1, 0, 0);
+                var away = (-sunward + sunward.AnyPerpendicular() * 0.15).Normalized();
+                _g.ViewFromForTest(body.Star, at + away * (body.BodyRadius * 9));
+                _g.LookAtPublic(-away);
+            }, 12);
+            Do(() => Shot($"12b_backlit_{view}"), 2);
+        }
         Do(() =>
         {
             // Through a gate: dock at this region's, cast off, book, and drift into it.
