@@ -1051,6 +1051,22 @@ public partial class Autotest : Node
             }, 12);
             Do(() => Shot($"12b_backlit_{view}"), 2);
         }
+        foreach (var kind in new[] { BodyKind.Rocky, BodyKind.Moon })
+        {
+            var want = kind;
+            Do(() =>
+            {
+                // Lit from the side: the terminator runs down the middle, where the ground's relief shows.
+                var g = _g.G!;
+                var body = g.System(_g.V!.SystemStar).Tree.FirstOrDefault(b => b.Kind == want) ?? _views[0];
+                var at = body.StarPosition(_g.V.AbsoluteTime);
+                var sunward = at.Length > 0 ? -at.Normalized() : new Vec3d(1, 0, 0);
+                var away = (sunward.AnyPerpendicular() + sunward * 0.25).Normalized();
+                _g.ViewFromForTest(body.Star, at + away * (body.BodyRadius * 6));
+                _g.LookAtPublic(-away);
+            }, 12);
+            Do(() => Shot($"12c_sidelit_{want}"), 2);
+        }
         Do(() =>
         {
             // Through a gate: dock at this region's, cast off, book, and drift into it.

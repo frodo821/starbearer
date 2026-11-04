@@ -45,12 +45,14 @@ public partial class Worlds : Node3D
                 break;
             case BodyKind.Moon:
                 mat.SetShaderParameter("kind", 2);
+                mat.SetShaderParameter("relief", 1f);
                 var tint = r.Range(0, 0.15);
                 Set("low", Hue(tint, r.Range(0, 0.2), r.Range(0.18, 0.3)));
                 Set("high", Hue(tint, r.Range(0, 0.15), r.Range(0.65, 0.85)));
                 break;
             default:
                 mat.SetShaderParameter("kind", 0);
+                mat.SetShaderParameter("relief", 1f);
                 // Close to the star worlds burn dry; far out they freeze; between, some hold water.
                 var warmth = 1 - c.OrbitRadius / c.Parent!.Edge;
                 var (sea, cloud) = warmth > 0.7 ? (0.2, 0.1) : warmth > 0.4 ? (r.Range(0.35, 0.6), r.Range(0.4, 0.8)) : (r.Range(0.5, 0.75), 0.3);

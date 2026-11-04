@@ -13,6 +13,7 @@ uniform float clouds = 0.4;
 uniform float bands = 7.0;
 uniform float spin = 0.0;
 uniform vec3 sun = vec3(1.0, 0.0, 0.0);
+uniform float relief = 0.0;        // how steep the ground's slopes light: rocky worlds and moons have it
 
 varying vec3 sphere;
 varying vec3 world_normal;
@@ -61,6 +62,26 @@ void vertex() {
 	world_normal = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz);
 }
 
+/// The ground's height: a rocky world's land over a flat sea, a moon's plains and craters.
+float rock_height(vec3 s) { return max(fbm(s * 2.2, 6), sea); }
+float moon_height(vec3 s) { return fbm(s * 3.0, 5) * 0.6 + craters(s * 3.5) + craters(s * 8.0 + 4.0) * 0.5; }
+
+/// How much of a rocky world the clouds hide at a point.
+float cloud_cover(vec3 s) { return smoothstep(0.52, 0.72, fbm(s * 3.0 + fbm(s * 2.0, 3) * 2.0, 5)) * clouds; }
+
+/// The ground's normal at a point of the unit sphere, tilted by the slope of its height: a normal map
+/// grown from the same noise as the colours, so mountains, coasts and crater rims catch the light.
+vec3 bumped(vec3 u, float strength) {
+	vec3 t1 = normalize(cross(u, abs(u.y) < 0.99 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0)));
+	vec3 t2 = cross(u, t1);
+	const float e = 0.004;
+	float h0, h1, h2;
+	if (kind == 0) { h0 = rock_height(u + seed); h1 = rock_height(u + t1 * e + seed); h2 = rock_height(u + t2 * e + seed); }
+	else { h0 = moon_height(u + seed); h1 = moon_height(u + t1 * e + seed); h2 = moon_height(u + t2 * e + seed); }
+	vec3 slope = t1 * ((h1 - h0) / e) + t2 * ((h2 - h0) / e);
+	return normalize(u - slope * strength);
+}
+
 vec3 rock(vec3 s, float latitude) {
 	float h = fbm(s * 2.2, 6);
 	float ice = smoothstep(0.72, 0.9, abs(latitude) + (fbm(s * 5.0, 3) - 0.5) * 0.3);
@@ -72,8 +93,7 @@ vec3 rock(vec3 s, float latitude) {
 		c = mix(mid, high, smoothstep(0.1, 0.5, up)) * (0.75 + 0.5 * noise(s * 16.0));
 	}
 	c = mix(c, vec3(0.92, 0.95, 1.0), ice);
-	float sky = smoothstep(0.52, 0.72, fbm(s * 3.0 + fbm(s * 2.0, 3) * 2.0, 5));
-	return mix(c, vec3(0.95), sky * clouds);
+	return mix(c, vec3(0.95), cloud_cover(s));
 }
 
 vec3 giant(vec3 s) {
@@ -105,7 +125,17 @@ void fragment() {
 		ALBEDO = star_surface(surface + seed) * mix(0.72, 1.0, pow(facing, 0.4));   // limb darkening
 	} else {
 		vec3 c = kind == 0 ? rock(s, surface.y) : kind == 1 ? giant(surface * 1.0 + vec3(0, 0, 0)) : moon(s);
-		float light = clamp(dot(world_normal, normalize(sun)), 0.0, 1.0);
+		// Lit by the ground's own normal where it has relief (clouds over it are smooth); day and night
+		// still go by the sphere's, so a slope never lights up the night side.
+		vec3 n = world_normal;
+		if (relief > 0.0 && kind != 1) {
+			float strength = relief * (kind == 0 ? 0.08 * (1.0 - cloud_cover(s)) : 0.05);
+			vec3 b = bumped(surface, strength);
+			float a = spin;
+			vec3 unspun = vec3(b.x * cos(a) - b.z * sin(a), b.y, b.z * cos(a) + b.x * sin(a));
+			n = normalize((MODEL_MATRIX * vec4(unspun, 0.0)).xyz);
+		}
+		float light = clamp(dot(n, normalize(sun)), 0.0, 1.0);
 		float day = smoothstep(-0.05, 0.25, dot(world_normal, normalize(sun)));
 		ALBEDO = c * (0.012 + 0.72 * pow(light, 0.8) * day);   // the air over it is a shell of its own (atmosphere.gdshader)
 	}
