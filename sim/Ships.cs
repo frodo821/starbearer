@@ -12,9 +12,10 @@ namespace Starbearer.Sim;
 /// <param name="DryMass">Empty, without fuel or cargo.</param>
 /// <param name="Tank">Fuel it holds when full.</param>
 /// <param name="Drag">Hyperspace drag, as a multiple of a small ship's: the field wraps a big hull poorly.</param>
-/// <param name="Thrust">Acceleration, as a multiple of a small ship's.</param>
+/// <param name="Thrust">Acceleration, as a multiple of a small ship's: in hyperspace as it is, in normal space at full tanks and an empty hold.</param>
 /// <param name="Gates">Whether gates take it.</param>
-public sealed record ShipClass(string Id, string Name, Bay[] Bays, double Price, double DryMass, double Tank, double Drag, double Thrust, bool Gates)
+/// <param name="SublightForce">The normal-space engine's force, N; what it does depends on what the ship weighs.</param>
+public sealed record ShipClass(string Id, string Name, Bay[] Bays, double Price, double DryMass, double Tank, double Drag, double Thrust, bool Gates, double SublightForce)
 {
     public double Capacity => Bays.Sum(b => b.Volume);
     /// <summary>Reaction mass for normal space it holds when full (see Tuning.SublightExhaust).</summary>
@@ -38,7 +39,11 @@ public static class Ships
     static ShipClass Make(Size z, string id, string name, Bay[] bays, double priceFactor, double dryFactor = 1) =>
         new(id, z.Name + name, bays, Round(z.Price * priceFactor),
             z.DryMass * dryFactor + bays.Where(b => b.Pressurized).Sum(b => b.Volume) * Tuning.PressureMassPerVolume,
-            z.Tank, z.Drag, z.Thrust, z.Gates);
+            z.Tank, z.Drag, z.Thrust, z.Gates, EngineForce(z));
+
+    /// <summary>One engine per size of hull, sized to push the plain hull of that size, tanks full and hold empty, at its acceleration: heavier variants of it are slower.</summary>
+    static double EngineForce(Size z) =>
+        Tuning.SublightAccelerationSi * z.Thrust * Units.Kg(z.DryMass * (1 + Tuning.ReactionMassPerDryMass) + z.Tank);
 
     static ShipClass ContainerShip(Size z, string? id = null) => Make(z, id ?? $"container-{z.Id}", "コンテナ船", new[] { new Bay(BayKind.Container, z.Volume) }, 1);
     static ShipClass TankerShip(Size z) => Make(z, $"tanker-{z.Id}", "タンカー", new[] { new Bay(BayKind.Fluid, z.Volume / 2), new Bay(BayKind.Fluid, z.Volume / 2) }, 1.1);

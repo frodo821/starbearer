@@ -1,6 +1,6 @@
 namespace Starbearer.Sim;
 
-/// <summary>All balance numbers. Units: ly, day, ship mass units.</summary>
+/// <summary>All balance numbers. Units: ly, day, ship mass units (100 t, see Units); the ship's normal-space physics in SI.</summary>
 public static class Tuning
 {
     // Wells
@@ -34,15 +34,23 @@ public static class Tuning
     public const double DepartureFuelFloor = 0.8;  // below this a ship can't reach another station
 
     // Normal space
-    public const double SublightThrust = 0.01;     // AU/day^2, about 0.2 m/s², a fiftieth of a g
     /// <summary>
-    /// Normal space burns reaction mass of its own, apart from the FTL drive's fuel: AU/day of exhaust
-    /// (about 5,200 km/s), and a tank of this share of the hull's dry mass. That is some 300 km/s for a
-    /// small ship come down from a jump with a load and half its fuel, about 210 km/s leaving full: enough
-    /// that a descent going the wrong way round, even on a hyperbola, can still be turned and brought in.
-    /// The speed of the exhaust, not the size of the tank, buys it, so the jump carries no more mass.
+    /// The normal-space engine is a force, so a laden ship is slower and a ship lightens as it burns. Each
+    /// size of hull gets the force (N) that gives it this acceleration (m/s², a fiftieth of a g) with
+    /// full tanks and an empty hold, times its Thrust: some 59 kN for a small hull of 294 t.
     /// </summary>
-    public const double SublightExhaust = 3.0, ReactionMassPerDryMass = 0.14;
+    public const double SublightAccelerationSi = 0.2;
+    /// <summary>
+    /// Normal space burns reaction mass of its own, apart from the FTL drive's fuel: exhaust at this speed
+    /// (m/s, a specific impulse of some 530,000 s), and a tank of this share of the hull's dry mass. That
+    /// is some 300 km/s for a small ship come down from a jump with a load and half its fuel, about 210 km/s
+    /// leaving full: enough that a descent going the wrong way round, even on a hyperbola, can still be
+    /// turned and brought in. The speed of the exhaust, not the size of the tank, buys it, so the jump
+    /// carries no more mass. Its jet power, half the force times this, is some 150 GW for a small hull.
+    /// </summary>
+    public const double SublightExhaustSi = 5.2e6, ReactionMassPerDryMass = 0.14;
+    /// <summary>The exhaust speed in AU/day, as the sim reckons it.</summary>
+    public static readonly double SublightExhaust = Units.AuPerDay(SublightExhaustSi);
     /// <summary>Reaction mass is water and the like: every port has it, cheap, at this price per unit of mass.</summary>
     public const double ReactionMassPrice = 40;
     public const double DockRange = 2e-5;          // AU, about 3,000 km

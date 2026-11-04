@@ -44,7 +44,7 @@ public partial class Hud
         var manifest = new Command(Key.I, "I", "積荷");
         Button(new Vector2(left + ShipWidth - PanelPad - ButtonWidth(manifest), 14), manifest);
         y += 22;
-        Text(new Vector2(x, y), $"質量 {v.Mass:F2}   積荷 {v.CargoMass:F1}   容積 {Missions.Cubic(Missions.VolumeUsed(v.Hold))}/{Missions.Cubic(v.Class.Capacity)}", Dim, 13); y += 18;
+        Text(new Vector2(x, y), $"質量 {Instruments.Tonnes(v.Mass)}   積荷 {Instruments.Tonnes(v.CargoMass)}   容積 {Missions.Cubic(Missions.VolumeUsed(v.Hold))}/{Missions.Cubic(v.Class.Capacity)}", Dim, 13); y += 18;
         if (v.Hold.Count > 0) { Text(new Vector2(x, y), $"耐熱 {v.HeatTolerance:F2}", Dim, 13); y += 18; }
         foreach (var c in v.Hold.Take(3)) { Text(new Vector2(x, y), c.IsJob ? $"{c.Mission.Cargo.Name} → {g.StarAt(c.Mission.Target).Name}" : $"{c.Mission.Cargo.Name} {c.Mission.Cargo.Volume:F0} 単位（自分の荷）", c.IsJob && g.StarOf(c.Mission.Target) == v.TargetStar ? Ink : Dim, 13); y += 18; }
         y += 6;
@@ -62,7 +62,9 @@ public partial class Hud
         Bar(x, ref y, "熱", Math.Min(v.Heat, 1.5) / 1.5, v.Heat > 1 ? Bad : v.Heat > v.HeatTolerance ? Warn : Ink, $"{v.Heat:F2}");
         Bar(x, ref y, "生命", v.LifeRemaining / Tuning.LifeSupportDays, Ink, v.Docked ? $"{v.LifeRemaining:F0}日 停泊中" : $"{v.LifeRemaining:F0}日");
         y += 8;
-        Text(new Vector2(x, y), $"推力 {Game.EngineAcceleration:F2} /日", Ink, 14); y += 20;
+        Text(new Vector2(x, y), v.Phase == Phase.Sublight
+            ? $"推力 {Instruments.Force(v.Class.SublightForce * Game.Helm.Throttle)}   加速 {Instruments.Acceleration(Game.EngineAcceleration)}"
+            : $"推力 {Game.EngineAcceleration:F2} ly/日²", Ink, 14); y += 20;
         Text(new Vector2(x, y), $"計算機 {(Game.Owns(Modules.Transfer) ? "搭載" : "なし")}   自動噴射 {(Game.Owns(Modules.AutoBurn) ? (v.AutoBurn ? "ON" : "OFF") : "なし")}", Dim, 13); y += 8;
         _shipHeight = y + PanelPad - 8;
     }
@@ -92,7 +94,7 @@ public partial class Hud
         }
         if (Game.Screen == Screen.Plan)
         {
-            Line($"キック Δv {Instruments.WellDeltaV(Game.PlanDv)}  (燃料 {v.FuelFor(Game.PlanDv):F2})", Warn, 17);
+            Line($"キック Δv {Instruments.WellDeltaV(Game.PlanDv)}  (燃料 {Instruments.Tonnes(v.FuelFor(Game.PlanDv))})", Warn, 17);
             if (v.Phase == Phase.Sublight)
             {
                 var gain = v.SubVelocity.Dot(Game.PlanDir.Normalized());

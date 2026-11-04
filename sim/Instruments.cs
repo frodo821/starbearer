@@ -34,7 +34,7 @@ public static class Instruments
     }
 
     /// <summary>Kilometres in an AU, and km/s in an AU/day.</summary>
-    public const double KmPerAu = 149597870.7, KmPerSecondPerAuPerDay = KmPerAu / 86400;
+    public const double KmPerAu = Units.MetresPerAu / 1000, KmPerSecondPerAuPerDay = KmPerAu / Units.SecondsPerDay;
 
     /// <summary>A distance in a system: AU from a tenth of one up, km below, where AU would read as nothing.</summary>
     public static string Distance(double au) =>
@@ -46,6 +46,15 @@ public static class Instruments
 
     /// <summary>A delta-v of the drive, given in ly/day of the well, as the km/s it is in the system it is spent in.</summary>
     public static string WellDeltaV(double lyPerDay) => Speed(lyPerDay * Sublight.SpeedFactor);
+
+    /// <summary>A mass in ship units, in tonnes.</summary>
+    public static string Tonnes(double mass) => $"{Units.Kg(mass) / 1000:N0} t";
+
+    /// <summary>A force, given in N, in kN.</summary>
+    public static string Force(double newtons) => $"{newtons / 1000:F1} kN";
+
+    /// <summary>An acceleration in a system, in m/s².</summary>
+    public static string Acceleration(double auPerDay2) => $"{Units.MetresPerSecond2(auPerDay2):F2} m/s²";
 
     /// <summary>A year of the clock, in days.</summary>
     public const double DaysPerYear = 365;

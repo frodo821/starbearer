@@ -91,10 +91,10 @@ public partial class SimTests
     public void BurningAlongTheNodeSpendsIt()
     {
         var (v, node, target, along, _, u) = NodeHere();
-        v.AdvanceSublight(0.5 * u / Tuning.SublightThrust, along);
+        v.AdvanceSublight(0.5 * u / v.SublightThrust, along);
         v.Remeasure(node, target, v.Primary.Mu);
         Assert.InRange(node.Prograde, 0.45 * u, 0.55 * u);
-        v.AdvanceSublight(0.6 * u / Tuning.SublightThrust, along);
+        v.AdvanceSublight(0.6 * u / v.SublightThrust, along);
         v.Remeasure(node, target, v.Primary.Mu);
         Assert.InRange(node.Prograde, -0.15 * u, -0.05 * u);   // past the node, what is left points back
         Assert.Single(v.Nodes);                                 // done only when the pilot says so
@@ -104,7 +104,7 @@ public partial class SimTests
     public void BurningOffAxisLeavesTheNodeUnfinished()
     {
         var (v, node, target, _, sideways, u) = NodeHere();
-        v.AdvanceSublight(0.5 * u / Tuning.SublightThrust, sideways);
+        v.AdvanceSublight(0.5 * u / v.SublightThrust, sideways);
         v.Remeasure(node, target, v.Primary.Mu);
         Assert.InRange(node.Prograde, 0.95 * u, 1.05 * u);
         Assert.InRange(node.Normal, -0.55 * u, -0.45 * u);
@@ -120,7 +120,7 @@ public partial class SimTests
         void Fly(double dv)
         {
             burn.Prepare(v, node, plan);
-            v.AdvanceSublight(dv / Tuning.SublightThrust, along);
+            v.AdvanceSublight(dv / v.SublightThrust, along);
             burn.Measure(v, node, along * dv);
         }
         Fly(0.4 * u);
@@ -148,7 +148,7 @@ public partial class SimTests
         var burn = new NodeBurn();
         burn.Prepare(v, node, plan);
         Assert.Equal((t0, r0, n0), node.Locked);
-        v.AdvanceSublight(dv / 2 / Tuning.SublightThrust, r0);
+        v.AdvanceSublight(dv / 2 / v.SublightThrust, r0);
         burn.Measure(v, node, r0 * (dv / 2));
         Assert.Equal(NodeBurn.Ending.Short, burn.Stop(v));
         // What is left is read along the axes the burn began on, though the ship's own have turned.

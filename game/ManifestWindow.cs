@@ -68,7 +68,7 @@ public partial class ManifestWindow : PanelContainer
         var ship = s.Ship;
         var bays = new CargoBays(v.Class, ship.Pressurized);
         _root.AddChild(Row(Text("積荷と仕事", 18, Good), Press("閉じる  I", _game.ToggleManifest, size: 13)));
-        _root.AddChild(Text($"{v.Class.Name}   容積 {Missions.Cubic(Missions.VolumeUsed(v.Hold))} / {Missions.Cubic(v.Class.Capacity)}   積荷質量 {v.CargoMass:F1}   資金 {s.Credits:F0}", 14));
+        _root.AddChild(Text($"{v.Class.Name}   容積 {Missions.Cubic(Missions.VolumeUsed(v.Hold))} / {Missions.Cubic(v.Class.Capacity)}   積荷質量 {Instruments.Tonnes(v.CargoMass)}   資金 {s.Credits:F0}", 14));
         // Room by kind of bay, as the board's refusals count it.
         var kinds = new[] { CargoKind.Container, CargoKind.Bulk, CargoKind.Fluid, CargoKind.PressurizedFluid }
             .Where(k => bays.RoomFor(k) > 0)
@@ -103,7 +103,7 @@ public partial class ManifestWindow : PanelContainer
             var info = new VBoxContainer();
             info.AddThemeConstantOverride("separation", 0);
             info.AddChild(Text($"{m.Cargo.Name}  →  {Missions.Label(g, m.Target)}（{g.Regions[star.Region].Name} 宙域）", 15, target == v.TargetStar ? Good : null));
-            info.AddChild(Text($"{Cargos.Name(m.Cargo.Kind)}  {Missions.Cubic(m.Cargo.Volume)}  質量 {m.Cargo.Mass:F1}   あと {far:F1} ly", 13, Dim));
+            info.AddChild(Text($"{Cargos.Name(m.Cargo.Kind)}  {Missions.Cubic(m.Cargo.Volume)}  質量 {Instruments.Tonnes(m.Cargo.Mass)}   あと {far:F1} ly", 13, Dim));
             var hot = v.Heat > m.Cargo.HeatTolerance;
             info.AddChild(Text($"報酬 {c.Payout:F0} / {m.Pay:F0}   健全度 {c.Integrity:P0}   耐熱 {m.Cargo.HeatTolerance:F2}" + (hot ? "  熱で傷んでいる" : ""), 13, hot || c.Integrity < 0.999 ? Warn : Dim));
             var course = Press(target == v.TargetStar ? "針路" : "針路に", () => _game.SetCourse(target), target != v.TargetStar, size: 13);
@@ -117,7 +117,7 @@ public partial class ManifestWindow : PanelContainer
             _root.AddChild(new HSeparator());
             _root.AddChild(Text("ほかの船", 15, Good));
             foreach (var x in away)
-                _root.AddChild(Text($"{x.Type.Name}  {Missions.Label(g, x.Station)}   積荷 {x.Hold.Count} 件   燃料 {x.Fuel:F2}/{x.Type.Tank:F2}", 13, Dim));
+                _root.AddChild(Text($"{x.Type.Name}  {Missions.Label(g, x.Station)}   積荷 {x.Hold.Count} 件   燃料 {Instruments.Tonnes(x.Fuel)}/{Instruments.Tonnes(x.Type.Tank)}", 13, Dim));
         }
     }
 }

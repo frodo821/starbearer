@@ -64,7 +64,8 @@ public sealed class Voyage
     public double Mass => Class.DryMass + CargoMass + Fuel + ReactionMass;
     /// <summary>The FTL drive's delta-v: its fuel against everything else carried, reaction mass included.</summary>
     public double DeltaVRemaining => Tuning.ExhaustVelocity * Math.Log(Mass / (Mass - Fuel));
-    public double SublightThrust => Tuning.SublightThrust * Class.Thrust;
+    /// <summary>Normal space's acceleration at full throttle (AU/day²): the engine's force against the ship's mass now.</summary>
+    public double SublightThrust => Units.AuPerDay2(Class.SublightForce / Units.Kg(Mass));
     public double FlightThrust => Tuning.MaxThrust * Class.Thrust;
 
     // Normal space

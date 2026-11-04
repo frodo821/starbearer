@@ -137,7 +137,7 @@ public partial class PortWindow : PanelContainer
             var owner = Factions.OwnerName(g, m.Target);
             info.AddChild(Text((m.State ? "特命  " : "") + $"{c.Name}  →  {g.StarAt(m.Target).Name}（{Missions.Name(g.KindOf(m.Target))}）" + (owner != "" ? $"  {owner}" : ""), 17, m.State ? Palette.Good : null));
             if (!Factions.Admits(s, g, m.Target)) info.AddChild(Text($"届け先の {owner} は敵対している: 入港できない", 13, Warn));
-            info.AddChild(Text($"{Cargos.Name(c.Kind)}   直線 {far:F1} ly   容積 {Missions.Cubic(c.Volume)}   質量 {c.Mass:F1}   耐熱 {c.HeatTolerance:F2}", 14, Dim));
+            info.AddChild(Text($"{Cargos.Name(c.Kind)}   直線 {far:F1} ly   容積 {Missions.Cubic(c.Volume)}   質量 {Instruments.Tonnes(c.Mass)}   耐熱 {c.HeatTolerance:F2}", 14, Dim));
             if (refusal != null) info.AddChild(Text($"積めない: {refusal}", 13, Warn));
             var take = Press("請ける", () => _game.TakeMission(m), refusal == null);
             box.AddChild(Row(info, Text($"報酬 {m.Pay:F0}", 17, Good), take));
@@ -154,7 +154,7 @@ public partial class PortWindow : PanelContainer
     static string Spec(ShipClass c, IReadOnlyCollection<int>? fitted = null) =>
         string.Join(" ", c.Bays.Select((b, i) => (Label: BayLabel(b, fitted?.Contains(i) == true), b.Volume)).GroupBy(x => x.Label)
             .Select(k => $"{k.Key}{Missions.Cubic(k.Sum(x => x.Volume))}"))
-        + $"   空荷Δv {Instruments.WellDeltaV(Tuning.ExhaustVelocity * Math.Log((c.DryMass + c.Tank) / c.DryMass))}   抵抗×{c.Drag:0.0#} 推力×{c.Thrust:0.0#} {(c.Gates ? "ゲート可" : "ゲート不可")}";
+        + $"   空荷Δv {Instruments.WellDeltaV(Tuning.ExhaustVelocity * Math.Log((c.DryMass + c.Tank) / c.DryMass))}   自重 {Instruments.Tonnes(c.DryMass)}   亜光速推力 {Instruments.Force(c.SublightForce)}   FTL抵抗×{c.Drag:0.0#} FTL推力×{c.Thrust:0.0#} {(c.Gates ? "ゲート可" : "ゲート不可")}";
 
     /// <summary>The company's ships docked here, and at a shipyard what it builds.</summary>
     Control HangarColumn(Galaxy g, SaveData s)
@@ -166,7 +166,7 @@ public partial class PortWindow : PanelContainer
         {
             var info = new VBoxContainer();
             info.AddChild(Text(ship.Type.Name + (ship.Id == s.Flown ? "（乗船中）" : ""), 16, ship.Id == s.Flown ? Good : null));
-            info.AddChild(Text($"燃料 {ship.Fuel:F2}/{ship.Type.Tank:F2}   船体 {ship.Hull:P0}   積荷 {ship.Hold.Count} 件   {Spec(ship.Fitted, ship.Pressurized)}", 13, Dim));
+            info.AddChild(Text($"燃料 {Instruments.Tonnes(ship.Fuel)}/{Instruments.Tonnes(ship.Type.Tank)}   船体 {ship.Hull:P0}   積荷 {ship.Hold.Count} 件   {Spec(ship.Fitted, ship.Pressurized)}", 13, Dim));
             if (ship.Id == s.Flown) { box.AddChild(Row(info)); continue; }
             var sale = Hangar.SaleRefusal(s, g, ship);
             box.AddChild(Row(info, Press("乗り換え", () => _game.BoardShip(ship.Id)),
@@ -219,11 +219,11 @@ public partial class PortWindow : PanelContainer
         var (fuelMass, fuelCost) = Trade.FuelQuote(s, g, s.MarketIn(g));
         var fuelStock = s.MarketIn(g).StockOf(g, s.PortStation, Wares.ShipFuel);
         var tank = s.Ship.Type.Tank;
-        var fuelLabel = $"燃料 {s.HeldFuel:F2} / {tank:F1}   在庫 {fuelStock:F0} 単位" + (fuelStock < 0.05 ? "  品切れ" : fuelMass < tank - s.HeldFuel - 1e-6 ? "  在庫の分だけ" : "");
+        var fuelLabel = $"燃料 {Instruments.Tonnes(s.HeldFuel)} / {Instruments.Tonnes(tank)}   在庫 {fuelStock:F0} 単位" + (fuelStock < 0.05 ? "  品切れ" : fuelMass < tank - s.HeldFuel - 1e-6 ? "  在庫の分だけ" : "");
         box.AddChild(Row(Text(fuelLabel, 15, fuelStock < 0.05 ? Warn : null), Press($"{fuelCost:F0}", _game.BuyFuel, fuelMass > 1e-4, "3")));
         void Sale(string name, double cost, bool need, Action<SaveData> buy, string key) =>
             box.AddChild(Row(Text(name, 15), Press($"{cost:F0}", () => _game.Purchase(buy), need, key)));
-        Sale($"推進剤（亜光速） {s.HeldReaction:F3} / {s.Ship.Fitted.ReactionTank:F3}", Supply.ReactionMassCost(s), s.HeldReaction < s.Ship.Fitted.ReactionTank - 1e-6, Supply.BuyReactionMass, "6");
+        Sale($"推進剤（亜光速） {Instruments.Tonnes(s.HeldReaction)} / {Instruments.Tonnes(s.Ship.Fitted.ReactionTank)}", Supply.ReactionMassCost(s), s.HeldReaction < s.Ship.Fitted.ReactionTank - 1e-6, Supply.BuyReactionMass, "6");
         Sale($"生命維持 残 {s.HeldLife:F0} 日", (Tuning.LifeSupportDays - s.HeldLife) * Tuning.LifePricePerDay, s.HeldLife < Tuning.LifeSupportDays - 0.5, Supply.BuyLife, "4");
         Sale($"船体 {s.HeldHull:P0}", (1 - s.HeldHull) * Tuning.HullRepairPrice, s.HeldHull < 0.999, Supply.RepairHull, "5");
         box.AddChild(Wrapped("足りなければ買える分だけ。燃料は FTL、推進剤は亜光速の噴射に使う。燃料は港の在庫から、推進剤はどの港でも安い。出港に足る燃料も買えなければ破産", 13, Dim));
@@ -250,7 +250,7 @@ public partial class PortWindow : PanelContainer
             var carried = CargoBays.Of(s).RoomFor(w.Kind) > 0;
             // A ware this ship has no bay for is struck through in red: it can't be bought into this hold.
             info.AddChild(carried ? Text($"{w.Name}  {role}", 16) : Struck($"{w.Name}  {role}  （{Cargos.BayName(w.Kind)}がない）", 16));
-            info.AddChild(Text($"{Cargos.Name(w.Kind)}   在庫 {stock:F0} / 目標 {e.Target[i]:F0}   質量 {w.Mass:F2}/単位   基準 {w.Price:F0}", 13, Dim));
+            info.AddChild(Text($"{Cargos.Name(w.Kind)}   在庫 {stock:F0} / 目標 {e.Target[i]:F0}   質量 {Instruments.Tonnes(w.Mass)}/単位   基準 {w.Price:F0}", 13, Dim));
             var cheap = price < w.Price * 0.9; var dear = price > w.Price * 1.1;
             var controls = new List<Control> { Text($"{price:F0}", 17, cheap ? Good : dear ? Warn : null) };
             var deals = new VBoxContainer();
