@@ -35,7 +35,7 @@ public static partial class Sublight
 
     public static double Mu(Star s) => SunMu * s.Mass;
     public static double SystemRadius(Star s) => EdgeAuPerSqrtMass * Math.Sqrt(s.Mass);
-    public static double StarRadius(Star s) => SunRadius * Math.Pow(s.Mass, 0.8);
+    public static double StarRadius(Star s) => SunRadius * s.SolarRadii;
 
     /// <summary>A state in a star's hyperspace well (ly and ly/day from the star) as the system has it (AU, AU/day).</summary>
     public static (Vec3d Position, Vec3d Velocity) ToSystem(Vec3d ly, Vec3d lyPerDay) => (ly * WellAuPerLy, lyPerDay * SpeedFactor);

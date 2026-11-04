@@ -21,7 +21,7 @@ public partial class SimTests
         // At rest, nothing moves.
         Assert.Equal((new Vec3d(1, 0, 0), 1.0), Optics.Aberrate(new Vec3d(1, 0, 0), along, 0));
         // The faster, the stronger, but never all the way to light speed.
-        Assert.True(Optics.Beta(Tuning.StallSpeed) is > 0 and < 0.3);
+        Assert.True(Optics.Beta(Tuning.StallSpeed) is > 0 and < 0.4);   // still mild at the stall line
         Assert.True(Optics.Beta(0.6) < Optics.Beta(1.5) && Optics.Beta(100) < 1);
         // Redshifted far enough, a star goes out of sight; Doppler brightening saturates.
         Assert.Equal(0, Optics.Visible(5000 * 0.25));

@@ -12,6 +12,23 @@ public sealed partial class Galaxy
         return char.ToUpperInvariant(s[0]) + s[1..];
     }
 
+    /// <summary>A star's mean radius on the main sequence, in Sun radii, for its mass, and how far a star strays from it (log-normal σ, about ±30%).</summary>
+    public static double MainSequenceRadius(double mass) => Math.Pow(mass, 0.8);
+    const double RadiusScatter = 0.26;
+
+    /// <summary>
+    /// A star's body: its radius drawn about the main sequence's for its mass, and its temperature from
+    /// that and its luminosity, so a swollen star is cooler and redder and a compact one hotter and bluer.
+    /// Drawn from a stream of the star's own, so the galaxy's layout, drawn before, is the same for it.
+    /// </summary>
+    static Star Body(Star s, ulong seed)
+    {
+        var r = new Rng(seed ^ 0x5EED_57A2_0000_0000UL ^ (ulong)(s.Id + 1) * 0x9E3779B97F4A7C15UL);
+        var radius = MainSequenceRadius(s.Mass) * Math.Exp(Math.Clamp(r.Normal(), -2, 2) * RadiusScatter);
+        var kelvin = 5772 * Math.Pow(s.Luminosity / (radius * radius), 0.25);
+        return s with { SolarRadii = radius, Temperature = kelvin };
+    }
+
     public static Galaxy Generate(ulong seed)
     {
         var r = new Rng(seed);
@@ -39,9 +56,9 @@ public sealed partial class Galaxy
             string name;
             do name = MakeName(r); while (!names.Add(name));
             var mass = Math.Pow(r.Range(0.25, 1.25), 2.2) + 0.35;       // mostly small, few heavy
-            var temp = 3000 + 4800 * Math.Pow(mass, 0.8);
-            stars.Add(new Star(stars.Count, name, p, mass, temp, r.NormalVec() * Tuning.ChartErrorLy));
+            stars.Add(new Star(stars.Count, name, p, mass, 0, r.NormalVec() * Tuning.ChartErrorLy));
         }
+        stars = stars.Select(s => Body(s, seed)).ToList();
 
         var nebulae = new Nebula[Tuning.NebulaCount];
         for (int i = 0; i < nebulae.Length; i++)

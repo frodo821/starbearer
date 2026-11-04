@@ -16,9 +16,9 @@ namespace Starbearer.Sim;
 public static class Optics
 {
     /// <summary>The effective β approaches BetaMax, reaching about two thirds of it at BetaSpeed (ly/day).</summary>
-    public const double BetaMax = 0.9, BetaSpeed = 0.6;
+    public const double BetaMax = 0.97, BetaSpeed = 0.4;
     /// <summary>The dark cone behind: its half-angle approaches DarkMaxDeg, about two thirds of it at DarkSpeed; its edge fades over DarkEdgeDeg.</summary>
-    public const double DarkMaxDeg = 75, DarkSpeed = 0.8, DarkEdgeDeg = 6;
+    public const double DarkMaxDeg = 100, DarkSpeed = 0.5, DarkEdgeDeg = 8;
     /// <summary>How much more a star bends light than it really would, so it can be seen.</summary>
     public const double LensExaggeration = 200000;   // for a Sun, a ring of some 5° at 1 AU, clear of its glow
     /// <summary>Light speed in AU/day, for a star's Schwarzschild radius from its μ (AU³/day²).</summary>
@@ -26,7 +26,7 @@ public static class Optics
     /// <summary>Below this temperature a star's light has gone out of sight into the infrared; it fades out from FadeFromK.</summary>
     public const double InvisibleK = 1500, FadeFromK = 3000;
     /// <summary>The most a star brightens, by Doppler or lens: the eye and the screen saturate.</summary>
-    public const double MaxGain = 4;
+    public const double MaxGain = 6;
 
     public static double Beta(double speed) => speed <= 0 ? 0 : BetaMax * Math.Tanh(speed / BetaSpeed);
 

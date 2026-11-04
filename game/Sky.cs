@@ -24,6 +24,8 @@ public partial class Sky : MultiMeshInstance3D
     const int PuffsPerNebula = 6;
     const float NebulaShell = 140f;
     /// <summary>Faint: a nebula is gas and dust, mostly seen as a haze against the stars.</summary>
+    /// <summary>How bright a Sun 10 ly off is, and the least a star of the galaxy is drawn at (a bright background star's).</summary>
+    const double SunAt10Ly = 0.9, FaintestStar = 0.2;
     const float NebulaBrightness = 0.006f;   // linear: the screen's sRGB lifts dark values a lot
     (Vec3d Center, double Radius, Vector3 Tint)[] _puffs = Array.Empty<(Vec3d, double, Vector3)>();
     ShaderMaterial _nebulae = null!;
@@ -135,7 +137,11 @@ public partial class Sky : MultiMeshInstance3D
             var radius = Sublight.StarRadius(s) / Sublight.AuPerLy;   // the star's body, to scale, in ly
             var disc = 2 * Radius * Math.Tan(Math.Min(Math.Atan(radius / Math.Max(dist, radius * 1.02)), 1.4));
             _size[k] = Math.Clamp(disc * 3 + 1.6, 0.5, Radius * 3);
-            _bright[k] = Math.Clamp(0.5 + 30 * s.Mass / (dist * dist), 0.5, 3);
+            // By the light that reaches the ship, L/d², with half the magnitudes so the sky's range fits the
+            // screen: a Sun at 10 ly is 0.9, every 5 magnitudes fainter half as many down, floored at a
+            // background star's and held at the screen's top. Heavy and near stars stand out, dwarfs far off fade.
+            var flux = s.Luminosity / (dist * dist);
+            _bright[k] = Math.Clamp(SunAt10Ly * Math.Sqrt(flux / 0.01), FaintestStar, 3);
         }
         var lensStar = g.Stars[lens];
         var lensAu = lensDist * Sublight.AuPerLy;

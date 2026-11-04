@@ -1,7 +1,11 @@
 namespace Starbearer.Sim;
 
-public sealed record Star(int Id, string Name, Vec3d Position, double Mass, double Temperature, Vec3d ChartOffset)
+/// <param name="Temperature">Surface temperature, K, from its luminosity and radius: T = 5772 (L/R²)^¼.</param>
+/// <param name="SolarRadii">The star's body, in Sun radii.</param>
+public sealed record Star(int Id, string Name, Vec3d Position, double Mass, double Temperature, Vec3d ChartOffset, double SolarRadii = 1)
 {
+    /// <summary>In Sun luminosities, by the main sequence's mass-luminosity relation.</summary>
+    public double Luminosity => Mass < 0.43 ? 0.23 * Math.Pow(Mass, 2.3) : Mass < 2 ? Math.Pow(Mass, 4) : 1.4 * Math.Pow(Mass, 3.5);
     /// <summary>The region the star belongs to.</summary>
     public int Region { get; init; }
     public double Mu => Mass * Tuning.MuPerMass;

@@ -814,11 +814,12 @@ public partial class Autotest : Node
             Press(Key.N);
         });
         Do(() => Check($"N runs time forward instead of jumping, or drops to real time on a burn already due [{_g.Message} | ignition in {_lead:F3} d]",
-            _lead > 0.3 ? _g.ToNode && _g.CurrentRate > 0 : !_g.ToNode && _g.Aligning));
+            // N stops 0.05 d short of ignition: a burn closer than that is due at once; in between, a short run may be over already.
+            _lead > 0.1 ? _g.ToNode && _g.CurrentRate > 0 : _lead <= 0.05 ? !_g.ToNode && _g.Aligning : _g.ToNode || _g.Aligning));
         Until(() => !_g.ToNode || Time.GetTicksMsec() - _clock > 15000);
         Do(() =>
         {
-            Check("N stops just short of ignition with the plan intact", !_g.ToNode && _g.IgnitionIn < 0.2 && (_lead <= 0.3 || _g.IgnitionIn > 0) && _g.V!.Nodes.Count == _count);
+            Check("N stops just short of ignition with the plan intact", !_g.ToNode && _g.IgnitionIn < 0.2 && (_lead <= 0.05 || _g.IgnitionIn > 0) && _g.V!.Nodes.Count == _count);
             Check("arriving at a node keeps real time for lining up", _g.Aligning && !_g.Paused && _g.CurrentRate == Main.Rates[0]);
             Press(Key.G);
             Press(Key.Key6);
